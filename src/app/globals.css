@@ -34,11 +34,36 @@
 
   .label { @apply mt-4 block text-sm font-medium; }
   .input { @apply mt-1 block w-full rounded-lg border border-line bg-paper px-3 py-2 text-base; }
-  .btn { @apply inline-flex min-h-11 items-center justify-center rounded-lg border border-line bg-paper px-4 py-2 text-sm font-medium hover:bg-wash; }
+  .btn { @apply inline-flex whitespace-nowrap min-h-11 items-center justify-center rounded-lg border border-line bg-paper px-4 py-2 text-sm font-medium hover:bg-wash; }
   .btn-primary { @apply border-brand bg-brand text-brand-ink hover:bg-brand hover:opacity-90; }
   .btn-block { @apply mt-6 w-full; }
   .alert { @apply mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800; }
 
   .list { @apply divide-y divide-line; }
   .list-row { @apply flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2 text-sm; }
+
+  /* Admin panel */
+  .shell-wide { @apply max-w-5xl; }
+  .page-title { @apply mt-6; }
+  .nav { @apply flex flex-wrap gap-1; }
+  .nav-link { @apply rounded-lg px-3 py-2 text-sm font-medium text-muted hover:bg-paper hover:text-ink; }
+  .nav-link[aria-current="page"] { @apply bg-paper text-ink shadow-sm; }
+  .btn-small { @apply min-h-9 px-3 py-1; }
+  .btn-danger { @apply border-red-300 text-red-800 hover:bg-red-50; }
+  .notice { @apply mt-4 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800; }
+  .filters { @apply mt-6 grid grid-cols-2 gap-3 sm:grid-cols-5 sm:items-end; }
+  .field { @apply block; }
+  .label-inline { @apply block text-sm font-medium; }
+  .filter-actions { @apply col-span-2 flex gap-2 sm:col-span-1; }
+  .doc-main { @apply flex min-w-0 flex-col gap-0.5; }
+  .doc-meta { @apply text-xs; }
+  .mono { @apply font-mono text-xs break-all; }
+  .row-between { @apply flex items-center justify-between gap-3; }
+  .pill { @apply inline-block rounded-full border border-line px-2 py-0.5 text-xs font-medium; }
+  .pill-ok { @apply border-green-200 bg-green-50 text-green-800; }
+  .pill-gap { @apply border-amber-200 bg-amber-50 text-amber-900; }
+  .chips { @apply mt-3 flex flex-wrap gap-2; }
+  .chip { @apply rounded border border-line bg-wash px-2 py-1; }
+  .confirm { @apply flex flex-wrap items-center gap-2 text-sm; }
+  .actions { @apply flex flex-wrap gap-2; }
 }

@@ -1,23 +1,16 @@
 // Admin sign-in logic on D1. Takes the database as a parameter, so unit tests
 // run it against SQLite in Node. No Next imports here.
 import { AUTH } from "../config.ts";
+import type { Db } from "../db.ts";
+import { clear, hit, limitKey } from "../ratelimit.ts";
 import { randomId, randomToken, secretEquals, sha256Hex } from "./crypto.ts";
 import * as Q from "./queries.ts";
+
+export type { Db };
 
 export type SignInResult =
   | { ok: true; token: string; expiresAt: number }
   | { ok: false; reason: "bad" | "locked" | "unavailable" };
-
-/** Minimal slice of the D1 API that this file uses. */
-export interface Db {
-  prepare(sql: string): {
-    bind(...values: unknown[]): {
-      first<T = Record<string, unknown>>(): Promise<T | null>;
-      all<T = Record<string, unknown>>(): Promise<{ results: T[] }>;
-      run(): Promise<unknown>;
-    };
-  };
-}
 
 export type AuditEntry = {
   actorId: string | null;
@@ -47,12 +40,11 @@ export async function signIn(
   const pass = input.adminPass ?? "";
   if (pass.length < AUTH.minPasswordLength) return { ok: false, reason: "unavailable" };
 
-  const key = await sha256Hex(`login:${input.clientKey}`);
-  const windowMs = AUTH.windowMinutes * 60_000;
-  const row = await db.prepare(Q.COUNT_ATTEMPT).bind(key, now, windowMs).first<{ attempts: number }>();
-  if (!row || row.attempts > AUTH.maxAttempts) {
+  const key = await limitKey("login", input.clientKey);
+  const attempts = await hit(db, key, AUTH.windowMinutes * 60_000, now);
+  if (attempts > AUTH.maxAttempts) {
     // Logged once per lockout, so an attacker cannot flood the audit log.
-    if (row?.attempts === AUTH.maxAttempts + 1) await audit(db, { actorId: null, action: "admin.login_locked" }, now);
+    if (attempts === AUTH.maxAttempts + 1) await audit(db, { actorId: null, action: "admin.login_locked" }, now);
     return { ok: false, reason: "locked" };
   }
 
@@ -66,7 +58,7 @@ export async function signIn(
 
   const token = randomToken();
   const expiresAt = now + AUTH.sessionHours * 3_600_000;
-  await db.prepare(Q.CLEAR_ATTEMPTS).bind(key).run();
+  await clear(db, key);
   await db.prepare(Q.DELETE_EXPIRED_SESSIONS).bind(now).run();
   await db.prepare(Q.INSERT_SESSION).bind(await sha256Hex(token), AUTH.platformAdminId, now, expiresAt).run();
   await audit(db, { actorId: AUTH.platformAdminId, action: "admin.login" }, now);

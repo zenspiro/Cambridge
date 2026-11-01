@@ -18,7 +18,7 @@
     "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
     "db:migrate:local": "wrangler d1 migrations apply cambridge --local",
     "db:migrate:remote": "wrangler d1 migrations apply cambridge --remote",
-    "test:e2e": "node tests/e2e/smoke.mjs && node tests/e2e/admin.mjs",
+    "test:e2e": "node tests/e2e/smoke.mjs && node tests/e2e/admin.mjs && node tests/e2e/library.mjs",
     "build:worker": "opennextjs-cloudflare build"
   },
   "dependencies": {
