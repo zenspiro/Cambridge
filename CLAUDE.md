@@ -12,9 +12,10 @@ Current state, kept short. The full brief (product, copyright rules, standards) 
 ## Status
 - Step 0 (repo, CI, Cloudflare, docs) live.
 - Admin sign-in (Step 1-lite) live: one platform admin, password only (owner decision).
-- Build 3a (source library) built. Next: 3b, the acquisition agent (GitHub Actions). Owner moved this ahead of the rest of Step 1.
-- Subject: Physics 0625 (owner decision). Library years 2022 to 2026 (owner decision).
-- This session's network blocks cambridgeinternational.org and workers.dev; the owner was told which hosts to allow.
+- Build 3a (source library) live. Build 3b (acquisition agent, settings page) built; needs the owner's two secrets (`docs/guides/agent-setup.md`).
+- Subject: Physics 0625 (owner decision). Library years 2022 to 2026 (owner decision), now a database setting.
+- Cambridge's public 0625 pages (checked 1 Nov 2026) carry only June 2024 variant 1, the 2023 specimens and the syllabus PDFs: about 30 files. Everything else in 2022 to 2026 needs manual upload or another approved source (owner's legal call).
+- Node in this container ignores the proxy unless `NODE_USE_ENV_PROXY=1`; GitHub Actions does not need it.
 - Open decisions: `docs/BRIEF.md` section 14.
 
 ## Stack in this repo
@@ -42,20 +43,28 @@ Current state, kept short. The full brief (product, copyright rules, standards) 
 - Local password: `.dev.vars` (copy `.dev.vars.example`).
 
 ## Source library (build 3a)
-- Pages: `/admin/library` (filters by year, session, type, paper), `/admin/library/gaps`, `/admin/library/upload`, `/admin/sources`. Frame and nav: `src/components/AdminShell.tsx`.
-- Files live in R2 `SOURCE` at `code/year/session/file_name`; rows in `source_document`. Only `src/app/admin/` may touch `env.SOURCE` (unit test). Downloads are attachments, `no-store`, audited (`source.download`).
+- Pages: `/admin/library` (filters by year, session, type, paper), `/admin/library/gaps`, `/admin/library/upload`, `/admin/sources`, `/admin/settings`. Frame and nav: `src/components/AdminShell.tsx`. Admin form POSTs go through `adminPost()` (`src/lib/adminPost.ts`).
+- Files live in R2 `SOURCE` at `code/year/session/file_name`; rows in `source_document`. Only `src/app/admin/` and the agent's store endpoint may touch `env.SOURCE` (unit test). Downloads are attachments, `no-store`, audited (`source.download`).
 - One store path for uploads and the agent: `storeDocument()` in `src/lib/library/store.ts`. It checks the Cambridge name (`names.ts`), year range, size, PDF header and syllabus version, then reserves the row as `pending` (unique name and SHA-256, so races and duplicates are caught), writes R2, marks `stored`, audits.
 - File types: qp, ms, in, ci, er, gt per exam session; sp, sm, in, ci, sy for specimens (session `y`). Brief listed qp, ms, er, gt, sp; the rest are real Cambridge types.
-- Syllabus versions are rows (`0625-2020`, `0625-2023`, `0625-2026`); a file joins the version for its year. Version years still to be confirmed on Cambridge's site. Gap rules are JSON in `syllabus.expected`, read by `expected.ts`.
-- Settings: `LIBRARY` in `src/lib/config.ts` (years, `lastSession` that counts for gaps, upload limits). Update `lastSession` when a new session's papers go public.
+- Syllabus versions are rows (`0625-2020`, `0625-2023`, `0625-2026`); a file joins the version for its year. 2023 to 2025 and 2026 to 2028 confirmed on Cambridge's site (1 Nov 2026). Gap rules are JSON in `syllabus.expected`, read by `expected.ts`.
+- Settings: library years and `lastSession` are the `setting` row `library` (`src/lib/settings.ts`, page `/admin/settings`). Limits stay in `LIBRARY` and `AGENT` (`src/lib/config.ts`).
 - Approved sources: `source_site`, seeded with Cambridge's official site. Addresses must be public https (`normaliseSiteUrl`). Remove uses the inline Yes / Never mind confirm.
 - Rate limits: one helper, `src/lib/ratelimit.ts` (`allow`, keys hashed), on the `login_attempt` table for every kind of limit.
 - Jobs: `src/lib/jobs.ts`. Each upload batch is a `source_upload` job with per-file results.
 
+## Acquisition agent (build 3b)
+- Run button: `/admin/agent` (years, sessions incl. Specimen, dry run or download) creates a `job` of type `agent` (one at a time, checked inside the insert; runs silent for 3 hours are closed) and calls GitHub `workflow_dispatch` on `.github/workflows/agent.yml` (`src/lib/agent/github.ts`). Report page: `/admin/agent/runs/[id]`; a dry run offers "Download these N files".
+- Agent: `scripts/agent/run.ts`, Node built-ins only (no npm install in Actions). Reads its run from `/api/agent/job`, reads robots.txt first (missing means allowed, unreachable means nothing allowed), visits only the start pages (`source_page`, edited on `/admin/sources`), follows PDF links inside the source's address, waits 5 s between requests, never follows redirects off the site, sends each PDF to `/api/agent/file`, reports to `/api/agent/finish`.
+- Name translation: `toCambridgeName()` in `src/lib/agent/links.ts`, built from Cambridge's real names (`570010-june-2024-question-paper-11.pdf` to `0625_s24_qp_11.pdf`; specimens and syllabi too). Unknown links go in the report, never guessed.
+- `/api/agent/*` have no session: every request must pass `agentRequest()` (HMAC-SHA256 over time, nonce, method, path and body hash; 5 minute window; nonce spent once in `request_nonce`). Files must come from an enabled source's address, at most 400 per run, and go through `storeDocument()`.
+- Secrets (owner sets them, never in code): Worker `GITHUB_TOKEN` (Actions read and write on this repo only), Worker and GitHub `AGENT_SECRET` (same value, 32+ characters). Vars in `wrangler.jsonc`: `GITHUB_REPO`, `AGENT_WORKFLOW`, `AGENT_REF`. Local: `.dev.vars`.
+- Local CSP: `upgrade-insecure-requests` is left out only when the request itself is plain http (local test server); https always has it.
+
 ## Database
 - Migrations in `migrations/NNNN_name.sql`, additive only (a unit test blocks DROP, RENAME, DELETE).
 - Conventions: TEXT random ids, INTEGER milliseconds for times, JSON as TEXT with `json_valid`, real foreign keys with `ON DELETE CASCADE` toward the owning user, so deletion and export find every row.
-- Tables: `job`, `admin_session`, `login_attempt` (all rate limits), `audit_log`, `subject`, `syllabus`, `source_site`, `source_document`.
+- Tables: `job`, `admin_session`, `login_attempt` (all rate limits), `audit_log`, `subject`, `syllabus`, `source_site`, `source_document`, `setting`, `source_page`, `request_nonce`.
 - Shared types `Db` and `Bucket`: `src/lib/db.ts`. Logic takes them as parameters so unit tests run it on SQLite and an in-memory bucket.
 
 ## Commands

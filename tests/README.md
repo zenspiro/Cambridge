@@ -14,6 +14,7 @@ Node's built-in test runner, TypeScript loaded directly. Files must not import N
 | `access.test.ts` | Every page and route is in `PUBLIC_ROUTES` or checks the admin session |
 | `library.test.ts` | Cambridge file names, gap rules, PDF check, store (version pick, rejections, duplicates, parallel uploads, storage failure), source site rules and audit, seed data, jobs, and only admin code touching the source bucket |
 | `ratelimit.test.ts` | Per-key windows, reset, hashed keys |
+| `agent.test.ts` | Signed requests and replay guard, robots.txt (incl. Cambridge's real file), Cambridge website names to standard names (real examples), PDF link filtering, settings, run choices, one run at a time, stale runs, start pages |
 | `check-inline.test.ts` | The inline code scanner catches each banned pattern and passes normal React code |
 
 ## Browser smoke test (`tests/e2e/smoke.mjs`, `npm run test:e2e`)
@@ -23,4 +24,7 @@ Needs a running Worker (`npx wrangler dev --port 8787`, or set `BASE_URL`). Each
 Needs a running Worker and `.dev.vars` (copy `.dev.vars.example`). The full sign-in and sign-out flow at 375 px and 1400 px, cookie flags, replayed cookie, cross-site and Origin-less POSTs, forged cookie, and the lockout. Each run uses made-up networks (`cf-connecting-ip`), so lockouts do not carry over between runs.
 
 ## Library test (`tests/e2e/library.mjs`, part of `npm run test:e2e`)
-Needs a running Worker with migrations applied and `.dev.vars`. Upload (good, bad name, fake PDF), library listing, download, junk filters, gap report, sources (add, refused address, switch off, inline confirm, remove) at 375 px and 1400 px, and signed-out and cross-site attempts on every library page and POST. Uses a random valid file name each run; re-running is safe. Click buttons by their form, not by `button[type=submit]`: the header's Sign out button comes first.
+Needs a running Worker with migrations applied and `.dev.vars`. Upload (good, bad name, fake PDF), library listing, download, junk filters, gap report, sources (add, refused address, switch off, inline confirm, remove) at 375 px and 1400 px, and signed-out and cross-site attempts on every library page and POST. Uses a random valid file name each run; re-running is safe. Click buttons by their form, not by `button[type=submit]`: the header's Sign out button comes first. Find messages with `p.alert` / `p.notice`, not `[role=alert]`: Next adds a hidden route announcer with that role.
+
+## Agent test (`tests/e2e/agent.mjs`, part of `npm run test:e2e`)
+Needs a running Worker, migrations and `.dev.vars` (with `AGENT_SECRET`). Starts a fake source website (`fake-source.mjs`, port 9911), switches Cambridge's source off for the test, sets up runs in the local D1, runs `scripts/agent/run.ts` in test mode (http allowed only for localhost, 50 ms gaps), and checks the reports, the library, the settings page and attacks on the signed endpoints. Run the agent with async `spawn`, never `spawnSync`: the fake site lives in the test process. It never contacts Cambridge.

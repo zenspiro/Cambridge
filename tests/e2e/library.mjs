@@ -63,19 +63,19 @@ for (const width of [375, 1400]) {
   await noOverflow("gaps");
 
   await page.goto(BASE + "/admin/sources");
-  check((await page.locator("text=Cambridge International (official)").count()) === 1, `${width}px sources lists Cambridge`);
+  check((await page.locator(".doc-main", { hasText: "Cambridge International (official)" }).count()) === 1, `${width}px sources lists Cambridge`);
   await noOverflow("sources");
 
   if (width === 1400) {
     await page.fill("#name", "Test site");
     await page.fill("#url", "https://127.0.0.1/");
     await page.click("text=Add source");
-    check((await page.locator("[role=alert]").textContent())?.includes("https address"), "sources: IP address refused");
+    check((await page.locator("p.alert").textContent())?.includes("https address"), "sources: IP address refused");
     const host = `e2e-${Date.now()}.example.org`;
     await page.fill("#name", "Test site");
     await page.fill("#url", `https://${host}/papers`);
     await page.click("text=Add source");
-    check((await page.locator("[role=status]").textContent())?.includes("added"), "sources: added");
+    check((await page.locator("p.notice").textContent())?.includes("added"), "sources: added");
     const row = page.locator(".list-row", { hasText: host });
     await row.locator("text=Switch off").click();
     check((await page.locator(".list-row", { hasText: host }).locator(".pill").textContent()) === "Off", "sources: switched off");

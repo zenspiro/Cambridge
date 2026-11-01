@@ -29,6 +29,10 @@
   ],
   "vars": {
     // Brand name is a setting, not hardcoded (brief 15.3). Placeholder until open decision 6.
-    "APP_NAME": "Exam Prep"
+    "APP_NAME": "Exam Prep",
+    // Where "Run agent" starts GitHub Actions. Not secrets; the token is.
+    "GITHUB_REPO": "zenspiro/Cambridge",
+    "AGENT_WORKFLOW": "agent.yml",
+    "AGENT_REF": "main"
   }
 }

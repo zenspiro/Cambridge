@@ -28,7 +28,7 @@ for (const width of [375, 1400]) {
 
   await page.fill("#password", "definitely wrong");
   await page.click("button[type=submit]");
-  check((await page.locator("[role=alert]").textContent())?.includes("not right"), `${width}px wrong password shows a message`);
+  check((await page.locator("p.alert").textContent())?.includes("not right"), `${width}px wrong password shows a message`);
 
   await page.fill("#password", PASS);
   await page.click("button[type=submit]");

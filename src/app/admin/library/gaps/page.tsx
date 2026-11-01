@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { requireAdmin } from "@/lib/auth/guard";
 import { getEnv } from "@/lib/env";
 import { AdminShell } from "@/components/AdminShell";
-import { LIBRARY } from "@/lib/config";
+import { getLibrarySettings } from "@/lib/settings";
 import { STORED_NAMES, SYLLABI_BY_CODE } from "@/lib/library/queries";
 import { gapReport, parseRules } from "@/lib/library/expected";
 import { sessionLabel } from "@/lib/library/labels";
@@ -12,6 +12,7 @@ export const metadata: Metadata = { title: "Gap report" };
 export default async function GapsPage() {
   await requireAdmin();
   const env = await getEnv();
+  const lib = await getLibrarySettings(env.DB);
   const [syl, names] = await Promise.all([
     env.DB.prepare(SYLLABI_BY_CODE).bind("0625").all<{ valid_from_year: number; valid_to_year: number; expected: string }>(),
     env.DB.prepare(STORED_NAMES).bind("0625").all<{ file_name: string }>(),
@@ -24,7 +25,7 @@ export default async function GapsPage() {
       return s ? parseRules(s.expected) : null;
     },
     have,
-    { fromYear: LIBRARY.fromYear, toYear: LIBRARY.toYear, last: LIBRARY.lastSession },
+    { fromYear: lib.fromYear, toYear: lib.toYear, last: lib.lastSession },
   );
   const expected = cells.reduce((a, c) => a + c.expected, 0);
   const got = cells.reduce((a, c) => a + c.have, 0);

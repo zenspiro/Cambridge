@@ -65,3 +65,48 @@ export async function removeSite(db: Db, id: string, actorId: string, now = Date
   await audit(db, { actorId, action: "source_site.remove", entity: "source_site", entityId: id }, now);
   return true;
 }
+
+/** A start page must be a public https address inside its source's address. */
+export function checkPageUrl(raw: unknown, siteBase: string): string | null {
+  if (typeof raw !== "string" || raw.length > 300) return null;
+  const site = normaliseSiteUrl(siteBase);
+  let u: URL;
+  try {
+    u = new URL(raw.trim());
+  } catch {
+    return null;
+  }
+  if (!site || u.protocol !== "https:" || u.username || u.password || u.port) return null;
+  u.hash = "";
+  const out = u.toString();
+  return out.startsWith(site) ? out : null;
+}
+
+export async function addPage(
+  db: Db,
+  input: { siteId: string; url: unknown; code: unknown },
+  actorId: string,
+  now = Date.now(),
+): Promise<{ ok: true } | { ok: false; error: "missing" | "page_url" | "page_exists" | "code" }> {
+  const site = await db.prepare(Q.GET_SITE).bind(input.siteId).first<{ id: string; base_url: string }>();
+  if (!site) return { ok: false, error: "missing" };
+  const code = typeof input.code === "string" ? input.code : "";
+  const known = await db.prepare(`SELECT 1 AS x FROM syllabus WHERE code = ?1 LIMIT 1`).bind(code).first();
+  if (!known) return { ok: false, error: "code" };
+  const url = checkPageUrl(input.url, site.base_url);
+  if (!url) return { ok: false, error: "page_url" };
+  const row = await db
+    .prepare(`INSERT INTO source_page (id, site_id, syllabus_code, url, created_by, created_at)
+              VALUES (?1, ?2, ?3, ?4, ?5, ?6) ON CONFLICT DO NOTHING RETURNING id`)
+    .bind(randomId(), site.id, code, url, actorId, now)
+    .first<{ id: string }>();
+  if (!row) return { ok: false, error: "page_exists" };
+  await audit(db, { actorId, action: "source_page.add", entity: "source_page", entityId: row.id }, now);
+  return { ok: true };
+}
+
+export async function removePage(db: Db, id: string, actorId: string, now = Date.now()) {
+  const row = await db.prepare(`DELETE FROM source_page WHERE id = ?1 RETURNING id`).bind(id).first<{ id: string }>();
+  if (row) await audit(db, { actorId, action: "source_page.remove", entity: "source_page", entityId: id }, now);
+  return !!row;
+}

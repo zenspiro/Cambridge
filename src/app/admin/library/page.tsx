@@ -4,6 +4,7 @@ import { requireAdmin } from "@/lib/auth/guard";
 import { getEnv } from "@/lib/env";
 import { AdminShell } from "@/components/AdminShell";
 import { DOC_TYPE_LABELS, LIBRARY, SESSION_LABELS } from "@/lib/config";
+import { getLibrarySettings, libraryYears } from "@/lib/settings";
 import { LIST_DOCUMENTS } from "@/lib/library/queries";
 import { dateFmt, describeDoc, formatBytes, sessionLabel } from "@/lib/library/labels";
 
@@ -22,13 +23,14 @@ function pick<T extends string>(v: string | undefined, allowed: readonly T[]): T
 export default async function LibraryPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   await requireAdmin();
   const q = await searchParams;
-  const years = Array.from({ length: LIBRARY.toYear - LIBRARY.fromYear + 1 }, (_, i) => String(LIBRARY.toYear - i));
+  const env = await getEnv();
+  const lib = await getLibrarySettings(env.DB);
+  const years = libraryYears(lib).map(String);
   const year = pick(q.year, years);
   const session = pick(q.session, Object.keys(SESSION_LABELS));
   const type = pick(q.type, Object.keys(DOC_TYPE_LABELS));
   const paper = pick(q.paper, ["1", "2", "3", "4", "5", "6"]);
 
-  const env = await getEnv();
   const { results } = await env.DB.prepare(LIST_DOCUMENTS)
     .bind("0625", year ? Number(year) : null, session, type, paper ? Number(paper) : null, LIBRARY.pageSize)
     .all<Row>();
@@ -42,7 +44,7 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
 
   return (
     <AdminShell current="/admin/library" title="Source library">
-      <p className="muted">Physics 0625, {LIBRARY.fromYear} to {LIBRARY.toYear}. Admin only. Every download is logged.</p>
+      <p className="muted">Physics 0625, {lib.fromYear} to {lib.toYear}. Admin only. Every download is logged.</p>
 
       <form className="card filters" method="get">
         <label className="field">

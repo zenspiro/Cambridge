@@ -29,7 +29,7 @@ export function makeNonce(): string {
  * Any outside host must be added here explicitly (brief 15.4).
  * Dev mode allows eval and inline styles because React dev tools and hot reload need them.
  */
-export function buildCsp(nonce: string, opts: { dev?: boolean } = {}): string {
+export function buildCsp(nonce: string, opts: { dev?: boolean; plainHttp?: boolean } = {}): string {
   if (!NONCE_RE.test(nonce)) throw new Error("invalid CSP nonce");
   const dev = opts.dev === true;
   const directives: Record<string, string[]> = {
@@ -49,6 +49,8 @@ export function buildCsp(nonce: string, opts: { dev?: boolean } = {}): string {
     "frame-ancestors": ["'none'"],
   };
   const parts = Object.entries(directives).map(([k, v]) => `${k} ${v.join(" ")}`);
-  if (!dev) parts.push("upgrade-insecure-requests");
+  // Only meaningful over https. On a local http test server it would send the page's
+  // own background requests to https://localhost and break them.
+  if (!dev && !opts.plainHttp) parts.push("upgrade-insecure-requests");
   return parts.join("; ");
 }
