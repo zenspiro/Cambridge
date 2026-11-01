@@ -21,6 +21,14 @@ const ACTION_LABELS: Record<string, string> = {
   "source_site.enable": "Switched on a source website",
   "source_site.disable": "Switched off a source website",
   "source_site.remove": "Removed a source website",
+  "source_page.add": "Added a start page",
+  "source_page.remove": "Removed a start page",
+  "setting.library": "Changed library settings",
+  "agent.start_dry": "Started an agent dry run",
+  "agent.start_download": "Started an agent download",
+  "agent.finish": "Agent run finished",
+  "agent.fail": "Agent run failed",
+  "agent.cancel": "Cancelled an agent run",
 };
 
 export default async function AdminHome() {

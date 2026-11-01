@@ -4,7 +4,7 @@ import { testDb } from "./helpers/d1.ts";
 import { signRequest, verifyRequest, MAX_SKEW_MS } from "../../src/lib/agent/sign.ts";
 import { parseRobots } from "../../src/lib/agent/robots.ts";
 import { extractPdfLinks, toCambridgeName } from "../../src/lib/agent/links.ts";
-import { checkRunParams, claimRun, finishRun, startRun, spendNonce, activeRun } from "../../src/lib/agent/runs.ts";
+import { checkRunParams, claimRun, finishRun, startRun, spendNonce, activeRun, recordProgress, cancelRun, closeStaleRuns, cleanEventText, cleanRunUrl, getRun } from "../../src/lib/agent/runs.ts";
 import { checkLibrarySettings, getLibrarySettings, saveLibrarySettings, LIBRARY_DEFAULTS } from "../../src/lib/settings.ts";
 import { addPage, checkPageUrl, removePage } from "../../src/lib/library/sources.ts";
 import { AGENT } from "../../src/lib/config.ts";
@@ -146,7 +146,7 @@ test("runs: one at a time, claimed once, finished once, stale runs closed", asyn
   const fresh = await startRun(db, p, "platform-admin", later);
   assert.ok(fresh, "stale run no longer blocks");
   const row = db.raw.prepare("SELECT status, error_ref FROM job WHERE id = ?").get(stuck!) as { status: string; error_ref: string };
-  assert.deepEqual({ ...row }, { status: "failed", error_ref: "timeout" });
+  assert.deepEqual({ ...row }, { status: "failed", error_ref: "never_started" });
 });
 
 test("start pages stay inside their source", async () => {
@@ -165,4 +165,73 @@ test("start pages stay inside their source", async () => {
   assert.equal(await removePage(db, "cie-0625-overview", "a"), true);
   db.raw.exec("DELETE FROM source_site WHERE id = 'cambridge-official'");
   assert.equal(pages().n, 0, "pages go with their source");
+});
+
+test("progress: updates the run, keeps the last events, refuses inactive runs", async () => {
+  const db = testDb();
+  const p = { code: "0625", years: [2024], sessions: ["s" as const], mode: "dry" as const };
+  const id = (await startRun(db, p, "a", T))!;
+  assert.equal(await recordProgress(db, id, { progress: 5, step: "x", event: "e", runUrl: null }, T + 1), false, "queued runs take no progress");
+  await claimRun(db, id, T + 2);
+  for (let i = 0; i < AGENT.maxEvents + 5; i++) {
+    assert.equal(await recordProgress(db, id, { progress: i * 10, step: `step ${i}`, event: `event ${i}`, runUrl: null }, T + 10 + i), true);
+  }
+  const run = (await getRun(db, id))!;
+  const events = JSON.parse(run.events) as { text: string }[];
+  assert.equal(events.length, AGENT.maxEvents);
+  assert.equal(events.at(-1)!.text, `event ${AGENT.maxEvents + 4}`);
+  assert.equal(run.progress, 99, "capped below 100 until finished");
+  assert.equal(run.heartbeat_at, T + 10 + AGENT.maxEvents + 4);
+  await recordProgress(db, id, { progress: 50, step: null, event: null, runUrl: "https://github.com/zenspiro/Cambridge/actions/runs/123" }, T + 100);
+  assert.equal((await getRun(db, id))!.step, `step ${AGENT.maxEvents + 4}`, "a missing step keeps the last one");
+  assert.equal((await getRun(db, id))!.run_url, "https://github.com/zenspiro/Cambridge/actions/runs/123");
+  await finishRun(db, id, true, "{}", null, T + 200);
+  assert.equal(await recordProgress(db, id, { progress: 1, step: "late", event: null, runUrl: null }, T + 201), false);
+});
+
+test("cancel stops a run and the agent's next update is refused", async () => {
+  const db = testDb();
+  const p = { code: "0625", years: [2024], sessions: ["s" as const], mode: "download" as const };
+  const id = (await startRun(db, p, "a", T))!;
+  await claimRun(db, id, T + 1);
+  assert.equal(await cancelRun(db, id, "platform-admin", T + 2), true);
+  assert.equal(await cancelRun(db, id, "platform-admin", T + 3), false, "only once");
+  assert.equal(await recordProgress(db, id, { progress: 10, step: "x", event: null, runUrl: null }, T + 4), false);
+  assert.equal(await activeRun(db, id), null, "file uploads for it are refused");
+  assert.equal(await finishRun(db, id, true, "{}", null, T + 5), false);
+  assert.equal((await getRun(db, id))!.status, "cancelled");
+  assert.ok(await startRun(db, p, "a", T + 6), "a new run can start right away");
+});
+
+test("quiet runs close after 15 minutes; never-started runs say so", async () => {
+  const db = testDb();
+  const p = { code: "0625", years: [2024], sessions: ["s" as const], mode: "dry" as const };
+  const never = (await startRun(db, p, "a", T))!;
+  await closeStaleRuns(db, T + AGENT.staleAfterMs - 1);
+  assert.equal((await getRun(db, never))!.status, "queued", "not yet");
+  await closeStaleRuns(db, T + AGENT.staleAfterMs + 1);
+  assert.deepEqual([(await getRun(db, never))!.status, (await getRun(db, never))!.error_ref], ["failed", "never_started"]);
+
+  const busy = (await startRun(db, p, "a", T + 1_000_000))!;
+  await claimRun(db, busy, T + 1_000_001);
+  await recordProgress(db, busy, { progress: 10, step: "x", event: null, runUrl: null }, T + 1_000_000 + AGENT.staleAfterMs);
+  await closeStaleRuns(db, T + 1_000_000 + AGENT.staleAfterMs + 10);
+  assert.equal((await getRun(db, busy))!.status, "running", "a recent update keeps it alive");
+  await closeStaleRuns(db, T + 1_000_000 + 2 * AGENT.staleAfterMs + 1);
+  assert.deepEqual([(await getRun(db, busy))!.status, (await getRun(db, busy))!.error_ref], ["failed", "timeout"]);
+});
+
+test("agent text and links are cleaned before they are stored", () => {
+  assert.equal(cleanEventText("  Page 1:\n 12 links\u0007 "), "Page 1: 12 links");
+  assert.equal(cleanEventText("x".repeat(500))!.length, 200);
+  assert.equal(cleanEventText(""), null);
+  assert.equal(cleanEventText(42), null);
+  assert.equal(cleanEventText("<script>alert(1)</script>"), "<script>alert(1)</script>", "kept as text; React escapes it on the page");
+  const repo = "zenspiro/Cambridge";
+  assert.equal(cleanRunUrl("https://github.com/zenspiro/Cambridge/actions/runs/41316201795", repo), "https://github.com/zenspiro/Cambridge/actions/runs/41316201795");
+  for (const bad of ["https://github.com/other/repo/actions/runs/1", "https://evil.example/zenspiro/Cambridge/actions/runs/1",
+    "javascript:alert(1)", "https://github.com/zenspiro/Cambridge/actions/runs/1?x=y", "https://github.com/zenspiroXCambridge/actions/runs/1", 7]) {
+    assert.equal(cleanRunUrl(bad, repo), null, String(bad));
+  }
+  assert.equal(cleanRunUrl("https://github.com/zenspiro/Cambridge/actions/runs/1", undefined), null);
 });

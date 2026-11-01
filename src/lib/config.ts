@@ -52,8 +52,14 @@ export const AGENT = {
   maxFilesPerRun: 400,
   /** Wait between requests to a source website. */
   delayMs: 5_000,
-  /** A queued or running run older than this is treated as dead and a new one may start. */
-  staleAfterMs: 3 * 3_600_000,
+  /** A run with no sign of life for this long is closed, so a new one may start. */
+  staleAfterMs: 15 * 60_000,
+  /** A run GitHub has not started after this long gets a warning on its page. */
+  slowStartMs: 5 * 60_000,
+  /** The run page reloads itself this often while a run is active. */
+  refreshSeconds: 10,
+  /** Events kept per run for the live log. */
+  maxEvents: 30,
   /** Agent runs an admin may start per hour. */
   runsPerHour: 10,
   /** Largest run report stored (bytes of JSON). */

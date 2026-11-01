@@ -6,7 +6,7 @@ Two secrets, set once. Nobody else needs to see their values.
 This lets the agent prove to the site that it is really our agent.
 
 1. Make a long random value, at least 32 characters, with a password manager's generator (letters and digits).
-2. GitHub: the Cambridge repository, Settings, Secrets and variables, Actions, New repository secret. Name `AGENT_SECRET`, paste the value.
+2. GitHub: the Cambridge repository, Settings, Secrets and variables, **Actions** (not "Agents", which is for GitHub Copilot), Secrets tab, New repository secret. Name `AGENT_SECRET`, paste the value.
 3. Cloudflare: Workers, `cambridge`, Settings, Variables and Secrets, Add. Type **Secret**, name `AGENT_SECRET`, paste the same value.
 
 ## 2. A GitHub token (GITHUB_TOKEN)

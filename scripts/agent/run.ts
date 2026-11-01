@@ -6,6 +6,7 @@ import { signRequest } from "../../src/lib/agent/sign.ts";
 import { extractPdfLinks, toCambridgeName } from "../../src/lib/agent/links.ts";
 import { parseRobots } from "../../src/lib/agent/robots.ts";
 import { parseCambridgeName } from "../../src/lib/library/names.ts";
+import { REASON_LABELS } from "../../src/lib/library/labels.ts";
 
 type Job = {
   params: { code: string; years: number[]; sessions: string[]; mode: "dry" | "download" };
@@ -103,6 +104,28 @@ type Report = {
   error?: string;
 };
 
+// Link to this run's own log on GitHub (set by GitHub Actions; absent locally).
+const RUN_URL =
+  process.env.GITHUB_SERVER_URL && process.env.GITHUB_REPOSITORY && process.env.GITHUB_RUN_ID
+    ? `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`
+    : null;
+
+class Cancelled extends Error {}
+
+/**
+ * Live update for the run page. A 409 means the admin cancelled the run (or it was
+ * closed): stop at once. Other failures only skip this update; the run goes on.
+ */
+async function progress(pct: number, step: string, event?: string) {
+  log(event ?? step);
+  try {
+    const r = await api("/api/agent/progress", enc.encode(JSON.stringify({ jobId: JOB_ID, progress: pct, step, event, runUrl: RUN_URL })));
+    if (r.status === 409) throw new Cancelled("the run was cancelled or closed in the admin panel");
+  } catch (e) {
+    if (e instanceof Cancelled) throw e;
+  }
+}
+
 const report: Report = {
   pagesVisited: 0, linksFound: 0, candidates: [], stored: [], skippedHave: 0, skippedNotRequested: 0,
   failed: [], unmatched: [], robotsBlocked: [], pageErrors: [],
@@ -137,7 +160,10 @@ async function main() {
   const sessions = new Set(job.params.sessions);
   const have = new Set(job.have);
   const seen = new Set<string>();
-  log(`run: ${job.params.mode}, years ${job.params.years.join(",")}, sessions ${job.params.sessions.join(",")}, ${job.sources.length} sources`);
+  const totalPages = job.sources.reduce((n, s) => n + s.pages.length, 0);
+  const findShare = job.params.mode === "dry" ? 95 : 20; // share of the bar for reading pages
+  let pagesDone = 0;
+  await progress(1, "Starting", `Started: ${job.params.mode === "dry" ? "dry run" : "download"}, ${job.sources.length} source(s), ${totalPages} start page(s)`);
 
   const allowedBySite = new Map<string, (path: string) => boolean>();
   for (const site of job.sources) {
@@ -148,19 +174,26 @@ async function main() {
     }
     // robots.txt: missing (4xx) means everything is allowed; unreachable (5xx, errors) means nothing is.
     let allowed: (path: string) => boolean = () => false;
+    await progress(2, `Reading ${base.host}/robots.txt`);
     try {
       const r = await politeFetch(`${base.origin}/robots.txt`, 512 * 1024);
       if (r.status >= 200 && r.status < 300) allowed = parseRobots(new TextDecoder().decode(r.bytes), job.limits.userAgentToken);
       else if (r.status >= 400 && r.status < 500) allowed = () => true;
       else report.pageErrors.push({ url: `${base.origin}/robots.txt`, status: String(r.status) });
-    } catch (e) {
+    } catch {
       report.pageErrors.push({ url: `${base.origin}/robots.txt`, status: "unreachable" });
     }
+    const robotsOk = report.pageErrors.every((e) => !e.url.startsWith(`${base.origin}/robots.txt`));
+    await progress(3, `Reading ${site.name}`, robotsOk ? `${site.name}: robots.txt read` : `${site.name}: robots.txt could not be read, so this source is skipped`);
     allowedBySite.set(site.siteId, allowed);
 
     for (const page of site.pages) {
+      pagesDone++;
+      const pct = 3 + Math.round(((pagesDone - 1) / Math.max(totalPages, 1)) * (findShare - 3));
+      await progress(pct, `Reading start page ${pagesDone} of ${totalPages}`);
       if (!allowed(new URL(page).pathname)) {
         report.robotsBlocked.push(page);
+        await progress(pct, `Reading start page ${pagesDone} of ${totalPages}`, `Page ${pagesDone}: blocked by robots.txt, skipped`);
         continue;
       }
       let html = "";
@@ -168,16 +201,20 @@ async function main() {
         const r = await politeFetch(page, MAX_PAGE_BYTES);
         if (r.status !== 200) {
           report.pageErrors.push({ url: page, status: String(r.status) });
+          await progress(pct, `Reading start page ${pagesDone} of ${totalPages}`, `Page ${pagesDone}: failed (${r.status})`);
           continue;
         }
         html = new TextDecoder().decode(r.bytes);
-      } catch {
+      } catch (e) {
+        if (e instanceof Cancelled) throw e;
         report.pageErrors.push({ url: page, status: "unreachable" });
+        await progress(pct, `Reading start page ${pagesDone} of ${totalPages}`, `Page ${pagesDone}: could not be reached`);
         continue;
       }
       report.pagesVisited++;
       const links = extractPdfLinks(html, page, site.baseUrl);
       report.linksFound += links.length;
+      const before = report.candidates.length;
       for (const link of links) {
         if (seen.has(link)) continue;
         seen.add(link);
@@ -201,30 +238,46 @@ async function main() {
         }
         report.candidates.push({ name, url: link, siteId: site.siteId });
       }
+      await progress(pct, `Reading start page ${pagesDone} of ${totalPages}`,
+        `Page ${pagesDone}: ${links.length} PDF links, ${report.candidates.length - before} new for this run`);
     }
   }
-  log(`found ${report.candidates.length} files to fetch, ${report.unmatched.length} links not recognised`);
+  await progress(findShare, "Pages read",
+    `Found ${report.candidates.length} file(s) to ${job.params.mode === "dry" ? "list" : "fetch"}, ${report.skippedHave} already stored, ${report.unmatched.length} link(s) not recognised`);
 
   if (job.params.mode === "download") {
-    for (const c of report.candidates.slice(0, job.limits.maxFiles)) {
+    const todo = report.candidates.slice(0, job.limits.maxFiles);
+    let n = 0;
+    for (const c of todo) {
+      n++;
+      const pct = findShare + Math.round(((n - 1) / Math.max(todo.length, 1)) * (99 - findShare));
+      const step = `Downloading file ${n} of ${todo.length}`;
+      await progress(pct, step);
+      const failedBefore = report.failed.length;
       try {
         const r = await politeFetch(c.url, job.limits.maxFileBytes);
         if (r.status !== 200) {
           report.failed.push({ name: c.name, reason: `http_${r.status}` });
-          continue;
+        } else {
+          const res = await api("/api/agent/file", r.bytes, {
+            "x-agent-job": JOB_ID, "x-agent-file": c.name, "x-agent-site": c.siteId, "x-agent-url": c.url,
+          }, "application/pdf");
+          const out = res.data as { ok?: boolean; reason?: string; error?: string } | null;
+          if (res.status === 200 && out?.ok) report.stored.push(c.name);
+          else report.failed.push({ name: c.name, reason: out?.reason ?? out?.error ?? `worker_${res.status}` });
+          if (res.status === 429 || res.status === 409) break; // run limit reached or run closed
         }
-        const res = await api("/api/agent/file", r.bytes, {
-          "x-agent-job": JOB_ID, "x-agent-file": c.name, "x-agent-site": c.siteId, "x-agent-url": c.url,
-        }, "application/pdf");
-        const out = res.data as { ok?: boolean; reason?: string; error?: string } | null;
-        if (res.status === 200 && out?.ok) report.stored.push(c.name);
-        else report.failed.push({ name: c.name, reason: out?.reason ?? out?.error ?? `worker_${res.status}` });
-        if (res.status === 429 || res.status === 409) break; // run limit reached or run closed
-      } catch {
+      } catch (e) {
+        if (e instanceof Cancelled) throw e;
         report.failed.push({ name: c.name, reason: "download_failed" });
       }
+      const failed = report.failed.length > failedBefore ? report.failed[report.failed.length - 1] : null;
+      const why = failed
+        ? (REASON_LABELS as Record<string, string>)[failed.reason] ?? (failed.reason.startsWith("http_") ? `the website answered ${failed.reason.slice(5)}` : failed.reason)
+        : "";
+      await progress(pct, step, failed ? `${n} of ${todo.length}: ${c.name} not stored (${why})` : `${n} of ${todo.length}: ${c.name} stored`);
     }
-    log(`stored ${report.stored.length}, not stored ${report.failed.length}`);
+    await progress(99, "Finishing", `Stored ${report.stored.length}, not stored ${report.failed.length}`);
   }
 }
 
@@ -232,6 +285,10 @@ try {
   await main();
   await finish(true);
 } catch (err) {
+  if (err instanceof Cancelled) {
+    log("stopped: the run was cancelled in the admin panel");
+    process.exit(0);
+  }
   report.error = err instanceof Error ? err.message.slice(0, 300) : "unknown error";
   console.error(`[agent] ${report.error}`);
   try {

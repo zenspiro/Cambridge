@@ -5,7 +5,7 @@ import { getEnv } from "@/lib/env";
 import { AdminShell, Notice } from "@/components/AdminShell";
 import { SESSION_LABELS } from "@/lib/config";
 import { getLibrarySettings, libraryYears } from "@/lib/settings";
-import { listRuns, type RunParams } from "@/lib/agent/runs";
+import { closeStaleRuns, listRuns, type RunParams } from "@/lib/agent/runs";
 import { describeRun, readReport, STATUS_LABELS, arr } from "@/lib/agent/labels";
 import { dateFmt } from "@/lib/library/labels";
 
@@ -13,7 +13,8 @@ export const metadata: Metadata = { title: "Download agent" };
 
 const MESSAGES = {
   bad: "Choose at least one year and one session.",
-  running: "A run is already waiting or running. Wait for it to finish first.",
+  running: "A run is already waiting or running. Open it below to follow it or cancel it.",
+  missing: "That run no longer exists.",
   busy: "Too many runs this hour. Please wait a little.",
 };
 
@@ -22,6 +23,7 @@ export default async function AgentPage({ searchParams }: { searchParams: Promis
   const q = await searchParams;
   const env = await getEnv();
   const lib = await getLibrarySettings(env.DB);
+  await closeStaleRuns(env.DB);
   const runs = await listRuns(env.DB, 20);
 
   return (
@@ -86,6 +88,7 @@ export default async function AgentPage({ searchParams }: { searchParams: Promis
                   </span>
                   <span className="actions">
                     {r.status === "succeeded" ? <span className="muted">{n}</span> : null}
+                    {r.status === "running" ? <span className="muted">{r.progress}%</span> : null}
                     <span className={r.status === "succeeded" ? "pill pill-ok" : r.status === "failed" ? "pill pill-gap" : "pill"}>
                       {STATUS_LABELS[r.status] ?? r.status}
                     </span>

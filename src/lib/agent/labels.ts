@@ -9,6 +9,22 @@ export const STATUS_LABELS: Record<string, string> = {
   cancelled: "Cancelled",
 };
 
+/** "3 min 20 s", "45 s". */
+export function elapsed(ms: number): string {
+  const s = Math.max(0, Math.round(ms / 1000));
+  const m = Math.floor(s / 60);
+  return m > 0 ? `${m} min ${s % 60} s` : `${s} s`;
+}
+
+export function readEvents(json: string): { at: number; text: string }[] {
+  try {
+    const v = JSON.parse(json);
+    return Array.isArray(v) ? v.filter((e) => e && typeof e.at === "number" && typeof e.text === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
 export function describeRun(p: RunParams): string {
   const mode = p.mode === "dry" ? "Dry run" : "Download";
   const sessions = p.sessions.map((s) => SESSION_LABELS[s] ?? s).join(", ");

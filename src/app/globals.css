@@ -75,4 +75,6 @@
   .summary { @apply cursor-pointer; }
   .stats { @apply grid grid-cols-2 gap-2 text-sm sm:grid-cols-5; }
   .stats li { @apply rounded-lg bg-wash p-2; }
+  .stack-tight { @apply flex flex-col gap-2; }
+  .bar { @apply h-3 w-full overflow-hidden rounded-full; accent-color: var(--color-brand); }
 }

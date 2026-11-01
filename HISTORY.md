@@ -2,6 +2,24 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-01: Live agent feedback and Cancel
+
+**What**
+- Run page while the agent works: progress bar with percentage, current step, time so far and since the last update, an activity log (one line per page and per file, newest first, times to the second), a link to the run's GitHub log, and Cancel run with an inline Yes / Never mind. The page reloads itself every 10 seconds while the run is active and stops when it ends.
+- Agent sends a signed update at each step (`/api/agent/progress`) and stops if the run was cancelled.
+- Stuck runs: a warning after 5 minutes if GitHub has not started the run; runs with no sign of life for 15 minutes close themselves (was 3 hours), with a message naming the likely cause.
+- Migration 0005: `job.heartbeat_at`, `step`, `events`, `run_url`.
+
+**Why**
+- Owner asked for reasonable feedback while the agent runs.
+- The first production dry run never started: `AGENT_SECRET` was under GitHub's Agents secrets, not Actions. The run sat "Waiting to start" with no explanation and blocked new runs for 3 hours.
+- Auto-reload uses a meta refresh rather than script, keeping to the brief's no-AJAX rule.
+
+**Tested**
+- 57 unit tests pass (4 new: progress updates and event cap, cancel, 15 minute rule for never-started and quiet runs, cleaning of agent text and GitHub links).
+- 111 browser checks, run twice. New: live updates arrive, progress bar, auto-refresh on then off, activity log, time so far, no sideways scroll at 375 px, cancel mid-run (asks first, run shows Cancelled, agent stops itself), never-started run explains the cause.
+- Fixed during testing: a file that failed to download had no activity line; reasons now read in plain words.
+
 ## 2026-11-01: Acquisition agent and settings (build 3b)
 
 **What**

@@ -22,15 +22,25 @@ export function checkRunParams(input: { code: unknown; years: unknown[]; session
 }
 
 /**
- * Starts a run unless one is already queued or running (checked inside the insert,
- * so two clicks cannot start two runs). Old stuck runs are closed first.
+ * Closes runs with no sign of life for AGENT.staleAfterMs: never started by GitHub,
+ * or started and gone quiet. Called before a new run starts and when run pages load.
  */
-export async function startRun(db: Db, params: RunParams, actorId: string, now = Date.now()): Promise<string | null> {
+export async function closeStaleRuns(db: Db, now = Date.now()): Promise<void> {
   await db
-    .prepare(`UPDATE job SET status = 'failed', error_ref = 'timeout', finished_at = ?1
-              WHERE type = 'agent' AND status IN ('queued', 'running') AND created_at <= ?2`)
+    .prepare(`UPDATE job SET status = 'failed', error_ref = CASE status WHEN 'queued' THEN 'never_started' ELSE 'timeout' END,
+                     finished_at = ?1
+              WHERE type = 'agent' AND status IN ('queued', 'running')
+                AND COALESCE(heartbeat_at, started_at, created_at) <= ?2`)
     .bind(now, now - AGENT.staleAfterMs)
     .run();
+}
+
+/**
+ * Starts a run unless one is already queued or running (checked inside the insert,
+ * so two clicks cannot start two runs). Stale runs are closed first.
+ */
+export async function startRun(db: Db, params: RunParams, actorId: string, now = Date.now()): Promise<string | null> {
+  await closeStaleRuns(db, now);
   const row = await db
     .prepare(`INSERT INTO job (id, type, status, params, created_by, created_at)
               SELECT ?1, 'agent', 'queued', ?2, ?3, ?4
@@ -45,7 +55,7 @@ export async function startRun(db: Db, params: RunParams, actorId: string, now =
 /** The agent picks up its run. Queued becomes running; a running run can be picked up again (retry). */
 export async function claimRun(db: Db, id: string, now = Date.now()): Promise<RunParams | null> {
   const row = await db
-    .prepare(`UPDATE job SET status = 'running', started_at = COALESCE(started_at, ?2)
+    .prepare(`UPDATE job SET status = 'running', started_at = COALESCE(started_at, ?2), heartbeat_at = ?2
               WHERE id = ?1 AND type = 'agent' AND status IN ('queued', 'running') RETURNING params`)
     .bind(id, now)
     .first<{ params: string }>();
@@ -70,11 +80,17 @@ export async function finishRun(db: Db, id: string, ok: boolean, report: string,
   return !!row;
 }
 
-export type RunRow = { id: string; status: string; params: string; result: string; error_ref: string | null; created_at: number; finished_at: number | null };
+export type RunEvent = { at: number; text: string };
+export type RunRow = {
+  id: string; status: string; params: string; result: string; error_ref: string | null; created_at: number;
+  started_at: number | null; finished_at: number | null; heartbeat_at: number | null; progress: number;
+  step: string | null; events: string; run_url: string | null;
+};
+const RUN_COLS = `id, status, params, result, error_ref, created_at, started_at, finished_at, heartbeat_at, progress, step, events, run_url`;
 
 export async function listRuns(db: Db, limit = 20): Promise<RunRow[]> {
   const { results } = await db
-    .prepare(`SELECT id, status, params, result, error_ref, created_at, finished_at FROM job WHERE type = 'agent' ORDER BY created_at DESC LIMIT ?1`)
+    .prepare(`SELECT ${RUN_COLS} FROM job WHERE type = 'agent' ORDER BY created_at DESC LIMIT ?1`)
     .bind(limit)
     .all<RunRow>();
   return results;
@@ -83,9 +99,63 @@ export async function listRuns(db: Db, limit = 20): Promise<RunRow[]> {
 export async function getRun(db: Db, id: string): Promise<RunRow | null> {
   if (!/^[A-Za-z0-9_-]{10,64}$/.test(id)) return null;
   return db
-    .prepare(`SELECT id, status, params, result, error_ref, created_at, finished_at FROM job WHERE id = ?1 AND type = 'agent'`)
+    .prepare(`SELECT ${RUN_COLS} FROM job WHERE id = ?1 AND type = 'agent'`)
     .bind(id)
     .first<RunRow>();
+}
+
+/** Short single-line text from the agent: no control characters, capped. Shown as text only. */
+export function cleanEventText(v: unknown, max = 200): string | null {
+  if (typeof v !== "string") return null;
+  const t = v.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim();
+  return t ? t.slice(0, max) : null;
+}
+
+/** Only a link to this repository's own Actions run log is kept. */
+export function cleanRunUrl(v: unknown, repo: string | undefined): string | null {
+  if (typeof v !== "string" || !repo) return null;
+  const re = new RegExp(`^https://github\\.com/${repo.replace(/[.]/g, "\\.")}/actions/runs/\\d{1,20}$`);
+  return re.test(v) ? v : null;
+}
+
+/**
+ * The agent's sign of life: progress (0 to 100), current step, and an optional event
+ * for the live log (last AGENT.maxEvents kept). False when the run is no longer active
+ * (finished, cancelled or closed), which tells the agent to stop.
+ */
+export async function recordProgress(
+  db: Db,
+  id: string,
+  update: { progress: number; step: string | null; event: string | null; runUrl: string | null },
+  now = Date.now(),
+): Promise<boolean> {
+  const row = await db.prepare(`SELECT events FROM job WHERE id = ?1 AND type = 'agent' AND status = 'running'`).bind(id).first<{ events: string }>();
+  if (!row) return false;
+  let events: RunEvent[] = [];
+  try {
+    events = JSON.parse(row.events) as RunEvent[];
+  } catch {
+    events = [];
+  }
+  if (update.event) events = [...events, { at: now, text: update.event }].slice(-AGENT.maxEvents);
+  const pct = Math.max(0, Math.min(99, Math.round(update.progress)));
+  const done = await db
+    .prepare(`UPDATE job SET progress = ?2, step = COALESCE(?3, step), events = ?4, heartbeat_at = ?5, run_url = COALESCE(run_url, ?6)
+              WHERE id = ?1 AND type = 'agent' AND status = 'running' RETURNING id`)
+    .bind(id, pct, update.step, JSON.stringify(events), now, update.runUrl)
+    .first<{ id: string }>();
+  return !!done;
+}
+
+/** Admin stops a run. The agent sees it on its next update and stops too. */
+export async function cancelRun(db: Db, id: string, actorId: string, now = Date.now()): Promise<boolean> {
+  const row = await db
+    .prepare(`UPDATE job SET status = 'cancelled', error_ref = 'cancelled', finished_at = ?2
+              WHERE id = ?1 AND type = 'agent' AND status IN ('queued', 'running') RETURNING id`)
+    .bind(id, now)
+    .first<{ id: string }>();
+  if (row) await audit(db, { actorId, action: "agent.cancel", entity: "job", entityId: id }, now);
+  return !!row;
 }
 
 /** Spends a signed request's nonce once. False means a replay. */

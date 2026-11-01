@@ -12,7 +12,8 @@ Current state, kept short. The full brief (product, copyright rules, standards) 
 ## Status
 - Step 0 (repo, CI, Cloudflare, docs) live.
 - Admin sign-in (Step 1-lite) live: one platform admin, password only (owner decision).
-- Build 3a (source library) live. Build 3b (acquisition agent, settings page) built; needs the owner's two secrets (`docs/guides/agent-setup.md`).
+- Build 3a (source library) and 3b (agent, settings) live; owner's secrets set. Live run feedback and Cancel built (next merge).
+- First production run failed because `AGENT_SECRET` sat under GitHub's "Agents" secrets (Copilot), not "Actions"; owner moved it.
 - Subject: Physics 0625 (owner decision). Library years 2022 to 2026 (owner decision), now a database setting.
 - Cambridge's public 0625 pages (checked 1 Nov 2026) carry only June 2024 variant 1, the 2023 specimens and the syllabus PDFs: about 30 files. Everything else in 2022 to 2026 needs manual upload or another approved source (owner's legal call).
 - Node in this container ignores the proxy unless `NODE_USE_ENV_PROXY=1`; GitHub Actions does not need it.
@@ -59,12 +60,14 @@ Current state, kept short. The full brief (product, copyright rules, standards) 
 - Name translation: `toCambridgeName()` in `src/lib/agent/links.ts`, built from Cambridge's real names (`570010-june-2024-question-paper-11.pdf` to `0625_s24_qp_11.pdf`; specimens and syllabi too). Unknown links go in the report, never guessed.
 - `/api/agent/*` have no session: every request must pass `agentRequest()` (HMAC-SHA256 over time, nonce, method, path and body hash; 5 minute window; nonce spent once in `request_nonce`). Files must come from an enabled source's address, at most 400 per run, and go through `storeDocument()`.
 - Secrets (owner sets them, never in code): Worker `GITHUB_TOKEN` (Actions read and write on this repo only), Worker and GitHub `AGENT_SECRET` (same value, 32+ characters). Vars in `wrangler.jsonc`: `GITHUB_REPO`, `AGENT_WORKFLOW`, `AGENT_REF`. Local: `.dev.vars`.
+- Live feedback: the agent posts signed updates to `/api/agent/progress` (progress, step, event, its GitHub log link); `recordProgress()` keeps the last 30 events and a heartbeat. A 409 there means cancelled or closed, and the agent stops. The run page reloads itself every 10 s while active (`<meta http-equiv="refresh">`, no script), shows a progress bar, elapsed time, activity log, GitHub log link and Cancel (inline confirm).
+- `closeStaleRuns()` (on start and when agent pages load): no sign of life for 15 minutes closes a run as `never_started` (GitHub never ran it, usually the GitHub secret) or `timeout`. A queued run older than 5 minutes shows a warning.
 - Local CSP: `upgrade-insecure-requests` is left out only when the request itself is plain http (local test server); https always has it.
 
 ## Database
 - Migrations in `migrations/NNNN_name.sql`, additive only (a unit test blocks DROP, RENAME, DELETE).
 - Conventions: TEXT random ids, INTEGER milliseconds for times, JSON as TEXT with `json_valid`, real foreign keys with `ON DELETE CASCADE` toward the owning user, so deletion and export find every row.
-- Tables: `job`, `admin_session`, `login_attempt` (all rate limits), `audit_log`, `subject`, `syllabus`, `source_site`, `source_document`, `setting`, `source_page`, `request_nonce`.
+- Tables: `job`, `admin_session`, `login_attempt` (all rate limits), `audit_log`, `subject`, `syllabus`, `source_site`, `source_document`, `setting`, `source_page`, `request_nonce`. `job` also has `heartbeat_at`, `step`, `events`, `run_url` (0005).
 - Shared types `Db` and `Bucket`: `src/lib/db.ts`. Logic takes them as parameters so unit tests run it on SQLite and an in-memory bucket.
 
 ## Commands
