@@ -12,7 +12,8 @@ Current state, kept short. The full brief (product, copyright rules, standards) 
 ## Status
 - Step 0 (repo, CI, Cloudflare, docs) live.
 - Admin sign-in (Step 1-lite) live: one platform admin, password only (owner decision).
-- Build 3a (source library) and 3b (agent, settings) live; owner's secrets set. Live run feedback and Cancel built (next merge).
+- Build 3a (source library), 3b (agent, settings) and live run feedback are live; owner's secrets set. First real runs stored June 2024 (14 files) and the 2023 specimens.
+- Library hierarchy and checklist built (next merge): one Library screen, no separate checklist page (owner decision).
 - First production run failed because `AGENT_SECRET` sat under GitHub's "Agents" secrets (Copilot), not "Actions"; owner moved it.
 - Subject: Physics 0625 (owner decision). Library years 2022 to 2026 (owner decision), now a database setting.
 - Cambridge's public 0625 pages (checked 1 Nov 2026) carry only June 2024 variant 1, the 2023 specimens and the syllabus PDFs: about 30 files. Everything else in 2022 to 2026 needs manual upload or another approved source (owner's legal call).
@@ -44,15 +45,23 @@ Current state, kept short. The full brief (product, copyright rules, standards) 
 - Local password: `.dev.vars` (copy `.dev.vars.example`).
 
 ## Source library (build 3a)
-- Pages: `/admin/library` (filters by year, session, type, paper), `/admin/library/gaps`, `/admin/library/upload`, `/admin/sources`, `/admin/settings`. Frame and nav: `src/components/AdminShell.tsx`. Admin form POSTs go through `adminPost()` (`src/lib/adminPost.ts`).
+- Pages: `/admin/library` (qualifications with subject cards and status, search across all), `/admin/library/[code]` (one syllabus: status, filters, search, checklist), `/admin/library/add?file=` (add one missing file by upload or approved link), `/admin/library/upload` (bulk), `/admin/sources`, `/admin/settings`. Frame and nav: `src/components/AdminShell.tsx`. Admin form POSTs go through `adminPost()` (`src/lib/adminPost.ts`).
 - Files live in R2 `SOURCE` at `code/year/session/file_name`; rows in `source_document`. Only `src/app/admin/` and the agent's store endpoint may touch `env.SOURCE` (unit test). Downloads are attachments, `no-store`, audited (`source.download`).
 - One store path for uploads and the agent: `storeDocument()` in `src/lib/library/store.ts`. It checks the Cambridge name (`names.ts`), year range, size, PDF header and syllabus version, then reserves the row as `pending` (unique name and SHA-256, so races and duplicates are caught), writes R2, marks `stored`, audits.
 - File types: qp, ms, in, ci, er, gt per exam session; sp, sm, in, ci, sy for specimens (session `y`). Brief listed qp, ms, er, gt, sp; the rest are real Cambridge types.
-- Syllabus versions are rows (`0625-2020`, `0625-2023`, `0625-2026`); a file joins the version for its year. 2023 to 2025 and 2026 to 2028 confirmed on Cambridge's site (1 Nov 2026). Gap rules are JSON in `syllabus.expected`, read by `expected.ts`.
+- Syllabus versions are rows (`0625-2020`, `0625-2023`, `0625-2026`); a file joins the version for its year. 2023 to 2025 and 2026 to 2028 confirmed on Cambridge's site (1 Nov 2026). Checklist rules are JSON in `syllabus.expected`.
 - Settings: library years and `lastSession` are the `setting` row `library` (`src/lib/settings.ts`, page `/admin/settings`). Limits stay in `LIBRARY` and `AGENT` (`src/lib/config.ts`).
 - Approved sources: `source_site`, seeded with Cambridge's official site. Addresses must be public https (`normaliseSiteUrl`). Remove uses the inline Yes / Never mind confirm.
 - Rate limits: one helper, `src/lib/ratelimit.ts` (`allow`, keys hashed), on the `login_attempt` table for every kind of limit.
 - Jobs: `src/lib/jobs.ts`. Each upload batch is a `source_upload` job with per-file results.
+
+## Library hierarchy and checklist
+- Hierarchy: `qualification` (IGCSE, O Level, AS & A Level) > `subject` (`qualification_id`) > syllabus code > `syllabus` versions > `source_document`. Adding a subject or syllabus is Step 2 (not built); empty qualifications still show.
+- `buildChecklist()` (`src/lib/library/checklist.ts`, pure) lists every expected file: per version the syllabus (essential), update and grade descriptions (extras) and specimens; per public session each paper and variant (qp, ms, ci for paper 5) plus er and gt. Rules are JSON in `syllabus.expected`. Essential variants per session are the setting `essentialVariants` (owner: variant 1, March 2). Stored files the checklist does not ask for show under "Other stored files".
+- `loadCatalog()` / `loadSyllabus()` (`src/lib/library/catalog.ts`) read the tree; the admin library and the signed `/api/agent/catalog` (for the AI engine, metadata only) both use them.
+- Search: every word must match; numbers match whole words (so "4" is paper 4), other words match word starts, file names match inside. Filters: year, session, type, paper, status (missing essentials, stored, extras).
+- Cells: green tick downloads; red cross (essential) or grey + (extra) opens the add page. Adding by upload renames to the checklist name; by link only from an enabled source (robots.txt, same-site redirects, size cap; `fetchApprovedPdf`). Origin `link`.
+- New types `su` (syllabus update) and `gd` (grade descriptions): `0625_y23_su.pdf`. Migration 0006 rebuilt `source_document` for them, a one-time owner-approved exception to additive only (allowed by name in `tests/unit/migrations.test.ts`).
 
 ## Acquisition agent (build 3b)
 - Run button: `/admin/agent` (years, sessions incl. Specimen, dry run or download) creates a `job` of type `agent` (one at a time, checked inside the insert; runs silent for 3 hours are closed) and calls GitHub `workflow_dispatch` on `.github/workflows/agent.yml` (`src/lib/agent/github.ts`). Report page: `/admin/agent/runs/[id]`; a dry run offers "Download these N files".
@@ -65,9 +74,9 @@ Current state, kept short. The full brief (product, copyright rules, standards) 
 - Local CSP: `upgrade-insecure-requests` is left out only when the request itself is plain http (local test server); https always has it.
 
 ## Database
-- Migrations in `migrations/NNNN_name.sql`, additive only (a unit test blocks DROP, RENAME, DELETE).
+- Migrations in `migrations/NNNN_name.sql`, additive only (a unit test blocks DROP, RENAME, DELETE). One named exception: 0006.
 - Conventions: TEXT random ids, INTEGER milliseconds for times, JSON as TEXT with `json_valid`, real foreign keys with `ON DELETE CASCADE` toward the owning user, so deletion and export find every row.
-- Tables: `job`, `admin_session`, `login_attempt` (all rate limits), `audit_log`, `subject`, `syllabus`, `source_site`, `source_document`, `setting`, `source_page`, `request_nonce`. `job` also has `heartbeat_at`, `step`, `events`, `run_url` (0005).
+- Tables: `job`, `admin_session`, `login_attempt` (all rate limits), `audit_log`, `subject`, `syllabus`, `source_site`, `source_document`, `setting`, `source_page`, `request_nonce`, `qualification`. `job` also has `heartbeat_at`, `step`, `events`, `run_url` (0005).
 - Shared types `Db` and `Bucket`: `src/lib/db.ts`. Logic takes them as parameters so unit tests run it on SQLite and an in-memory bucket.
 
 ## Commands

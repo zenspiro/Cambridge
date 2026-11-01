@@ -2,115 +2,93 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/guard";
 import { getEnv } from "@/lib/env";
-import { AdminShell } from "@/components/AdminShell";
-import { DOC_TYPE_LABELS, LIBRARY, SESSION_LABELS } from "@/lib/config";
-import { getLibrarySettings, libraryYears } from "@/lib/settings";
-import { LIST_DOCUMENTS } from "@/lib/library/queries";
-import { dateFmt, describeDoc, formatBytes, sessionLabel } from "@/lib/library/labels";
+import { AdminShell, Notice } from "@/components/AdminShell";
+import { CellLink, StatusLine } from "@/components/LibraryBits";
+import { loadCatalog } from "@/lib/library/catalog";
+import { cellMatches, groupCells, searchWords, type Cell } from "@/lib/library/checklist";
 
-export const metadata: Metadata = { title: "Source library" };
+export const metadata: Metadata = { title: "Library" };
 
-type Row = {
-  id: string; file_name: string; session: string; year: number; paper: number | null; variant: number | null;
-  doc_type: string; size_bytes: number; origin: string; acquired_at: number;
-};
-
-// Filters come from the address bar, so each is checked against an allowlist.
-function pick<T extends string>(v: string | undefined, allowed: readonly T[]): T | null {
-  return v && (allowed as readonly string[]).includes(v) ? (v as T) : null;
-}
-
-export default async function LibraryPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
+export default async function LibraryHome({ searchParams }: { searchParams: Promise<{ q?: string; e?: string }> }) {
   await requireAdmin();
-  const q = await searchParams;
+  const sp = await searchParams;
+  const q = (sp.q ?? "").slice(0, 100);
   const env = await getEnv();
-  const lib = await getLibrarySettings(env.DB);
-  const years = libraryYears(lib).map(String);
-  const year = pick(q.year, years);
-  const session = pick(q.session, Object.keys(SESSION_LABELS));
-  const type = pick(q.type, Object.keys(DOC_TYPE_LABELS));
-  const paper = pick(q.paper, ["1", "2", "3", "4", "5", "6"]);
+  const { library, qualifications } = await loadCatalog(env.DB);
+  const words = searchWords(q);
 
-  const { results } = await env.DB.prepare(LIST_DOCUMENTS)
-    .bind("0625", year ? Number(year) : null, session, type, paper ? Number(paper) : null, LIBRARY.pageSize)
-    .all<Row>();
-
-  // Group by session for reading.
-  const groups = new Map<string, Row[]>();
-  for (const r of results) {
-    const k = sessionLabel(r.session, r.year);
-    groups.set(k, [...(groups.get(k) ?? []), r]);
+  // Search across every syllabus.
+  const results: { code: string; subject: string; cell: Cell }[] = [];
+  if (words.length > 0) {
+    for (const qual of qualifications)
+      for (const s of qual.subjects)
+        for (const y of s.syllabuses) {
+          const all = [...y.checklist.versions.flatMap(groupCells), ...y.checklist.sessions.flatMap(groupCells), ...y.checklist.others];
+          for (const c of all) if (cellMatches(c, {}, words)) results.push({ code: y.code, subject: `${qual.shortName} ${s.name}`, cell: c });
+        }
   }
 
   return (
-    <AdminShell current="/admin/library" title="Source library">
-      <p className="muted">Physics 0625, {lib.fromYear} to {lib.toYear}. Admin only. Every download is logged.</p>
+    <AdminShell current="/admin/library" title="Library">
+      <Notice code={sp.e} messages={{ unknown: "That syllabus is not in the library.", too_big: "That file is too big (25 MB at most)." }} />
+      <p className="muted">
+        Cambridge source files by qualification and subject, {library.fromYear} to {library.toYear}. Admin only; every
+        download is logged. Green means every essential file is in.
+      </p>
 
-      <form className="card filters" method="get">
-        <label className="field">
-          <span className="label-inline">Year</span>
-          <select className="input" name="year" defaultValue={year ?? ""}>
-            <option value="">All</option>
-            {years.map((y) => <option key={y} value={y}>{y}</option>)}
-          </select>
-        </label>
-        <label className="field">
-          <span className="label-inline">Session</span>
-          <select className="input" name="session" defaultValue={session ?? ""}>
-            <option value="">All</option>
-            {Object.entries(SESSION_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </select>
-        </label>
-        <label className="field">
-          <span className="label-inline">Type</span>
-          <select className="input" name="type" defaultValue={type ?? ""}>
-            <option value="">All</option>
-            {Object.entries(DOC_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </select>
-        </label>
-        <label className="field">
-          <span className="label-inline">Paper</span>
-          <select className="input" name="paper" defaultValue={paper ?? ""}>
-            <option value="">All</option>
-            {["1", "2", "3", "4", "5", "6"].map((p) => <option key={p} value={p}>{p}</option>)}
-          </select>
-        </label>
-        <div className="filter-actions">
-          <button className="btn btn-primary" type="submit">Filter</button>
-          <Link className="btn" href="/admin/library">Clear</Link>
-        </div>
+      <form className="card searchbar" method="get" role="search">
+        <label className="sr-only" htmlFor="q">Search the library</label>
+        <input className="input" id="q" name="q" type="search" maxLength={100} defaultValue={q}
+          placeholder="Search, e.g. mark scheme 2024 paper 4" />
+        <button className="btn btn-primary" type="submit">Search</button>
+        {q ? <Link className="btn" href="/admin/library">Clear</Link> : null}
       </form>
 
-      {results.length === 0 ? (
+      {words.length > 0 ? (
         <section className="card stack">
-          <p className="muted">
-            No files match. <Link className="link" href="/admin/library/upload">Upload some</Link>.
-          </p>
+          <h2 className="subtitle">
+            {results.length} {results.length === 1 ? "match" : "matches"} for &quot;{q}&quot;
+          </h2>
+          <ul className="list">
+            {results.slice(0, 200).map(({ code, subject, cell }) => (
+              <li className="list-row" key={cell.fileName}>
+                <span className="doc-main">
+                  <span className="mono">{cell.fileName}</span>
+                  <Link className="muted link" href={`/admin/library/${code}?q=${encodeURIComponent(cell.fileName)}`}>{subject} ({code})</Link>
+                </span>
+                <span className="actions">
+                  {!cell.doc && !cell.essential ? <span className="muted">extra</span> : null}
+                  <CellLink cell={cell} label={cell.doc ? "Download" : "Add"} />
+                </span>
+              </li>
+            ))}
+          </ul>
+          {results.length > 200 ? <p className="muted">Showing the first 200. Add more words to narrow it down.</p> : null}
         </section>
       ) : (
-        [...groups.entries()].map(([label, rows]) => (
-          <section className="card stack" key={label}>
-            <h2 className="subtitle">{label}</h2>
-            <ul className="list">
-              {rows.map((r) => (
-                <li className="list-row" key={r.id}>
-                  <span className="doc-main">
-                    <span className="mono">{r.file_name}</span>
-                    <span className="muted">{describeDoc(r)}</span>
-                  </span>
-                  <span className="doc-meta muted">
-                    {formatBytes(r.size_bytes)} · {r.origin === "agent" ? "Agent" : "Upload"} · {dateFmt.format(r.acquired_at)}
-                  </span>
-                  <a className="btn btn-small" href={`/admin/library/file/${encodeURIComponent(r.id)}`}>Download</a>
-                </li>
-              ))}
-            </ul>
+        qualifications.map((qual) => (
+          <section className="stack" key={qual.id}>
+            <h2 className="subtitle section-title">{qual.name}</h2>
+            {qual.subjects.length === 0 ? (
+              <p className="muted card">No subjects yet.</p>
+            ) : (
+              <div className="cards">
+                {qual.subjects.flatMap((s) =>
+                  s.syllabuses.map((y) => (
+                    <Link className="card card-link" key={y.code} href={`/admin/library/${y.code}`}>
+                      <span className="row-between">
+                        <strong>{s.name}</strong>
+                        <span className="mono muted">{y.code}</span>
+                      </span>
+                      <StatusLine status={y.checklist.status} compact />
+                    </Link>
+                  )),
+                )}
+              </div>
+            )}
           </section>
         ))
       )}
-      {results.length === LIBRARY.pageSize ? (
-        <p className="muted">Showing the first {LIBRARY.pageSize}. Use the filters to narrow it down.</p>
-      ) : null}
     </AdminShell>
   );
 }

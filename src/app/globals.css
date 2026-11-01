@@ -77,4 +77,41 @@
   .stats li { @apply rounded-lg bg-wash p-2; }
   .stack-tight { @apply flex flex-col gap-2; }
   .bar { @apply h-3 w-full overflow-hidden rounded-full; accent-color: var(--color-brand); }
+  .bar-ok { accent-color: #15803d; }
+  .bar-part { accent-color: #d97706; }
+  .bar-none { accent-color: #dc2626; }
+
+  /* Library */
+  .pill-part { @apply border-amber-200 bg-amber-50 text-amber-900; }
+  .pill-none { @apply border-red-200 bg-red-50 text-red-800; }
+  .searchbar { @apply mt-6 flex flex-col gap-2 sm:flex-row sm:items-center; }
+  .section-title { @apply mt-8; }
+  .cards { @apply grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3; }
+  .card-link { @apply flex flex-col gap-3 no-underline transition hover:border-brand; }
+  .status { @apply flex flex-col gap-2; }
+  .status-compact .bar { @apply h-2; }
+  .crumbs { @apply mt-2 flex flex-wrap items-center gap-2 text-sm text-muted; }
+  .filters-6 { @apply sm:grid-cols-3 lg:grid-cols-6; }
+  .field-wide { @apply col-span-2 sm:col-span-3 lg:col-span-6; }
+  .legend { @apply mt-4 flex flex-wrap gap-x-4 gap-y-2 text-sm; }
+  .legend-item { @apply inline-flex items-center gap-1.5 whitespace-nowrap; }
+  .group { @apply mt-3 p-0; }
+  .group-head { @apply flex cursor-pointer list-none items-center justify-between gap-3 p-4 sm:px-6; }
+  .group-head::-webkit-details-marker { display: none; }
+  .group-body { @apply flex flex-col gap-3 px-4 pb-4 sm:px-6; }
+  .doc-chips { @apply flex flex-wrap gap-2; }
+  .grid-table { @apply w-full table-fixed border-collapse text-sm; }
+  .grid-table th:first-child { @apply w-24; }
+  .grid-table th, .grid-table td { @apply border-b border-line px-2 py-1.5 text-center; }
+  .grid-table thead th { @apply text-xs font-semibold text-muted; }
+  .grid-table tbody th { @apply text-left font-medium whitespace-nowrap; }
+  .row-extra { @apply bg-wash text-muted; }
+  .tag { @apply ml-2 rounded bg-line px-1.5 py-0.5 text-xs font-normal text-muted; }
+  .cell { @apply inline-flex min-h-9 min-w-9 items-center justify-center gap-1.5 rounded-lg border px-2 text-sm font-semibold no-underline; }
+  .cell-have { @apply border-green-200 bg-green-50 text-green-800 hover:bg-green-100; }
+  .cell-miss { @apply border-red-200 bg-red-50 text-red-700 hover:bg-red-100; }
+  .cell-extra { @apply border-line bg-paper text-muted hover:bg-wash; }
+  .cell-na { @apply border-transparent text-line; }
+  .legend .cell { @apply min-h-6 min-w-6 px-1 text-xs; }
+  .cell-label { @apply font-medium; }
 }

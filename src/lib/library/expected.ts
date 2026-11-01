@@ -8,6 +8,13 @@ export type ExpectedRules = {
   perPaper: DocType[];
   ciPapers?: number[];
   perSession?: DocType[];
+  /** Per syllabus version: essential documents (syllabus) and extras (updates, grade descriptions). */
+  versionDocs?: DocType[];
+  extraVersionDocs?: DocType[];
+  /** Specimen papers for the version, their types, and which papers have confidential instructions. */
+  specimenPapers?: number[];
+  specimenTypes?: DocType[];
+  specimenCiPapers?: number[];
 };
 
 const ORDER = { m: 0, s: 1, w: 2 } as const;

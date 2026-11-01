@@ -9,7 +9,9 @@ export async function POST(request: Request) {
       fromYear: num("fromYear"),
       toYear: num("toYear"),
       lastSession: { year: num("lastYear"), session: form.get("lastSession") },
+      essentialVariants: Object.fromEntries((["m", "s", "w"] as const).map((s) => [s, form.getAll(`ev_${s}`).map(Number)])),
     });
+    if (value && Object.values(value.essentialVariants).some((v) => v.length === 0)) return "bad";
     if (!value) return "bad";
     await saveLibrarySettings(db, value, actorId);
     return "ok_saved";

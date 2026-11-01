@@ -86,7 +86,7 @@ try {
   const want = ["0625_s24_qp_11.pdf", "0625_s24_ms_11.pdf", "0625_s24_er.pdf", "0625_y23_sp_1.pdf", "0625_s24_qp_21.pdf", "0625_s24_ms_21.pdf"];
   check(want.every((w) => would.includes(w)) && would.length === want.length, `dry run lists the right ${want.length} files`);
   check((await page.locator("details", { hasText: "Blocked by robots.txt" }).locator("li").allTextContents()).some((t) => t.includes("/blocked/")), "robots.txt block is reported");
-  check((await page.locator("details", { hasText: "Links not recognised" }).locator("li").allTextContents()).some((t) => t.includes("syllabus-update")), "unknown links are reported");
+  check((await page.locator("details", { hasText: "Links not recognised" }).locator("li").allTextContents()).some((t) => t.includes("teacher-guide")), "unknown links are reported");
   check((await page.locator("text=Download these 6 files").count()) === 1, "dry run offers to download");
   check(!(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)), "375px run report: no sideways scroll");
 
@@ -104,8 +104,8 @@ try {
   const notStored = await page.locator("details", { hasText: "Not stored" }).locator("li").allTextContents();
   check(notStored.some((t) => t.includes("0625_s24_qp_21.pdf") && t.includes("Not a PDF")), "fake PDF is refused");
   check(notStored.some((t) => t.includes("0625_s24_ms_21.pdf") && t.includes("http_404")), "missing file is reported");
-  await page.goto(BASE + "/admin/library?year=2024");
-  check((await page.locator(".list-row", { hasText: "0625_s24_qp_11.pdf" }).textContent())?.includes("Agent"), "library shows agent files");
+  await page.goto(BASE + "/admin/library/0625?year=2024&session=s");
+  check((await page.locator('a.cell-have[title^="0625_s24_qp_11.pdf:"]').count()) === 1, "library ticks agent files");
 
   // 4. Re-running finds nothing new.
   const again = newRun("dry");

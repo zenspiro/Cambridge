@@ -13,12 +13,16 @@ After 5 wrong tries from one network, sign-in pauses for 15 minutes from the fir
 ## Recent activity
 The admin home lists the latest sign-ins, sign-outs, wrong passwords and lockouts, in Pakistan time.
 
-## Source library
-The library holds Cambridge files for Physics 0625, 2022 to 2026. Only admins can see it, and every download is written to the activity log.
+## Library
+Cambridge files by qualification (IGCSE, O Level, AS & A Level) and subject. Only admins can see it, and every download is written to the activity log.
 
-- **Library:** files grouped by session (March, June, November, Specimen). Filter by year, session, type or paper. Download saves the PDF to your computer.
-- **Gaps:** for each session, how many expected files are stored, with the missing names listed under "missing". Sessions whose papers are not public yet are left out.
-- **Upload:** choose up to 20 PDFs (90 MB) at once. Files must keep Cambridge's names, like `0625_s23_qp_42.pdf`. Each file shows Stored or the reason it was skipped (wrong name, not a PDF, outside 2022 to 2026, already stored).
+- **Library home:** one card per subject with a bar: green when every essential file is in, amber when some are, red when none are. The search box looks across every subject (for example "mark scheme 2024 paper 4", or a file name).
+- **A subject:** click its card. At the top, the overall status and the filters (year, session, type, paper, status) with a search box. Below, foldable groups, each with its own count:
+  - **Syllabus and specimens**, per syllabus version: the syllabus (essential), updates and grade descriptions (extras), and the specimen papers with mark schemes.
+  - **Exam sessions**, newest first: a table of papers. "41" means paper 4, variant 1. Columns: QP (question paper), MS (mark scheme), CI (confidential instructions, paper 5). Above the table: examiner report and grade thresholds.
+- **Ticks and crosses:** a green tick downloads the file. A red cross is an essential file that is missing. A grey + is an extra (another variant) not yet stored. Groups that are complete start folded.
+- **Adding a missing file:** click its cross or +. Upload the PDF from your computer (any file name; it is saved under the right Cambridge name) or paste a link from an approved source.
+- **Upload (bulk):** for many files at once, they must already have Cambridge names, like `0625_s23_qp_42.pdf`.
 
 ## Approved sources
 The websites the download agent may visit. It starts with Cambridge's official site.
@@ -43,6 +47,7 @@ Only one run can go at a time. To stop one, press **Cancel run**, then **Yes, ca
 
 ## Settings
 - **From year / To year:** the years the library keeps (at most 15 years apart).
-- **Latest public session:** the newest exam session whose papers are public. The gap report ignores later sessions.
+- **Latest public session:** the newest exam session whose papers are public. The library does not ask for later sessions.
+- **Essential variants:** which variants of each paper must be stored for a session to count as complete (default variant 1; March variant 2). The rest show as extras.
 
 When a new session's papers come out: move the latest public session forward, then run the agent for just that session.

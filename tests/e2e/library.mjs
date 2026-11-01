@@ -1,5 +1,5 @@
 // Browser test of the source library against a running Worker (default http://localhost:8787).
-// Signs in with the local .dev.vars password, uploads, browses, downloads, checks gaps and sources.
+// Signs in with the local .dev.vars password, uploads, browses the library, adds a missing file, checks sources.
 import { chromium, request as apiRequest } from "playwright";
 import { readFileSync, writeFileSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -45,22 +45,59 @@ for (const width of [375, 1400]) {
     await noOverflow("upload results");
   }
 
+  // Library home: qualifications and subject cards with status.
   await page.goto(BASE + "/admin/library");
-  check((await page.locator(".mono", { hasText: good }).count()) === 1, `${width}px library lists the file`);
-  await noOverflow("library");
+  check((await page.locator("h2", { hasText: "Cambridge IGCSE" }).count()) === 1, `${width}px library groups by qualification`);
+  check((await page.locator(".card-link", { hasText: "0625" }).locator(".pill").count()) === 1, `${width}px subject card shows its status`);
+  check((await page.locator("text=No subjects yet").count()) === 2, `${width}px empty qualifications are shown`);
+  await noOverflow("library home");
 
-  const [download] = await Promise.all([
-    page.waitForEvent("download"),
-    page.locator(".list-row", { hasText: good }).locator("a", { hasText: "Download" }).click(),
-  ]);
+  // Search across the library.
+  await page.fill("#q", good);
+  await page.click("form[role=search] button[type=submit]");
+  await page.waitForURL(/\?q=/);
+  check((await page.locator(".list-row", { hasText: good }).count()) === 1, `${width}px search finds the file`);
+
+  // Subject page: the file's cell is ticked and downloads.
+  await page.goto(BASE + "/admin/library/0625");
+  check((await page.locator("nav.crumbs", { hasText: "Cambridge IGCSE" }).count()) === 1, `${width}px breadcrumb shows the hierarchy`);
+  const cellLink = page.locator(`a[title^="${good}:"]`);
+  check((await cellLink.count()) === 1, `${width}px the file shows in the checklist`);
+  if (!(await cellLink.isVisible())) await page.locator("details", { has: cellLink }).locator("summary").click();
+  const [download] = await Promise.all([page.waitForEvent("download"), cellLink.click()]);
   check(download.suggestedFilename() === good, `${width}px download is an attachment with the right name`);
+  await noOverflow("subject page");
 
-  await page.goto(BASE + "/admin/library?year=2099&type=%3Cscript%3E&paper=9");
-  check((await page.locator(".mono", { hasText: good }).count()) === 1, `${width}px junk filters are ignored safely`);
+  await page.goto(BASE + "/admin/library/0625?year=2099&type=%3Cscript%3E&paper=9&status=x");
+  check((await page.locator(`a[title^="${good}:"]`).count()) === 1, `${width}px junk filters are ignored safely`);
+  await page.goto(BASE + "/admin/library/0625?status=missing");
+  check((await page.locator("table .cell-have").count()) === 0 && (await page.locator("table .cell-miss").count()) > 0, `${width}px Missing filter shows only missing essentials`);
+  await page.goto(BASE + "/admin/library/0625?q=mark+scheme+paper+4&year=2024");
+  const shown = await page.locator("a.cell").evaluateAll((els) => els.map((e) => e.getAttribute("title") ?? "").filter(Boolean));
+  check(shown.length > 0 && shown.every((t) => /^0625_[msw]24_ms_4\d\.pdf:/.test(t)), `${width}px search inside a subject narrows the table`);
+  await page.goto(BASE + "/admin/library/9999");
+  check(page.url().includes("e=unknown"), `${width}px unknown syllabus goes back to the library`);
 
-  await page.goto(BASE + "/admin/library/gaps");
-  check((await page.locator(".pill").count()) > 0, `${width}px gap report renders`);
-  await noOverflow("gaps");
+  if (width === 375) {
+    // Add a missing essential file from its cell, with any file name.
+    await page.goto(BASE + "/admin/library/0625?status=missing");
+    const missing = page.locator("a.cell-miss").first();
+    const target = (await missing.getAttribute("title")).split(":")[0];
+    await missing.click();
+    await page.waitForURL(/\/admin\/library\/add\?file=/);
+    check((await page.locator("p.mono", { hasText: target }).count()) === 1, `add page names the file: ${target}`);
+    await page.fill("#url", "https://evil.example/paper.pdf");
+    await page.click("form[action='/admin/library/add/link'] button");
+    await page.waitForURL(/e=not_approved/);
+    check((await page.locator("p.alert").textContent())?.includes("approved source"), "link from an unapproved site is refused");
+    const any = join(dir, "my scan (final).pdf");
+    writeFileSync(any, `%PDF-1.4\n% add ${Date.now()} ${Math.random()}\n%%EOF`);
+    await page.setInputFiles("#file", any);
+    await page.click("form[action='/admin/library/add/upload'] button");
+    await page.waitForURL(/\/admin\/library\/0625\?e=ok_added/);
+    check((await page.locator(`a.cell-have[title^="${target}:"]`).count()) === 1, "added file is saved under the checklist name and ticked");
+    await noOverflow("add flow");
+  }
 
   await page.goto(BASE + "/admin/sources");
   check((await page.locator(".doc-main", { hasText: "Cambridge International (official)" }).count()) === 1, `${width}px sources lists Cambridge`);
@@ -98,13 +135,13 @@ for (const width of [375, 1400]) {
 
 // Signed out: nothing in the library is reachable.
 const api = await apiRequest.newContext({ baseURL: BASE, maxRedirects: 0 });
-for (const p of ["/admin/library", "/admin/library/gaps", "/admin/library/upload", "/admin/sources", "/admin/library/file/aaaaaaaaaaaaaaaa"]) {
+for (const p of ["/admin/library", "/admin/library/0625", "/admin/library/add?file=0625_s24_qp_11.pdf", "/admin/library/upload", "/admin/sources", "/admin/library/file/aaaaaaaaaaaaaaaa"]) {
   const r = await api.get(p);
   check([303, 307].includes(r.status()) && (r.headers()["location"] ?? "").endsWith("/admin/login"), `signed out: ${p} redirects to sign-in`);
 }
 const forged = await api.get("/admin/library/file/aaaaaaaaaaaaaaaa", { headers: { cookie: "__Host-admin=forgedtoken123" } });
 check(forged.status() !== 200, "forged cookie cannot download");
-for (const p of ["/admin/library/upload/send", "/admin/sources/add", "/admin/sources/remove"]) {
+for (const p of ["/admin/library/upload/send", "/admin/library/add/upload", "/admin/library/add/link", "/admin/sources/add", "/admin/sources/remove"]) {
   const r = await api.post(p, { headers: { origin: "https://evil.example" }, form: { id: "cambridge-official" } });
   check(r.status() === 403, `cross-site POST to ${p} refused`);
   const r2 = await api.post(p, { headers: { origin: BASE }, form: { id: "cambridge-official" } });
