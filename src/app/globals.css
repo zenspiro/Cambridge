@@ -25,4 +25,20 @@
   .lead { @apply mt-3 text-base text-muted; }
   .ref { @apply mt-4 inline-block rounded bg-wash px-2 py-1 font-mono text-sm; }
   .link { @apply text-brand underline underline-offset-2; }
+
+  .shell-narrow { @apply max-w-md; }
+  .stack { @apply mt-6 flex flex-col gap-3; }
+  .topbar { @apply flex items-center justify-between gap-4; }
+  .subtitle { @apply text-lg font-semibold; }
+  .muted { @apply text-sm text-muted; }
+
+  .label { @apply mt-4 block text-sm font-medium; }
+  .input { @apply mt-1 block w-full rounded-lg border border-line bg-paper px-3 py-2 text-base; }
+  .btn { @apply inline-flex min-h-11 items-center justify-center rounded-lg border border-line bg-paper px-4 py-2 text-sm font-medium hover:bg-wash; }
+  .btn-primary { @apply border-brand bg-brand text-brand-ink hover:bg-brand hover:opacity-90; }
+  .btn-block { @apply mt-6 w-full; }
+  .alert { @apply mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800; }
+
+  .list { @apply divide-y divide-line; }
+  .list-row { @apply flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2 text-sm; }
 }

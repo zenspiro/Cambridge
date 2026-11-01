@@ -4,7 +4,7 @@
 import { chromium } from "playwright";
 
 const BASE = process.env.BASE_URL ?? "http://localhost:8787";
-const PAGES = ["/", "/does-not-exist"];
+const PAGES = ["/", "/admin/login", "/does-not-exist"];
 const WIDTHS = [375, 1400];
 
 const browser = await chromium.launch();

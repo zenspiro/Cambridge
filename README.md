@@ -8,6 +8,7 @@ Needs Node 22 or newer.
 
 ```bash
 npm ci
+cp .dev.vars.example .dev.vars
 npm run db:migrate:local
 npm run dev
 ```
@@ -19,7 +20,7 @@ npm run build:worker
 npx wrangler dev --port 8787
 ```
 
-Then open http://localhost:8787 and http://localhost:8787/health.
+Then open http://localhost:8787, http://localhost:8787/health and http://localhost:8787/admin (local password in `.dev.vars`).
 
 ## Scripts
 
@@ -35,4 +36,4 @@ Then open http://localhost:8787 and http://localhost:8787/health.
 
 ## Deploys
 
-GitHub Actions (`.github/workflows/ci.yml`). Pull requests run the checks. A push to `main` runs the checks, then production migrations, then the deploy, then a health check. Needs the repo secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
+GitHub Actions (`.github/workflows/ci.yml`). Pull requests run the checks. A push to `main` runs the checks, then production migrations, then the deploy, then a health check. Needs the repo secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, and the Worker secret `ADMIN_PASS` (set in the Cloudflare dashboard as a Secret).
