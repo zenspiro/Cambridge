@@ -1,6 +1,7 @@
 // Storing one Cambridge file: checks, fingerprint, race-safe reservation, storage.
 // Shared by manual upload now and the agent later. Takes db and bucket as parameters.
 import { LIBRARY } from "../config.ts";
+import { getLibrarySettings } from "../settings.ts";
 import type { Bucket, Db } from "../db.ts";
 import { randomId } from "../auth/crypto.ts";
 import { audit } from "../auth/session.ts";
@@ -53,7 +54,8 @@ export async function storeDocument(db: Db, bucket: Bucket, input: StoreInput, n
 
   const p = parseCambridgeName(input.fileName);
   if (!p) return fail("name");
-  if (p.year < LIBRARY.fromYear || p.year > LIBRARY.toYear) return fail("year");
+  const range = await getLibrarySettings(db);
+  if (p.year < range.fromYear || p.year > range.toYear) return fail("year");
   if (input.bytes.length === 0 || input.bytes.length > LIBRARY.maxFileBytes) return fail("size");
   if (!looksLikePdf(input.bytes)) return fail("not_pdf");
 

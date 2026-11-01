@@ -5,7 +5,9 @@ const NAV = [
   { href: "/admin/library", label: "Library" },
   { href: "/admin/library/gaps", label: "Gaps" },
   { href: "/admin/library/upload", label: "Upload" },
+  { href: "/admin/agent", label: "Agent" },
   { href: "/admin/sources", label: "Sources" },
+  { href: "/admin/settings", label: "Settings" },
 ] as const;
 
 /** Frame for every signed-in admin page. Pages still call requireAdmin() themselves. */
@@ -35,7 +37,14 @@ export function AdminShell({ current, title, children }: { current: string; titl
 }
 
 /** Fixed messages by code, so nothing from the address bar is shown as text. */
-export function Notice({ code, messages }: { code: string | undefined; messages: Record<string, string> }) {
+export function Notice({ code, messages, errorRef }: { code: string | undefined; messages: Record<string, string>; errorRef?: string }) {
+  if (errorRef && /^[A-HJKMNP-TV-Z2-9]{4}-[A-HJKMNP-TV-Z2-9]{4}$/.test(errorRef)) {
+    return (
+      <p className="alert" role="alert">
+        Something went wrong. Reference: {errorRef}
+      </p>
+    );
+  }
   if (!code || !Object.hasOwn(messages, code)) return null;
   const good = code.startsWith("ok");
   return (

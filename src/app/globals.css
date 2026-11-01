@@ -65,5 +65,14 @@
   .chips { @apply mt-3 flex flex-wrap gap-2; }
   .chip { @apply rounded border border-line bg-wash px-2 py-1; }
   .confirm { @apply flex flex-wrap items-center gap-2 text-sm; }
-  .actions { @apply flex flex-wrap gap-2; }
+  .actions { @apply flex flex-wrap items-center gap-2; }
+  .pages { @apply mt-2 flex w-full flex-col gap-2 rounded-lg bg-wash p-3; }
+  .inline-form { @apply flex flex-col gap-2 sm:flex-row sm:items-center; }
+  .form-grid { @apply grid grid-cols-1 gap-3 sm:grid-cols-2; }
+  .fieldset { @apply border-0 p-0; }
+  .checks { @apply mt-2 flex flex-wrap gap-x-5 gap-y-2; }
+  .check { @apply inline-flex min-h-9 items-center gap-2 text-sm; }
+  .summary { @apply cursor-pointer; }
+  .stats { @apply grid grid-cols-2 gap-2 text-sm sm:grid-cols-5; }
+  .stats li { @apply rounded-lg bg-wash p-2; }
 }

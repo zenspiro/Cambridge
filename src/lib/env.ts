@@ -1,7 +1,16 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 
 /** Bindings, vars and secrets. Secrets are set in the Cloudflare dashboard, never in code. */
-export type AppEnv = CloudflareEnv & { ADMIN_PASS?: string };
+export type AppEnv = CloudflareEnv & {
+  ADMIN_PASS?: string;
+  /** GitHub token with only Actions read and write on this repo (starts agent runs). */
+  GITHUB_TOKEN?: string;
+  /** Shared with the GitHub secret of the same name; signs agent requests. */
+  AGENT_SECRET?: string;
+  GITHUB_REPO?: string;
+  AGENT_WORKFLOW?: string;
+  AGENT_REF?: string;
+};
 
 /** Cloudflare bindings and vars (D1, R2, settings). Server only. */
 export async function getEnv(): Promise<AppEnv> {

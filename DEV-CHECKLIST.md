@@ -9,7 +9,9 @@ Update this file whenever the process changes.
 ## While building (brief 15.2 to 15.5)
 - [ ] Every new route: `requireAdmin()` / `adminSession()` (or listed in `PUBLIC_ROUTES` on purpose), ownership check on every record.
 - [ ] Every POST: `isSameOrigin`, rate limit (`allow` in `src/lib/ratelimit.ts`), then a 303 redirect via `redirectTo`.
-- [ ] Cambridge files: only through `storeDocument()`; only `src/app/admin/` may touch `env.SOURCE`; downloads audited.
+- [ ] Cambridge files: only through `storeDocument()`; only `src/app/admin/` and `api/agent/file` may touch `env.SOURCE`; downloads audited.
+- [ ] Agent endpoints: `agentRequest()` first. New outside fetches by the agent: robots.txt, delay, same site only.
+- [ ] Changing the agent's name rules: add the real example to `REAL` in `tests/unit/agent.test.ts`.
 - [ ] Input validated on the server; output escaped; SQL bound parameters only.
 - [ ] Settings and limits from config or the database, not hardcoded.
 - [ ] Reuse an existing helper or class before writing a new one.

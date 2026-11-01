@@ -2,6 +2,34 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-01: Acquisition agent and settings (build 3b)
+
+**What**
+- `/admin/agent`: choose years, sessions (including Specimen) and dry run or download; Run starts GitHub Actions. Run list and run report (found, stored, not stored with reasons, links not recognised, robots.txt blocks, page errors). A dry run offers "Download these N files".
+- `scripts/agent/run.ts` and `.github/workflows/agent.yml`: the agent. robots.txt first, start pages only, same-site PDF links only, 5 second gaps, honest name, no logins, no off-site redirects, at most 400 files per run, skips what is stored.
+- Signed agent endpoints `/api/agent/job`, `/file`, `/finish` (HMAC, clock window, single-use nonce). Files go through the same store path as uploads.
+- `/admin/settings`: library years and latest public session moved from code to the database.
+- Start pages per source on `/admin/sources`, seeded with Cambridge's 0625 past-papers and overview pages.
+- Migration 0004: `setting`, `source_page`, `request_nonce`.
+
+**Why**
+- Owner chose the Run button, selectable years and sessions, and a settings page, so new sessions can be added later without code.
+- Agent in TypeScript (not Python) so it shares the Cambridge name rules with the library.
+- The GitHub token needs only Actions access, not Contents, so a leaked token cannot change code.
+- Built against Cambridge's real pages (fetched once, politely): robots.txt allows the PDFs; their names were used to write and test the translation.
+
+**Found**
+- Cambridge's public 0625 pages carry only June 2024 (variant 1 of each paper), the 2023 specimens and syllabus PDFs: 33 links, 30 usable. The rest of 2022 to 2026 is not public there.
+- Syllabus versions confirmed on Cambridge's site: 2023 to 2025 and 2026 to 2028 (and a 2029 syllabus).
+
+**Tested**
+- 53 unit tests pass (11 new: signatures, replay guard, robots.txt incl. Cambridge's real file, real Cambridge names, link filtering, settings, run choices, one-run-at-a-time and stale runs, start pages; plus the http-only CSP rule).
+- Typecheck, inline check, build, local migration 0004.
+- 97 browser checks, run twice: all earlier suites plus a new agent suite against a fake source site (Run button without a token, dry run, robots.txt block, unknown links, download run storing 4 real PDFs and refusing a fake one, a 404 reported, re-run skips stored files, settings, unsigned / replayed / wrong-secret / old / off-site agent requests refused).
+- Real dry run against Cambridge from the local Worker: 2 pages, 33 PDF links, 25 to fetch, 3 not recognised (syllabus update notes, grade descriptions), nothing downloaded.
+- Fixed during testing: question papers are named "question-paper-11" (no "-paper"); the CSP's upgrade rule broke page prefetches on the local http server; test scripts tripped on Next's hidden alert element.
+- Not tested: the real GitHub dispatch and a production run (need the owner's secrets).
+
 ## 2026-11-01: Source library (build 3a)
 
 **What**

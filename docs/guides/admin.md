@@ -28,3 +28,21 @@ The websites the download agent may visit. It starts with Cambridge's official s
 - **Remove:** asks "Remove this source?" first. Choose Yes, remove or Never mind. Files already downloaded from it stay in the library.
 
 Only add a source if you are sure its files may be used (brief section 3).
+
+## Start pages
+Each source lists the pages the agent reads (under "Start pages" on the Sources page). The agent only follows PDF links on these pages that stay inside the source's address. Add a page with its full https address; remove one with "Remove page", then "Yes, remove" or "Never mind". A source with no start pages is skipped.
+
+## Download agent
+1. Agent page: tick the years and sessions to look for. "Specimen" means specimen papers and syllabus documents.
+2. Keep **Dry run** the first time. Press Run agent.
+3. The run page shows progress after you press Refresh. A run waits 5 seconds between requests, so allow a few minutes.
+4. When it finishes, check "Would fetch". If it looks right, press **Download these files**.
+5. Files already in the library are never fetched again. "Links not recognised" lists PDFs whose names the agent could not read; upload those by hand if you need them.
+
+Only one run can go at a time. A run that never reports back is closed after 3 hours. First-time setup: `agent-setup.md`.
+
+## Settings
+- **From year / To year:** the years the library keeps (at most 15 years apart).
+- **Latest public session:** the newest exam session whose papers are public. The gap report ignores later sessions.
+
+When a new session's papers come out: move the latest public session forward, then run the agent for just that session.

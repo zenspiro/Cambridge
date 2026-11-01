@@ -4,6 +4,7 @@ import { getEnv } from "@/lib/env";
 import { AdminShell, Notice } from "@/components/AdminShell";
 import { LIBRARY } from "@/lib/config";
 import { getJob } from "@/lib/jobs";
+import { getLibrarySettings } from "@/lib/settings";
 import { REASON_LABELS } from "@/lib/library/labels";
 import type { StoreOutcome } from "@/lib/library/store";
 
@@ -21,6 +22,7 @@ export default async function UploadPage({ searchParams }: { searchParams: Promi
   const { actorId } = await requireAdmin();
   const q = await searchParams;
   const env = await getEnv();
+  const lib = await getLibrarySettings(env.DB);
   const job = q.job ? await getJob(env.DB, q.job, "source_upload") : null;
   const outcomes: StoreOutcome[] = job && job.created_by === actorId ? (JSON.parse(job.result).files ?? []) : [];
   const stored = outcomes.filter((o) => o.ok).length;
@@ -47,8 +49,8 @@ export default async function UploadPage({ searchParams }: { searchParams: Promi
 
       <form className="card stack" method="post" action="/admin/library/upload/send" encType="multipart/form-data">
         <p className="muted">
-          PDFs with Cambridge file names, like <span className="mono">0625_s23_qp_42.pdf</span>, from {LIBRARY.fromYear} to{" "}
-          {LIBRARY.toYear}. Up to {LIBRARY.maxFilesPerUpload} files and {LIBRARY.maxUploadBytes / 1024 / 1024} MB at a time.
+          PDFs with Cambridge file names, like <span className="mono">0625_s23_qp_42.pdf</span>, from {lib.fromYear} to{" "}
+          {lib.toYear}. Up to {LIBRARY.maxFilesPerUpload} files and {LIBRARY.maxUploadBytes / 1024 / 1024} MB at a time.
           Files already stored are skipped.
         </p>
         <label className="label" htmlFor="files">PDF files</label>

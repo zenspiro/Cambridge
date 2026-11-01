@@ -7,4 +7,9 @@ export const PUBLIC_ROUTES: readonly string[] = [
   "health/route.ts", // pass or fail only
   "admin/login/page.tsx", // the sign-in form
   "admin/session/route.ts", // sign-in POST: rate limited and audited
+  // Agent endpoints: no session, but every request must pass agentRequest()
+  // (HMAC signature, 5 minute clock window, single-use nonce). Tested.
+  "api/agent/job/route.ts",
+  "api/agent/file/route.ts",
+  "api/agent/finish/route.ts",
 ];

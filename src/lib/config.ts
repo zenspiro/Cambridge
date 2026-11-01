@@ -14,12 +14,9 @@ export const AUTH = {
   cookieName: "__Host-admin",
 } as const;
 
+// Library years and the latest public session live in the database (setting 'library',
+// src/lib/settings.ts), changed at /admin/settings. Limits stay here.
 export const LIBRARY = {
-  /** Owner decision: 2022 to 2026 (Physics 0625 first). */
-  fromYear: 2022,
-  toYear: 2026,
-  /** The latest exam session whose papers can be public yet; later ones are not counted as gaps. */
-  lastSession: { year: 2026, session: "s" as "m" | "s" | "w" },
   maxFilesPerUpload: 20,
   maxFileBytes: 25 * 1024 * 1024,
   maxUploadBytes: 90 * 1024 * 1024,
@@ -49,3 +46,18 @@ export const DOC_TYPE_LABELS: Readonly<Record<string, string>> = {
   sm: "Specimen mark scheme",
   sy: "Syllabus",
 };
+
+export const AGENT = {
+  /** Most files one download run may store. */
+  maxFilesPerRun: 400,
+  /** Wait between requests to a source website. */
+  delayMs: 5_000,
+  /** A queued or running run older than this is treated as dead and a new one may start. */
+  staleAfterMs: 3 * 3_600_000,
+  /** Agent runs an admin may start per hour. */
+  runsPerHour: 10,
+  /** Largest run report stored (bytes of JSON). */
+  maxReportBytes: 400_000,
+  /** Honest name sent to websites and matched in robots.txt. */
+  userAgentToken: "ExamPrepLibraryAgent",
+} as const;

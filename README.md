@@ -36,4 +36,6 @@ Then open http://localhost:8787, http://localhost:8787/health and http://localho
 
 ## Deploys
 
-GitHub Actions (`.github/workflows/ci.yml`). Pull requests run the checks. A push to `main` runs the checks, then production migrations, then the deploy, then a health check. Needs the repo secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, and the Worker secret `ADMIN_PASS` (set in the Cloudflare dashboard as a Secret).
+GitHub Actions (`.github/workflows/ci.yml`). Pull requests run the checks. A push to `main` runs the checks, then production migrations, then the deploy, then a health check. Needs the repo secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, and the Worker secrets `ADMIN_PASS`, `GITHUB_TOKEN` and `AGENT_SECRET` (set in the Cloudflare dashboard as Secrets), plus the GitHub secret `AGENT_SECRET`. Setup: `docs/guides/agent-setup.md`.
+
+The download agent runs in `.github/workflows/agent.yml`, started only from the admin panel.

@@ -22,6 +22,13 @@ test("production CSP is strict", () => {
   assert.ok(!/https?:/.test(csp), "no outside hosts unless added on purpose");
 });
 
+test("upgrade-insecure-requests is on for https and off only on plain http", () => {
+  assert.ok(buildCsp(makeNonce()).includes("upgrade-insecure-requests"));
+  const local = buildCsp(makeNonce(), { plainHttp: true });
+  assert.ok(!local.includes("upgrade-insecure-requests"));
+  assert.ok(!local.includes("unsafe-"), "nothing else is relaxed");
+});
+
 test("dev CSP relaxes only what hot reload needs", () => {
   const csp = buildCsp(makeNonce(), { dev: true });
   assert.ok(csp.includes("'unsafe-eval'"));

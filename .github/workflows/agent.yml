@@ -1,0 +1,38 @@
+# Download agent (build 3b). Started only by the admin panel's "Run agent" button
+# (workflow_dispatch with a job id). Needs the repo secret AGENT_SECRET, the same
+# value as the Worker secret AGENT_SECRET. No other secrets, no write access to the repo.
+name: Agent
+
+on:
+  workflow_dispatch:
+    inputs:
+      job_id:
+        description: "Run id from the admin panel"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agent
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      # Only Node built-ins and shared source files are used, so no npm install.
+      - name: Run agent
+        env:
+          APP_URL: ${{ vars.APP_URL || 'https://cambridge.zenspiroapps.workers.dev' }}
+          AGENT_SECRET: ${{ secrets.AGENT_SECRET }}
+          JOB_ID: ${{ inputs.job_id }}
+        run: node scripts/agent/run.ts
