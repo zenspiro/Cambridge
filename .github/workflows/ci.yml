@@ -1,0 +1,83 @@
+# Order (brief 15.5): typecheck, checks, migrations, deploy. A broken change never ships.
+# Pull requests and pushes run the checks. Only a push to main migrates and deploys.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Unit tests
+        run: npm run test:unit
+      - name: Inline code check
+        run: npm run check:inline
+      - name: Build Worker
+        run: npm run build:worker
+      - name: Migrations (local D1)
+        run: npm run db:migrate:local
+      - name: Browser smoke test
+        run: |
+          npx playwright install --with-deps chromium
+          npx wrangler dev --port 8787 > wrangler-dev.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf http://localhost:8787/health > /dev/null && break; sleep 1; done
+          npm run test:e2e
+      - name: Worker log on failure
+        if: failure()
+        run: cat wrangler-dev.log || true
+
+  deploy:
+    needs: check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Find the D1 database id
+        run: node scripts/set-d1-id.ts
+      - name: Migrations (production D1)
+        run: npm run db:migrate:remote
+      - name: Deploy
+        run: npm run deploy
+      - name: Health check
+        run: |
+          for i in $(seq 1 10); do
+            curl -sf https://cambridge.zenspiroapps.workers.dev/health && exit 0
+            sleep 6
+          done
+          echo "Health check failed after deploy" && exit 1
