@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "npm run cf:types && next build",
     "cf:types": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
     "typecheck": "npm run cf:types && tsc --noEmit",
     "test:unit": "node --test \"tests/unit/*.test.ts\"",
