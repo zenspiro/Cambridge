@@ -12,7 +12,8 @@ A plain list of what the platform does today, for non-developers.
 - Gap report: which expected files are still missing for each session.
 - Upload: add up to 20 Cambridge PDFs at once; wrong names, non-PDFs and duplicates are skipped with a reason.
 - Approved sources: the list of websites the download agent may visit, which the admin can add to, switch off or remove, with the start pages the agent reads on each.
-- Download agent: pick years and sessions, do a dry run to see what it would fetch, then download only the missing files. Each run has a report. It reads each site's robots.txt, waits between requests and never logs in.
+- Download agent: pick years and sessions, do a dry run to see what it would fetch, then download only the missing files. It reads each site's robots.txt, waits between requests and never logs in.
+- Live run page: progress bar, current step, time so far, a line for every page and file, a link to the GitHub log, and a Cancel button. It updates itself every 10 seconds.
 - Settings: library years and the latest public exam session.
 
 ## Coming next

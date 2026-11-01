@@ -25,15 +25,25 @@ sql(`INSERT OR REPLACE INTO source_page (id, site_id, syllabus_code, url, create
 sql(`UPDATE job SET status = 'failed' WHERE type = 'agent' AND status IN ('queued', 'running')`);
 
 // Async spawn: the fake source runs in this process and must keep answering.
-const runAgent = (jobId) =>
+const runAgent = (jobId, delayMs = 50) =>
   new Promise((resolve) => {
     const child = spawn("node", ["scripts/agent/run.ts"], {
-      env: { ...process.env, APP_URL: BASE, AGENT_SECRET: SECRET, JOB_ID: jobId, AGENT_TEST_MODE: "1", AGENT_DELAY_MS: "50" },
+      env: { ...process.env, APP_URL: BASE, AGENT_SECRET: SECRET, JOB_ID: jobId, AGENT_TEST_MODE: "1", AGENT_DELAY_MS: String(delayMs) },
     });
     let stderr = "";
+    let stdout = "";
     child.stderr.on("data", (d) => (stderr += d));
-    child.on("close", (status) => resolve({ status, stderr }));
+    child.stdout.on("data", (d) => (stdout += d));
+    child.on("close", (status) => resolve({ status, stderr, stdout }));
   });
+const waitFor = async (fn, ms = 20_000) => {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    if (await fn()) return true;
+    await new Promise((r) => setTimeout(r, 300));
+  }
+  return false;
+};
 const newRun = (mode) => {
   const j = id();
   sql(`INSERT INTO job (id, type, status, params, created_by, created_at) VALUES ('${j}', 'agent', 'queued', '{"code":"0625","years":[2024,2023],"sessions":["s","y"],"mode":"${mode}"}', 'platform-admin', ${Date.now()})`);
@@ -103,7 +113,44 @@ try {
   const rep = JSON.parse(rows(`SELECT result FROM job WHERE id = '${again}'`)[0].result);
   check(rep.candidates.length === 2 && rep.skippedHave === 4, "a second run skips what is already stored");
 
-  // 5. Settings page.
+  // 5. Live feedback: watch a slow run while it works.
+  const live = newRun("dry");
+  const liveDone = runAgent(live, 700);
+  check(await waitFor(() => rows(`SELECT events FROM job WHERE id = '${live}'`)[0].events.length > 40), "agent sends live updates");
+  await page.goto(`${BASE}/admin/agent/runs/${live}`);
+  check((await page.locator("progress.bar").count()) === 1, "run page shows a progress bar while running");
+  check((await page.locator("meta[http-equiv=refresh]").count()) === 1, "run page refreshes itself while running");
+  check((await page.locator("section", { hasText: "Activity" }).locator("li").count()) >= 1, "run page shows the activity log");
+  check((await page.locator("text=so far").count()) === 1, "run page shows time elapsed");
+  check(!(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)), "375px live run page: no sideways scroll");
+  await liveDone;
+  await page.goto(`${BASE}/admin/agent/runs/${live}`);
+  check((await page.locator("meta[http-equiv=refresh]").count()) === 0, "refresh stops when the run is done");
+  const liveEvents = await page.locator("section", { hasText: "Activity" }).locator("li").allTextContents();
+  check(liveEvents.some((t) => t.includes("Found 2 file(s)")), "activity log says what was found");
+
+  // 6. Cancel a run while the agent is working.
+  const stop = newRun("download");
+  const stopDone = runAgent(stop, 900);
+  check(await waitFor(() => rows(`SELECT status FROM job WHERE id = '${stop}'`)[0].status === "running"), "download run starts");
+  await page.goto(`${BASE}/admin/agent/runs/${stop}`);
+  await page.getByRole("link", { name: "Cancel run" }).click();
+  await page.waitForURL(/cancel=1/);
+  check((await page.getByText("Cancel this run?").count()) === 1, "cancel asks first");
+  await page.getByRole("button", { name: "Yes, cancel" }).click();
+  await page.waitForURL(new RegExp(`/admin/agent/runs/${stop}$`));
+  check((await page.locator(".pill", { hasText: "Cancelled" }).count()) === 1, "run shows Cancelled");
+  const stopped = await stopDone;
+  check(stopped.status === 0 && stopped.stdout.includes("cancelled in the admin panel"), "agent stops itself after a cancel");
+  check(rows(`SELECT status FROM job WHERE id = '${stop}'`)[0].status === "cancelled", "run stays cancelled");
+
+  // 7. A run GitHub never starts closes itself and says why.
+  const ghost = id();
+  sql(`INSERT INTO job (id, type, status, params, created_by, created_at) VALUES ('${ghost}', 'agent', 'queued', '{"code":"0625","years":[2024],"sessions":["s"],"mode":"dry"}', 'platform-admin', ${Date.now() - 16 * 60_000})`);
+  await page.goto(`${BASE}/admin/agent/runs/${ghost}`);
+  check((await page.locator("p.alert").textContent())?.includes("AGENT_SECRET"), "never-started run explains the likely cause");
+
+  // 8. Settings page.
   await page.goto(BASE + "/admin/settings");
   await page.fill("input[name=fromYear]", "2030");
   await page.click("form[action='/admin/settings/save'] button");
