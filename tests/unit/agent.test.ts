@@ -65,8 +65,10 @@ const REAL: [string, string | null][] = [
   ["595767-2023-specimen-paper-5-confidential-instructions.pdf", "0625_y23_ci_5.pdf"],
   ["595430-2023-2025-syllabus.pdf", "0625_y23_sy.pdf"],
   ["697209-2026-2028-syllabus.pdf", "0625_y26_sy.pdf"],
-  ["604573-2023-2025-syllabus-update.pdf", null],
-  ["730281-2023-2025-grade-descriptions.pdf", null],
+  ["604573-2023-2025-syllabus-update.pdf", "0625_y23_su.pdf"],
+  ["748914-2026-2028-syllabus-update.pdf", "0625_y26_su.pdf"],
+  ["730281-2023-2025-grade-descriptions.pdf", "0625_y23_gd.pdf"],
+  ["764332-2029-syllabus.pdf", "0625_y29_sy.pdf"],
 ];
 
 test("Cambridge website names become standard names", () => {
@@ -98,9 +100,15 @@ test("PDF links: same site only, resolved, no duplicates", () => {
 
 test("library settings: checked, saved, audited, safe defaults", async () => {
   const db = testDb();
-  assert.deepEqual(await getLibrarySettings(db), { fromYear: 2022, toYear: 2026, lastSession: { year: 2026, session: "s" } });
-  const ok = { fromYear: 2022, toYear: 2027, lastSession: { year: 2027, session: "m" } };
+  assert.deepEqual(await getLibrarySettings(db), {
+    fromYear: 2022, toYear: 2026, lastSession: { year: 2026, session: "s" }, essentialVariants: { m: [2], s: [1], w: [1] },
+  });
+  const ok = { fromYear: 2022, toYear: 2027, lastSession: { year: 2027, session: "m" }, essentialVariants: { m: [2], s: [1, 2], w: [1] } };
   assert.deepEqual(checkLibrarySettings(ok), ok);
+  assert.deepEqual(checkLibrarySettings({ ...ok, essentialVariants: undefined })?.essentialVariants, { m: [2], s: [1], w: [1] }, "old rows get the default");
+  for (const ev of [{ m: [2], s: [0], w: [1] }, { m: [2], s: ["1"], w: [1] }, { m: [2], s: [1] }, "x"]) {
+    assert.equal(checkLibrarySettings({ ...ok, essentialVariants: ev }), null, JSON.stringify(ev));
+  }
   for (const bad of [
     { ...ok, fromYear: 2028 }, { ...ok, fromYear: 1990 }, { ...ok, toYear: 2050 }, { ...ok, lastSession: { year: 2030, session: "s" } },
     { ...ok, lastSession: { year: 2026, session: "x" } }, { ...ok, fromYear: 2022.5 }, null, "x",

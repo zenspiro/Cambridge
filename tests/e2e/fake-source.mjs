@@ -10,7 +10,7 @@ export function startFakeSource(port = 9911) {
     "/Images/114-2023-specimen-paper-1.pdf": pdf("sp1"),
     "/Images/115-june-2024-question-paper-21.pdf": "<html>not really a pdf</html>",
     "/Images/116-june-2019-question-paper-11.pdf": pdf("old"),
-    "/Images/117-2023-2025-syllabus-update.pdf": pdf("update"),
+    "/Images/117-2023-2025-teacher-guide.pdf": pdf("guide"),
     "/blocked/118-june-2024-question-paper-31.pdf": pdf("blocked"),
   };
   const page = `<html><body>

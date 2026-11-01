@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: "Settings" };
 
 const MESSAGES = {
   ok_saved: "Settings saved.",
-  bad: "Check the years: From must not be after To, at most 15 years apart, and the latest public session must fall inside them.",
+  bad: "Check the years (From not after To, at most 15 years apart, latest public session inside them) and tick at least one essential variant per session.",
   busy: "Too many changes this hour. Please wait a little.",
 };
 
@@ -47,6 +47,23 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             <input className="input" name="lastYear" type="number" min={2000} max={2100} required defaultValue={lib.lastSession.year} />
           </label>
         </div>
+        <h2 className="subtitle">Essential variants</h2>
+        <p className="muted">
+          Which variants of each paper must be in the library for a session to count as complete. The others still show as
+          extras you can add. Cambridge&apos;s public site has variant 1 (March: variant 2).
+        </p>
+        {(["m", "s", "w"] as const).map((s) => (
+          <fieldset className="fieldset" key={s}>
+            <legend className="label-inline">{SESSION_LABELS[s]}</legend>
+            <div className="checks">
+              {[1, 2, 3].map((v) => (
+                <label className="check" key={v}>
+                  <input type="checkbox" name={`ev_${s}`} value={v} defaultChecked={lib.essentialVariants[s].includes(v)} /> Variant {v}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        ))}
         <button className="btn btn-primary btn-block" type="submit">Save settings</button>
       </form>
     </AdminShell>

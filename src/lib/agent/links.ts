@@ -81,8 +81,8 @@ export function toCambridgeName(url: string, code: string): string | null {
     const type = SPEC_TYPES[spec[3] ?? ""];
     if (type) name = `${code}_y${yy(spec[1]!)}_${type}_${spec[2]}.pdf`;
   }
-  const syl = /^(\d{4})(?:-\d{4})?-syllabus$/.exec(slug);
-  if (syl) name = `${code}_y${yy(syl[1]!)}_sy.pdf`;
+  const syl = /^(\d{4})(?:-\d{4})?-(syllabus|syllabus-update|grade-descriptions)$/.exec(slug);
+  if (syl) name = `${code}_y${yy(syl[1]!)}_${{ syllabus: "sy", "syllabus-update": "su", "grade-descriptions": "gd" }[syl[2]!]}.pdf`;
 
   return name && parseCambridgeName(name) ? name : null;
 }

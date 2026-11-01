@@ -45,6 +45,8 @@ export const DOC_TYPE_LABELS: Readonly<Record<string, string>> = {
   sp: "Specimen paper",
   sm: "Specimen mark scheme",
   sy: "Syllabus",
+  su: "Syllabus update",
+  gd: "Grade descriptions",
 };
 
 export const AGENT = {

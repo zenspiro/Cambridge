@@ -22,7 +22,7 @@ test("every page and route is public on purpose or checks the admin session", ()
     const src = readFileSync(join(appDir, r), "utf8");
     // Guards: requireAdmin() for pages, adminSession() for handlers, adminPost() wraps adminSession().
     const code = src.replace(/\/\/.*$/gm, "");
-    assert.match(code, /\b(requireAdmin\(\)|adminSession\(\)|adminPost\()/, `${r} has no auth check and is not in PUBLIC_ROUTES`);
+    assert.match(code, /\b(requireAdmin\(\)|adminSession\(\)|adminPost\(|addFilePost\()/, `${r} has no auth check and is not in PUBLIC_ROUTES`);
   }
 });
 

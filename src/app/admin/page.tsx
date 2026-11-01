@@ -16,6 +16,7 @@ const ACTION_LABELS: Record<string, string> = {
   "admin.login_locked": "Sign-in locked (too many tries)",
   "source.upload": "Uploaded a source file",
   "source.agent": "Agent stored a source file",
+  "source.link": "Added a source file from a link",
   "source.download": "Downloaded a source file",
   "source_site.add": "Added a source website",
   "source_site.enable": "Switched on a source website",
@@ -43,7 +44,7 @@ export default async function AdminHome() {
       <section className="card stack">
         <h2 className="subtitle">Source library</h2>
         <p className="muted">
-          {count?.n ?? 0} Physics 0625 files stored. <Link className="link" href="/admin/library/gaps">See what is missing</Link>.
+          {count?.n ?? 0} Physics 0625 files stored. <Link className="link" href="/admin/library">See the library</Link>.
         </p>
       </section>
 

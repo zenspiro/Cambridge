@@ -26,7 +26,7 @@ export type StoreInput = {
   fileName: string;
   bytes: Uint8Array;
   actorId: string;
-  origin: "upload" | "agent";
+  origin: "upload" | "agent" | "link";
   jobId?: string | null;
   sourceUrl?: string | null;
   sourceSiteId?: string | null;

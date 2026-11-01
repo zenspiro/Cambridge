@@ -62,3 +62,23 @@ INSERT INTO source_site (id, name, base_url, enabled, notes, created_by, created
 VALUES (?1, ?2, ?3, 1, ?4, ?5, ?6) ON CONFLICT DO NOTHING RETURNING id`;
 export const SET_SITE_ENABLED = `UPDATE source_site SET enabled = ?2 WHERE id = ?1`;
 export const DELETE_SITE = `DELETE FROM source_site WHERE id = ?1`;
+
+// Hierarchy: qualification > subject > syllabus code > version > documents.
+export const LIST_QUALIFICATIONS = `SELECT id, name, short_name FROM qualification ORDER BY sort_order`;
+
+export const LIST_SYLLABUS_CODES = `
+SELECT q.id AS qualification_id, s.id AS subject_id, s.name AS subject_name, y.code, MIN(y.title) AS title
+FROM syllabus y JOIN subject s ON s.id = y.subject_id JOIN qualification q ON q.id = s.qualification_id
+GROUP BY q.id, s.id, s.name, y.code ORDER BY q.sort_order, s.name, y.code`;
+
+export const SYLLABUS_HEADER = `
+SELECT q.id AS qualification_id, q.name AS qualification_name, q.short_name, s.id AS subject_id, s.name AS subject_name,
+       MIN(y.title) AS title
+FROM syllabus y JOIN subject s ON s.id = y.subject_id JOIN qualification q ON q.id = s.qualification_id
+WHERE y.code = ?1 GROUP BY q.id, q.name, q.short_name, s.id, s.name`;
+
+export const STORED_FOR_CODE = `
+SELECT d.id, d.file_name, d.doc_type, d.session, d.year, d.paper, d.variant, d.size_bytes, d.origin, d.acquired_at,
+       d.sha256, d.syllabus_id
+FROM source_document d JOIN syllabus y ON y.id = d.syllabus_id
+WHERE d.status = 'stored' AND y.code = ?1`;

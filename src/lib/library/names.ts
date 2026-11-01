@@ -2,7 +2,7 @@
 // and the gap report. Pure, no imports beyond config.
 
 export type Session = "m" | "s" | "w" | "y";
-export type DocType = "qp" | "ms" | "in" | "ci" | "er" | "gt" | "sp" | "sm" | "sy";
+export type DocType = "qp" | "ms" | "in" | "ci" | "er" | "gt" | "sp" | "sm" | "sy" | "su" | "gd";
 
 export type ParsedName = {
   fileName: string;
@@ -16,8 +16,9 @@ export type ParsedName = {
 
 // Exam sessions: per-paper files with an optional variant digit, or per-session files.
 const EXAM = /^(\d{4})_([msw])(\d{2})_(?:(qp|ms|in|ci)_([1-9])([1-9])?|(er|gt))\.pdf$/;
-// Specimens: y + first exam year of the syllabus version.
-const SPEC = /^(\d{4})_y(\d{2})_(?:(sp|sm|in|ci)_([1-9])|(sy))\.pdf$/;
+// Specimens and version documents: y + first exam year of the syllabus version.
+// sy syllabus, su syllabus update, gd grade descriptions.
+const SPEC = /^(\d{4})_y(\d{2})_(?:(sp|sm|in|ci)_([1-9])|(sy|su|gd))\.pdf$/;
 
 export function parseCambridgeName(raw: string): ParsedName | null {
   if (typeof raw !== "string" || raw.length > 40) return null;

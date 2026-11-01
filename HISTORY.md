@@ -2,6 +2,28 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-01: Library hierarchy, checklist, search and add-a-file
+
+**What**
+- Library home: qualifications (IGCSE, O Level, AS & A Level), each with subject cards showing an essentials bar (green, amber, red) and extras count; search across the whole library.
+- Subject page: breadcrumb (Library > qualification > subject), overall status, filters (year, session, type, paper, status) and search, then foldable groups with their own status: syllabus documents and specimens per syllabus version, and every exam session as a table of papers and variants (QP, MS, CI) plus examiner report and grade thresholds. Green tick downloads; a red cross or grey + opens Add.
+- Add a missing file: upload any file name (saved under the checklist name) or paste a link from an approved source.
+- Settings: essential variants per session (default variant 1, March 2); other variants show as extras.
+- New document types: syllabus update and grade descriptions, recognised from Cambridge's links.
+- Signed `/api/agent/catalog`: the same tree for the AI engine (metadata only).
+- Gaps page removed (its job is now in the library).
+- Migration 0006: `qualification`, `subject.qualification_id`, `source_document` rebuilt (types su, gd; origin link), checklist rules, essential variants.
+
+**Why**
+- Owner: one neatly organised Library screen by subject with filters and search, status per subject and per document, and a way to add variants from other sources or by hand; hierarchy by qualification for the admin and the AI engine.
+- Rebuilding `source_document` breaks "additive only"; the owner approved it once (only test data so far). The test allows that one file by name and checks every column and row is copied.
+
+**Tested**
+- 64 unit tests pass (7 new: checklist groups and counts, stored and extra files, essential variants setting, filters and search incl. "paper 4", hierarchy load, rebuilt table, and the rebuild's column copy).
+- 134 browser checks, run twice: qualifications and subject cards, search, breadcrumb, cell download, junk filters ignored, Missing filter, subject search, unknown syllabus, add flow (unapproved link refused, upload with any name ticks the cell), signed-out and cross-site attempts on the new pages and POSTs.
+- Local migration 0006 on a database with 17 stored files: all 17 kept.
+- Fixed during testing: "4" matched every 2024 (numbers now match whole words); specimen table overflowed its card on phones; empty version showed a red 0/0.
+
 ## 2026-11-01: Live agent feedback and Cancel
 
 **What**
