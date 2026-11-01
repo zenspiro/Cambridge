@@ -25,6 +25,7 @@ const ACTION_LABELS: Record<string, string> = {
   "source_page.add": "Added a start page",
   "source_page.remove": "Removed a start page",
   "setting.library": "Changed library settings",
+  "syllabus.variants": "Changed a syllabus's essential variants",
   "agent.start_dry": "Started an agent dry run",
   "agent.start_download": "Started an agent download",
   "agent.finish": "Agent run finished",

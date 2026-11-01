@@ -47,10 +47,10 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             <input className="input" name="lastYear" type="number" min={2000} max={2100} required defaultValue={lib.lastSession.year} />
           </label>
         </div>
-        <h2 className="subtitle">Essential variants</h2>
+        <h2 className="subtitle">Default essential variants</h2>
         <p className="muted">
-          Which variants of each paper must be in the library for a session to count as complete. The others still show as
-          extras you can add. Cambridge&apos;s public site has variant 1 (March: variant 2).
+          Used for any syllabus that has no setting of its own (each subject page has its own, under &quot;Essential
+          variants&quot;). Pakistan sits variant 2. Cambridge&apos;s public site carries variant 1.
         </p>
         {(["m", "s", "w"] as const).map((s) => (
           <fieldset className="fieldset" key={s}>

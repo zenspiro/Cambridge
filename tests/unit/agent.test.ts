@@ -101,11 +101,11 @@ test("PDF links: same site only, resolved, no duplicates", () => {
 test("library settings: checked, saved, audited, safe defaults", async () => {
   const db = testDb();
   assert.deepEqual(await getLibrarySettings(db), {
-    fromYear: 2022, toYear: 2026, lastSession: { year: 2026, session: "s" }, essentialVariants: { m: [2], s: [1], w: [1] },
+    fromYear: 2022, toYear: 2026, lastSession: { year: 2026, session: "s" }, essentialVariants: { m: [2], s: [2], w: [2] },
   });
   const ok = { fromYear: 2022, toYear: 2027, lastSession: { year: 2027, session: "m" }, essentialVariants: { m: [2], s: [1, 2], w: [1] } };
   assert.deepEqual(checkLibrarySettings(ok), ok);
-  assert.deepEqual(checkLibrarySettings({ ...ok, essentialVariants: undefined })?.essentialVariants, { m: [2], s: [1], w: [1] }, "old rows get the default");
+  assert.deepEqual(checkLibrarySettings({ ...ok, essentialVariants: undefined })?.essentialVariants, { m: [2], s: [2], w: [2] }, "old rows get the default");
   for (const ev of [{ m: [2], s: [0], w: [1] }, { m: [2], s: ["1"], w: [1] }, { m: [2], s: [1] }, "x"]) {
     assert.equal(checkLibrarySettings({ ...ok, essentialVariants: ev }), null, JSON.stringify(ev));
   }

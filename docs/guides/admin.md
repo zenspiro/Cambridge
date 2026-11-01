@@ -17,10 +17,15 @@ The admin home lists the latest sign-ins, sign-outs, wrong passwords and lockout
 Cambridge files by qualification (IGCSE, O Level, AS & A Level) and subject. Only admins can see it, and every download is written to the activity log.
 
 - **Library home:** one card per subject with a bar: green when every essential file is in, amber when some are, red when none are. The search box looks across every subject (for example "mark scheme 2024 paper 4", or a file name).
-- **A subject:** click its card. At the top, the overall status and the filters (year, session, type, paper, status) with a search box. Below, foldable groups, each with its own count:
-  - **Syllabus and specimens**, per syllabus version: the syllabus (essential), updates and grade descriptions (extras), and the specimen papers with mark schemes.
-  - **Exam sessions**, newest first: a table of papers. "41" means paper 4, variant 1. Columns: QP (question paper), MS (mark scheme), CI (confidential instructions, paper 5). Above the table: examiner report and grade thresholds.
-- **Ticks and crosses:** a green tick downloads the file. A red cross is an essential file that is missing. A grey + is an extra (another variant) not yet stored. Groups that are complete start folded.
+- **A subject:** click its card for the overview:
+  - **Status** and the sessions with the most missing files.
+  - **Search and filters:** type words or pick a status, year, session, type or paper; you get a short list in plain words ("June 2024, Paper 2 Multiple Choice (Extended), variant 2, mark scheme") with Download or Add.
+  - **Exam sessions grid:** one row per year, one tile per session. Green: complete, amber: some, red: none, dashed: not public yet. Click a tile to open that session.
+  - **Syllabus and specimens:** one tile per syllabus version.
+  - **Papers:** what each paper is, its time and marks, and the Core and Extended routes.
+  - **Essential variants for this subject:** tick which variants must be stored (Pakistan sits variant 2).
+- **A session page:** the examiner report and grade thresholds, then the essential variant's papers (with names and Core or Extended tags; columns QP question paper, MS mark scheme, CI confidential instructions), then other variants folded underneath. Use the arrows to step to the session before or after.
+- **Ticks and crosses:** a green tick downloads the file. A red cross is an essential file that is missing. A grey + is an extra (another variant) not yet stored.
 - **Adding a missing file:** click its cross or +. Upload the PDF from your computer (any file name; it is saved under the right Cambridge name) or paste a link from an approved source.
 - **Upload (bulk):** for many files at once, they must already have Cambridge names, like `0625_s23_qp_42.pdf`.
 
@@ -48,6 +53,6 @@ Only one run can go at a time. To stop one, press **Cancel run**, then **Yes, ca
 ## Settings
 - **From year / To year:** the years the library keeps (at most 15 years apart).
 - **Latest public session:** the newest exam session whose papers are public. The library does not ask for later sessions.
-- **Essential variants:** which variants of each paper must be stored for a session to count as complete (default variant 1; March variant 2). The rest show as extras.
+- **Default essential variants:** used only for a subject without its own setting (each subject sets its own on its overview). Currently variant 2.
 
 When a new session's papers come out: move the latest public session forward, then run the agent for just that session.

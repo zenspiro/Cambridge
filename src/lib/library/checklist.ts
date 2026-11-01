@@ -2,7 +2,7 @@
 // as syllabus documents, specimens and exam sessions. One pure function used by the
 // admin library, its search and filters, and the AI engine's catalog. No database here.
 import { DOC_TYPE_LABELS, SESSION_LABELS } from "../config.ts";
-import type { LibrarySettings } from "../settings.ts";
+import { checkVariants, type LibrarySettings } from "../settings.ts";
 import { EXAM_SESSIONS, parseRules, sessionDue, type ExpectedRules } from "./expected.ts";
 import { examName, parseCambridgeName, type DocType } from "./names.ts";
 
@@ -11,7 +11,24 @@ export type StoredDoc = {
   paper: number | null; variant: number | null; size_bytes: number; origin: string; acquired_at: number;
   sha256?: string; syllabus_id?: string;
 };
-export type Version = { id: string; code: string; title: string; valid_from_year: number; valid_to_year: number; expected: string };
+export type Version = {
+  id: string; code: string; title: string; valid_from_year: number; valid_to_year: number; expected: string;
+  /** JSON, this syllabus's own essential variants; null means the library-wide default. */
+  essential_variants?: string | null;
+};
+
+/** The essential variants for a version: its own if set and valid, else the library default. */
+export function essentialFor(v: Version | undefined, lib: LibrarySettings) {
+  if (v?.essential_variants) {
+    try {
+      const own = checkVariants(JSON.parse(v.essential_variants));
+      if (own) return own;
+    } catch {
+      // fall back
+    }
+  }
+  return lib.essentialVariants;
+}
 
 export type Cell = {
   fileName: string;
@@ -27,7 +44,9 @@ export type PaperRow = { paper: number; variant: number | null; essential: boole
 export type Status = { essentialHave: number; essentialTotal: number; extraHave: number; extraTotal: number };
 
 export type VersionGroup = { version: Version; label: string; docs: Cell[]; specimens: PaperRow[]; status: Status };
-export type SessionGroup = { year: number; session: "m" | "s" | "w"; label: string; rows: PaperRow[]; docs: Cell[]; status: Status };
+export type SessionGroup = {
+  year: number; session: "m" | "s" | "w"; label: string; versionId: string; rows: PaperRow[]; docs: Cell[]; status: Status;
+};
 export type Checklist = { code: string; versions: VersionGroup[]; sessions: SessionGroup[]; others: Cell[]; status: Status };
 
 const yy = (y: number) => String(y % 100).padStart(2, "0");
@@ -116,7 +135,7 @@ export function buildChecklist(code: string, versions: Version[], stored: Stored
       if (!sessionDue(year, session, lib.lastSession)) continue;
       const variants = r.variants[session] ?? [];
       if (variants.length === 0) continue;
-      const essentialSet = new Set(lib.essentialVariants[session] ?? []);
+      const essentialSet = new Set(essentialFor(v, lib)[session] ?? []);
       const rows: PaperRow[] = [];
       for (const p of r.papers) {
         for (const vnt of variants) {
@@ -130,7 +149,7 @@ export function buildChecklist(code: string, versions: Version[], stored: Stored
       rows.sort((a, b) => Number(b.essential) - Number(a.essential) || a.paper - b.paper || (a.variant ?? 0) - (b.variant ?? 0));
       const docs = (r.perSession ?? []).map((t) => cell(examName(code, session, year, t), true, have, used));
       sessionGroups.push({
-        year, session, label: `${SESSION_LABELS[session]} ${year}`, rows, docs, status: statusOf([...docs, ...rowCells(rows)]),
+        year, session, label: `${SESSION_LABELS[session]} ${year}`, versionId: v!.id, rows, docs, status: statusOf([...docs, ...rowCells(rows)]),
       });
     }
   }

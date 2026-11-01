@@ -5,7 +5,7 @@ SELECT id, code, title, valid_from_year, valid_to_year, expected FROM syllabus
 WHERE code = ?1 AND valid_from_year <= ?2 AND valid_to_year >= ?2`;
 
 export const SYLLABI_BY_CODE = `
-SELECT id, code, title, valid_from_year, valid_to_year, expected FROM syllabus
+SELECT id, code, title, valid_from_year, valid_to_year, expected, essential_variants FROM syllabus
 WHERE code = ?1 ORDER BY valid_from_year`;
 
 export const SYLLABUS_CODES = `SELECT DISTINCT code, title FROM syllabus ORDER BY code`;

@@ -5,55 +5,27 @@ import { requireAdmin } from "@/lib/auth/guard";
 import { getEnv } from "@/lib/env";
 import { AdminShell, Notice } from "@/components/AdminShell";
 import { CellLink, GroupPill, StatusLine } from "@/components/LibraryBits";
+import { Crumbs, Legend } from "@/components/LibraryTables";
 import { DOC_TYPE_LABELS, SESSION_LABELS } from "@/lib/config";
-import { libraryYears, getLibrarySettings } from "@/lib/settings";
-import { loadHeader, loadSyllabus, tone } from "@/lib/library/catalog";
-import { filterChecklist, type ChecklistFilter, type PaperRow } from "@/lib/library/checklist";
-import { formatBytes } from "@/lib/library/labels";
+import { getLibrarySettings, libraryYears } from "@/lib/settings";
+import { loadHeader, loadSyllabus } from "@/lib/library/catalog";
+import { essentialFor, filterChecklist, groupCells, type Cell, type ChecklistFilter } from "@/lib/library/checklist";
+import { describeFile, duration, loadPapers, paperLookup, routeText, TIER_LABELS } from "@/lib/library/papers";
+import { sessionHref, versionHref, type ExamSession } from "@/lib/library/slugs";
 
 export const metadata: Metadata = { title: "Library" };
 
 const MESSAGES = {
   ok_added: "File added to the library.",
+  ok_variants: "Essential variants saved for this syllabus.",
+  bad_variants: "Tick at least one variant for each session.",
+  busy: "Too many changes this hour. Please wait a little.",
 };
 
 const pick = <T extends string>(v: string | undefined, allowed: readonly T[]): T | null =>
   v && (allowed as readonly string[]).includes(v) ? (v as T) : null;
 
-function PaperTable({ rows, types, specimen = false }: { rows: PaperRow[]; types: string[]; specimen?: boolean }) {
-  if (rows.length === 0) return null;
-  return (
-    <table className="grid-table">
-      <thead>
-        <tr>
-          <th scope="col">Paper</th>
-          {types.map((t) => (
-            <th scope="col" key={t}>
-              <abbr title={DOC_TYPE_LABELS[t]}>{t === "sp" ? "QP" : t === "sm" ? "MS" : t.toUpperCase()}</abbr>
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((r) => (
-          <tr key={`${r.paper}-${r.variant}`} className={r.essential ? undefined : "row-extra"}>
-            <th scope="row">
-              {specimen ? `Paper ${r.paper}` : `${r.paper}${r.variant ?? ""}`}
-              {!r.essential ? <span className="tag">extra</span> : null}
-            </th>
-            {types.map((t) => (
-              <td key={t}>
-                <CellLink cell={r.cells[t as keyof PaperRow["cells"]]} />
-              </td>
-            ))}
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-}
-
-export default async function SyllabusPage({
+export default async function SyllabusOverview({
   params,
   searchParams,
 }: {
@@ -65,8 +37,13 @@ export default async function SyllabusPage({
   const q = await searchParams;
   const env = await getEnv();
   const lib = await getLibrarySettings(env.DB);
-  const [list, header] = await Promise.all([loadSyllabus(env.DB, code, lib), loadHeader(env.DB, code)]);
+  const [list, header, { papers, routes }] = await Promise.all([
+    loadSyllabus(env.DB, code, lib),
+    loadHeader(env.DB, code),
+    loadPapers(env.DB, code),
+  ]);
   if (!list || !header) redirect("/admin/library?e=unknown");
+  const look = paperLookup(papers);
 
   const years = libraryYears(lib).map(String);
   const filter: ChecklistFilter = {
@@ -78,61 +55,49 @@ export default async function SyllabusPage({
     q: (q.q ?? "").slice(0, 100),
   };
   const view = filterChecklist(list, filter);
-  const open = (t: string) => view.filtered || t !== "ok";
+
+  // Flat results for search and filters, described in plain words.
+  const results: { cell: Cell; versionId: string | null }[] = view.filtered
+    ? [
+        ...view.versions.flatMap((g) => groupCells(g).map((cell) => ({ cell, versionId: g.version.id }))),
+        ...view.sessions.flatMap((g) => groupCells(g).map((cell) => ({ cell, versionId: g.versionId }))),
+        ...view.others.map((cell) => ({ cell, versionId: cell.doc?.syllabus_id ?? null })),
+      ]
+    : [];
+
+  // Overview grid: one row per year, one tile per session.
+  const bySession = new Map(list.sessions.map((g) => [`${g.year}${g.session}`, g]));
+  const worst = [...list.sessions]
+    .filter((g) => g.status.essentialHave < g.status.essentialTotal)
+    .sort((a, b) => (b.status.essentialTotal - b.status.essentialHave) - (a.status.essentialTotal - a.status.essentialHave) || b.year - a.year)
+    .slice(0, 3);
+  const missing = list.status.essentialTotal - list.status.essentialHave;
+  const newest = list.versions[0];
+  const newestPapers = papers.filter((p) => p.syllabus_id === newest?.version.id);
+  const newestRoutes = routes.filter((r) => r.syllabus_id === newest?.version.id);
+  const ownVariants = essentialFor(list.versions[0]?.version, lib);
 
   return (
-    <AdminShell current="/admin/library" title={`${header.subject_name} (${code})`}>
-      <nav className="crumbs" aria-label="Breadcrumb">
-        <Link className="link" href="/admin/library">Library</Link>
-        <span aria-hidden="true">›</span>
-        <span>{header.qualification_name}</span>
-        <span aria-hidden="true">›</span>
-        <span aria-current="page">{header.subject_name} {code}</span>
-      </nav>
-      <Notice code={q.e} messages={MESSAGES} />
+    <AdminShell current="/admin/library" title={`${header.subject_name} ${code}`}>
+      <Crumbs items={[{ label: "Library", href: "/admin/library" }, { label: header.qualification_name }, { label: `${header.subject_name} ${code}` }]} />
+      <Notice code={q.e} messages={MESSAGES} errorRef={q.ref} />
 
       <section className="card stack">
         <StatusLine status={list.status} />
-        <p className="muted">
-          {lib.fromYear} to {lib.toYear}, up to {SESSION_LABELS[lib.lastSession.session]} {lib.lastSession.year}. Essential:
-          syllabus, specimens, and for each session variant {lib.essentialVariants.s.join(", ")} (March{" "}
-          {lib.essentialVariants.m.join(", ")}) of every paper, plus the examiner report and grade thresholds. Change in{" "}
-          <Link className="link" href="/admin/settings">Settings</Link>.
-        </p>
+        {missing > 0 ? (
+          <p>
+            <Link className="link" href={`/admin/library/${code}?status=missing`}>{missing} essential files missing</Link>
+            {worst.length > 0 ? <span className="muted">. Most missing: {worst.map((g) => `${g.label} (${g.status.essentialHave} of ${g.status.essentialTotal})`).join(", ")}.</span> : null}
+          </p>
+        ) : (
+          <p className="notice">Every essential file is in.</p>
+        )}
       </section>
 
-      <form className="card filters filters-6" method="get" role="search">
-        <label className="field field-wide">
-          <span className="label-inline">Search</span>
-          <input className="input" name="q" type="search" maxLength={100} defaultValue={filter.q ?? ""} placeholder="e.g. paper 4 mark scheme" />
-        </label>
-        <label className="field">
-          <span className="label-inline">Year</span>
-          <select className="input" name="year" defaultValue={q.year ?? ""}>
-            <option value="">All</option>
-            {years.map((y) => <option key={y} value={y}>{y}</option>)}
-          </select>
-        </label>
-        <label className="field">
-          <span className="label-inline">Session</span>
-          <select className="input" name="session" defaultValue={filter.session ?? ""}>
-            <option value="">All</option>
-            {Object.entries(SESSION_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </select>
-        </label>
-        <label className="field">
-          <span className="label-inline">Type</span>
-          <select className="input" name="type" defaultValue={filter.type ?? ""}>
-            <option value="">All</option>
-            {Object.entries(DOC_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </select>
-        </label>
-        <label className="field">
-          <span className="label-inline">Paper</span>
-          <select className="input" name="paper" defaultValue={filter.paper ? String(filter.paper) : ""}>
-            <option value="">All</option>
-            {["1", "2", "3", "4", "5", "6"].map((p) => <option key={p} value={p}>{p}</option>)}
-          </select>
+      <form className="card filters filters-compact" method="get" role="search">
+        <label className="field field-search">
+          <span className="sr-only">Search this syllabus</span>
+          <input className="input" name="q" type="search" maxLength={100} defaultValue={filter.q ?? ""} placeholder="Search, e.g. mark scheme 2024 paper 4" />
         </label>
         <label className="field">
           <span className="label-inline">Status</span>
@@ -143,97 +108,180 @@ export default async function SyllabusPage({
             <option value="extras">Extras</option>
           </select>
         </label>
+        <label className="field">
+          <span className="label-inline">Year</span>
+          <select className="input" name="year" defaultValue={q.year ?? ""}>
+            <option value="">All</option>
+            {years.map((y) => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </label>
+        <details className="more-filters" open={!!(filter.session || filter.type || filter.paper)}>
+          <summary className="link">More filters</summary>
+          <div className="filters-more">
+            <label className="field">
+              <span className="label-inline">Session</span>
+              <select className="input" name="session" defaultValue={filter.session ?? ""}>
+                <option value="">All</option>
+                {Object.entries(SESSION_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            </label>
+            <label className="field">
+              <span className="label-inline">Type</span>
+              <select className="input" name="type" defaultValue={filter.type ?? ""}>
+                <option value="">All</option>
+                {Object.entries(DOC_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            </label>
+            <label className="field">
+              <span className="label-inline">Paper</span>
+              <select className="input" name="paper" defaultValue={filter.paper ? String(filter.paper) : ""}>
+                <option value="">All</option>
+                {["1", "2", "3", "4", "5", "6"].map((p) => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </label>
+          </div>
+        </details>
         <div className="filter-actions">
-          <button className="btn btn-primary" type="submit">Apply</button>
-          <Link className="btn" href={`/admin/library/${code}`}>Clear</Link>
+          <button className="btn btn-primary" type="submit">Show</button>
+          {view.filtered ? <Link className="btn" href={`/admin/library/${code}`}>Clear</Link> : null}
         </div>
       </form>
 
       {view.filtered ? (
-        <p className="muted">
-          {view.matches} {view.matches === 1 ? "file matches" : "files match"}.
-        </p>
-      ) : null}
-
-      <ul className="legend muted" aria-label="Key">
-        <li className="legend-item"><span className="cell cell-have" aria-hidden="true">✓</span> Stored (click to download)</li>
-        <li className="legend-item"><span className="cell cell-miss" aria-hidden="true">✕</span> Essential, missing</li>
-        <li className="legend-item"><span className="cell cell-extra" aria-hidden="true">+</span> Extra, not stored</li>
-        <li className="legend-item">Click a missing file to add it.</li>
-      </ul>
-
-      {view.versions.length > 0 ? <h2 className="subtitle section-title">Syllabus and specimens</h2> : null}
-      {view.versions.map((g) => (
-        <details className="card group" key={g.version.id} open={open(tone(g.status))}>
-          <summary className="group-head">
-            <span className="subtitle">{g.label}</span>
-            <GroupPill status={g.status} />
-          </summary>
-          <div className="group-body">
-            {g.docs.length > 0 ? (
-              <div className="doc-chips">
-                {g.docs.map((c) => (
-                  <span className="doc-chip" key={c.fileName}>
-                    <CellLink cell={c} label={`${DOC_TYPE_LABELS[c.docType]}${c.essential ? "" : " (extra)"}`} />
-                  </span>
-                ))}
-              </div>
-            ) : null}
-            {g.specimens.length > 0 ? (
-              <>
-                <h3 className="label-inline">Specimen papers</h3>
-                <PaperTable rows={g.specimens} types={["sp", "sm", "ci"]} specimen />
-              </>
-            ) : null}
-          </div>
-        </details>
-      ))}
-
-      {view.sessions.length > 0 ? <h2 className="subtitle section-title">Exam sessions</h2> : null}
-      {view.sessions.map((g) => (
-        <details className="card group" key={`${g.year}${g.session}`} open={open(tone(g.status))}>
-          <summary className="group-head">
-            <span className="subtitle">{g.label}</span>
-            <GroupPill status={g.status} />
-          </summary>
-          <div className="group-body">
-            {g.docs.length > 0 ? (
-              <div className="doc-chips">
-                {g.docs.map((c) => (
-                  <span className="doc-chip" key={c.fileName}>
-                    <CellLink cell={c} label={DOC_TYPE_LABELS[c.docType]} />
-                  </span>
-                ))}
-              </div>
-            ) : null}
-            <PaperTable rows={g.rows} types={["qp", "ms", "ci"]} />
-          </div>
-        </details>
-      ))}
-
-      {view.others.length > 0 ? (
-        <details className="card group" open={view.filtered}>
-          <summary className="group-head">
-            <span className="subtitle">Other stored files</span>
-            <span className="pill">{view.others.length}</span>
-          </summary>
-          <ul className="list group-body">
-            {view.others.map((c) => (
-              <li className="list-row" key={c.fileName}>
-                <span className="mono">{c.fileName}</span>
-                <span className="actions">
-                  {c.doc ? <span className="muted">{formatBytes(c.doc.size_bytes)}</span> : null}
-                  <CellLink cell={c} label="Download" />
+        <section className="card stack">
+          <h2 className="subtitle">{results.length} {results.length === 1 ? "file" : "files"}</h2>
+          {results.length === 0 ? <p className="muted">Nothing matches.</p> : null}
+          <ul className="list">
+            {results.slice(0, 300).map(({ cell, versionId }) => (
+              <li className="list-row result-row" key={cell.fileName}>
+                <span className="doc-main">
+                  <span>{describeFile(cell.fileName, versionId, look)}</span>
+                  <span className="mono muted">{cell.fileName}{!cell.doc && !cell.essential ? " · extra" : ""}</span>
                 </span>
+                <CellLink cell={cell} label={cell.doc ? "Download" : "Add"} />
               </li>
             ))}
           </ul>
-        </details>
-      ) : null}
+          {results.length > 300 ? <p className="muted">Showing the first 300. Narrow it down with the filters.</p> : null}
+        </section>
+      ) : (
+        <>
+          <section className="card stack">
+            <h2 className="subtitle">Exam sessions</h2>
+            <p className="muted">Each tile shows essential files stored for that session. Click one to see its papers.</p>
+            <table className="year-grid">
+              <thead>
+                <tr>
+                  <th scope="col"><span className="sr-only">Year</span></th>
+                  {(["m", "s", "w"] as ExamSession[]).map((s) => <th scope="col" key={s}>{SESSION_LABELS[s]}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {libraryYears(lib).map((y) => (
+                  <tr key={y}>
+                    <th scope="row">{y}</th>
+                    {(["m", "s", "w"] as ExamSession[]).map((s) => {
+                      const g = bySession.get(`${y}${s}`);
+                      return (
+                        <td key={s}>
+                          {g ? (
+                            <Link className={`tile tile-${g.status.essentialHave === g.status.essentialTotal ? "ok" : g.status.essentialHave > 0 ? "part" : "none"}`}
+                              href={sessionHref(code, y, s)} aria-label={`${g.label}: ${g.status.essentialHave} of ${g.status.essentialTotal} essential`}>
+                              {g.status.essentialHave}/{g.status.essentialTotal}
+                            </Link>
+                          ) : (
+                            <span className="tile tile-off" title="Not public yet or not in the library">·</span>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
 
-      {view.filtered && view.matches === 0 ? (
-        <section className="card"><p className="muted">Nothing matches these filters.</p></section>
-      ) : null}
+          <section className="card stack">
+            <h2 className="subtitle">Syllabus and specimens</h2>
+            <div className="tiles-row">
+              {list.versions.map((g) => (
+                <Link className="version-tile" key={g.version.id} href={versionHref(code, g.version.valid_from_year)}>
+                  <span>{g.version.valid_from_year} to {g.version.valid_to_year}</span>
+                  <GroupPill status={g.status} />
+                </Link>
+              ))}
+            </div>
+          </section>
+
+          {newest && newestPapers.length > 0 ? (
+            <section className="card stack">
+              <h2 className="subtitle">Papers ({newest.version.valid_from_year} to {newest.version.valid_to_year} syllabus)</h2>
+              <table className="info-table">
+                <thead>
+                  <tr><th scope="col">Paper</th><th scope="col">Name</th><th scope="col">Time</th><th scope="col">Marks</th></tr>
+                </thead>
+                <tbody>
+                  {newestPapers.map((p) => (
+                    <tr key={p.paper}>
+                      <th scope="row">{p.paper}</th>
+                      <td>{p.name}{p.tier !== "all" ? <span className={`tag tag-${p.tier}`}>{TIER_LABELS[p.tier]}</span> : null}</td>
+                      <td>{duration(p.duration_min)}</td>
+                      <td>{p.marks}{p.weighting_pct ? ` (${p.weighting_pct}%)` : ""}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <ul className="routes">
+                {newestRoutes.map((r) => (
+                  <li key={r.name}><strong>{r.name}:</strong> {routeText(r.papers)}{r.grades ? `, grades ${r.grades}` : ""}</li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+
+          {list.others.length > 0 ? (
+            <details className="card group">
+              <summary className="group-head">
+                <span className="subtitle">Other stored files</span>
+                <span className="pill">{list.others.length}</span>
+              </summary>
+              <ul className="list group-body">
+                {list.others.map((c) => (
+                  <li className="list-row result-row" key={c.fileName}>
+                    <span className="doc-main">
+                      <span>{describeFile(c.fileName, c.doc?.syllabus_id ?? null, look)}</span>
+                      <span className="mono muted">{c.fileName}</span>
+                    </span>
+                    <CellLink cell={c} label="Download" />
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
+
+          <form className="card stack" method="post" action="/admin/library/variants">
+            <h2 className="subtitle">Essential variants for {code}</h2>
+            <p className="muted">Which variants of each paper must be stored for a session to be complete. Pakistan sits variant 2.</p>
+            <input type="hidden" name="code" value={code} />
+            <div className="variant-grid">
+              {(["m", "s", "w"] as ExamSession[]).map((s) => (
+                <fieldset className="fieldset" key={s}>
+                  <legend className="label-inline">{SESSION_LABELS[s]}</legend>
+                  <div className="checks">
+                    {[1, 2, 3].map((v) => (
+                      <label className="check" key={v}>
+                        <input type="checkbox" name={`ev_${s}`} value={v} defaultChecked={ownVariants[s].includes(v)} /> {v}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+              ))}
+            </div>
+            <button className="btn" type="submit">Save variants</button>
+          </form>
+        </>
+      )}
+      <Legend />
     </AdminShell>
   );
 }
