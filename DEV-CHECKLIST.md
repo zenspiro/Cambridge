@@ -8,7 +8,8 @@ Update this file whenever the process changes.
 
 ## While building (brief 15.2 to 15.5)
 - [ ] Every new route: `requireAdmin()` / `adminSession()` (or listed in `PUBLIC_ROUTES` on purpose), ownership check on every record.
-- [ ] Every POST: `isSameOrigin`, then a 303 redirect via `redirectTo`.
+- [ ] Every POST: `isSameOrigin`, rate limit (`allow` in `src/lib/ratelimit.ts`), then a 303 redirect via `redirectTo`.
+- [ ] Cambridge files: only through `storeDocument()`; only `src/app/admin/` may touch `env.SOURCE`; downloads audited.
 - [ ] Input validated on the server; output escaped; SQL bound parameters only.
 - [ ] Settings and limits from config or the database, not hardcoded.
 - [ ] Reuse an existing helper or class before writing a new one.

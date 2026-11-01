@@ -7,8 +7,12 @@ A plain list of what the platform does today, for non-developers.
 - A health page (`/health`) that says whether the database and file storage are working.
 
 - Admin sign-in with a password, at `/admin/login`. After 5 wrong tries from one network, sign-in pauses for 15 minutes.
-- Admin home showing recent sign-in activity.
+- Admin home showing recent activity.
+- Source library (admin only): Physics 0625 papers, mark schemes, examiner reports and other Cambridge files for 2022 to 2026, grouped by session, with filters and downloads. Every download is logged.
+- Gap report: which expected files are still missing for each session.
+- Upload: add up to 20 Cambridge PDFs at once; wrong names, non-PDFs and duplicates are skipped with a reason.
+- Approved sources: the list of websites the download agent may visit, which the admin can add to, switch off or remove.
 
 ## Coming next
-- Source library: Cambridge papers, mark schemes and examiner reports, collected by a download agent and organised by year and session (admin only).
+- Download agent: fetches public Cambridge files into the library, with a dry run first.
 - Student sign-in with an email code or Google.

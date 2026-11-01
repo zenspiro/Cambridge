@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/guard";
 import { recentAudit } from "@/lib/auth/session";
 import { getEnv } from "@/lib/env";
+import { AdminShell } from "@/components/AdminShell";
+import { COUNT_DOCUMENTS } from "@/lib/library/queries";
+import { dateFmt } from "@/lib/library/labels";
 
 export const metadata: Metadata = { title: "Admin" };
 
@@ -10,32 +14,29 @@ const ACTION_LABELS: Record<string, string> = {
   "admin.logout": "Signed out",
   "admin.login_failed": "Wrong password",
   "admin.login_locked": "Sign-in locked (too many tries)",
+  "source.upload": "Uploaded a source file",
+  "source.agent": "Agent stored a source file",
+  "source.download": "Downloaded a source file",
+  "source_site.add": "Added a source website",
+  "source_site.enable": "Switched on a source website",
+  "source_site.disable": "Switched off a source website",
+  "source_site.remove": "Removed a source website",
 };
-
-const dateFmt = new Intl.DateTimeFormat("en-GB", {
-  dateStyle: "medium",
-  timeStyle: "short",
-  timeZone: "Asia/Karachi",
-});
 
 export default async function AdminHome() {
   await requireAdmin();
   const env = await getEnv();
-  const events = await recentAudit(env.DB, 15);
+  const [events, count] = await Promise.all([
+    recentAudit(env.DB, 15),
+    env.DB.prepare(COUNT_DOCUMENTS).bind("0625").first<{ n: number }>(),
+  ]);
   return (
-    <main className="shell">
-      <header className="topbar">
-        <h1 className="title">Admin</h1>
-        <form method="post" action="/admin/session/end">
-          <button className="btn" type="submit">
-            Sign out
-          </button>
-        </form>
-      </header>
-
+    <AdminShell current="/admin" title="Admin">
       <section className="card stack">
         <h2 className="subtitle">Source library</h2>
-        <p className="muted">Coming next: Cambridge papers, mark schemes and the download agent.</p>
+        <p className="muted">
+          {count?.n ?? 0} Physics 0625 files stored. <Link className="link" href="/admin/library/gaps">See what is missing</Link>.
+        </p>
       </section>
 
       <section className="card stack">
@@ -55,6 +56,6 @@ export default async function AdminHome() {
           </ul>
         )}
       </section>
-    </main>
+    </AdminShell>
   );
 }

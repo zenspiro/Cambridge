@@ -2,7 +2,7 @@
 // Lets unit tests run the real SQL from src/lib against a real database.
 import { DatabaseSync } from "node:sqlite";
 import { readdirSync, readFileSync } from "node:fs";
-import type { Db } from "../../../src/lib/auth/session.ts";
+import type { Bucket, Db } from "../../../src/lib/db.ts";
 
 export function testDb(): Db & { raw: DatabaseSync } {
   const raw = new DatabaseSync(":memory:");
@@ -31,6 +31,25 @@ export function testDb(): Db & { raw: DatabaseSync } {
           };
         },
       };
+    },
+  };
+}
+
+/** In-memory R2 stand-in. */
+export function testBucket(opts: { failPut?: boolean } = {}): Bucket & { objects: Map<string, Uint8Array> } {
+  const objects = new Map<string, Uint8Array>();
+  return {
+    objects,
+    async put(key, value) {
+      if (opts.failPut) throw new Error("storage down");
+      objects.set(key, value instanceof Uint8Array ? value : new Uint8Array(value));
+    },
+    async get(key) {
+      const v = objects.get(key);
+      return v ? { body: new Blob([v as BlobPart]).stream(), size: v.length } : null;
+    },
+    async delete(key) {
+      objects.delete(key);
     },
   };
 }

@@ -11,8 +11,10 @@ Current state, kept short. The full brief (product, copyright rules, standards) 
 
 ## Status
 - Step 0 (repo, CI, Cloudflare, docs) live.
-- Admin sign-in (Step 1-lite) built: one platform admin, password only (owner decision). Next: source library and acquisition agent (owner moved it ahead of the rest of Step 1).
-- Subject: Physics 0625 recommended to the owner for the first syllabus.
+- Admin sign-in (Step 1-lite) live: one platform admin, password only (owner decision).
+- Build 3a (source library) built. Next: 3b, the acquisition agent (GitHub Actions). Owner moved this ahead of the rest of Step 1.
+- Subject: Physics 0625 (owner decision). Library years 2022 to 2026 (owner decision).
+- This session's network blocks cambridgeinternational.org and workers.dev; the owner was told which hosts to allow.
 - Open decisions: `docs/BRIEF.md` section 14.
 
 ## Stack in this repo
@@ -39,10 +41,22 @@ Current state, kept short. The full brief (product, copyright rules, standards) 
 - `audit_log` records sign-in, failed try, lockout (once) and sign-out. Never passwords, tokens or IPs. Kept when accounts go (no cascade).
 - Local password: `.dev.vars` (copy `.dev.vars.example`).
 
+## Source library (build 3a)
+- Pages: `/admin/library` (filters by year, session, type, paper), `/admin/library/gaps`, `/admin/library/upload`, `/admin/sources`. Frame and nav: `src/components/AdminShell.tsx`.
+- Files live in R2 `SOURCE` at `code/year/session/file_name`; rows in `source_document`. Only `src/app/admin/` may touch `env.SOURCE` (unit test). Downloads are attachments, `no-store`, audited (`source.download`).
+- One store path for uploads and the agent: `storeDocument()` in `src/lib/library/store.ts`. It checks the Cambridge name (`names.ts`), year range, size, PDF header and syllabus version, then reserves the row as `pending` (unique name and SHA-256, so races and duplicates are caught), writes R2, marks `stored`, audits.
+- File types: qp, ms, in, ci, er, gt per exam session; sp, sm, in, ci, sy for specimens (session `y`). Brief listed qp, ms, er, gt, sp; the rest are real Cambridge types.
+- Syllabus versions are rows (`0625-2020`, `0625-2023`, `0625-2026`); a file joins the version for its year. Version years still to be confirmed on Cambridge's site. Gap rules are JSON in `syllabus.expected`, read by `expected.ts`.
+- Settings: `LIBRARY` in `src/lib/config.ts` (years, `lastSession` that counts for gaps, upload limits). Update `lastSession` when a new session's papers go public.
+- Approved sources: `source_site`, seeded with Cambridge's official site. Addresses must be public https (`normaliseSiteUrl`). Remove uses the inline Yes / Never mind confirm.
+- Rate limits: one helper, `src/lib/ratelimit.ts` (`allow`, keys hashed), on the `login_attempt` table for every kind of limit.
+- Jobs: `src/lib/jobs.ts`. Each upload batch is a `source_upload` job with per-file results.
+
 ## Database
 - Migrations in `migrations/NNNN_name.sql`, additive only (a unit test blocks DROP, RENAME, DELETE).
 - Conventions: TEXT random ids, INTEGER milliseconds for times, JSON as TEXT with `json_valid`, real foreign keys with `ON DELETE CASCADE` toward the owning user, so deletion and export find every row.
-- Tables: `job`, `admin_session`, `login_attempt`, `audit_log`.
+- Tables: `job`, `admin_session`, `login_attempt` (all rate limits), `audit_log`, `subject`, `syllabus`, `source_site`, `source_document`.
+- Shared types `Db` and `Bucket`: `src/lib/db.ts`. Logic takes them as parameters so unit tests run it on SQLite and an in-memory bucket.
 
 ## Commands
 See README.md. Before every push: `npm run check`, `npm run build:worker`, `npm run db:migrate:local`, then with `npx wrangler dev` running, `npm run test:e2e`. Full list: `DEV-CHECKLIST.md`.

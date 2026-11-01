@@ -2,6 +2,26 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-01: Source library (build 3a)
+
+**What**
+- Admin pages: library (filters, grouped by session), gap report, multi-file upload with per-file results, approved sources (add, switch on or off, remove with inline confirm).
+- Migration 0003: `subject`, `syllabus` (three 0625 versions), `source_site` (Cambridge official seeded), `source_document`; `job` gains `created_by` and `result`.
+- One store path for uploads and the coming agent; one rate limiter for every write (sign-in moved onto it); jobs helper.
+- Admin-only, audited downloads as attachments.
+
+**Why**
+- Owner moved the acquisition agent forward; the library is where its files land and where the AI steps will read them. Split into 3a (library) and 3b (agent), owner agreed.
+- Physics 0625, 2022 to 2026 (owner decisions). Files are tagged with the syllabus version for their year, so later steps can prefer the current one.
+- Files are reserved in the database before writing to storage, so two uploads of the same file cannot overwrite each other.
+
+**Tested**
+- 42 unit tests pass (15 new: 14 for the library, name parser, gap rules, PDF check, store with version pick, rejections, duplicates, parallel uploads, storage failure clean-up, source address rules, source changes audited, seed, jobs, a check that only admin code touches the source bucket, and 1 for the rate limiter).
+- Typecheck, inline check, build, local migration 0003.
+- Browser at 375 px and 1400 px (40 checks): upload with good, badly named and fake files; library listing; download as an attachment; junk filters ignored; gap report; sources add, refused IP address, switch off, inline confirm, Never mind, remove; no sideways scroll; no script or CSP errors. Signed out, every library page and download redirects to sign-in; cross-site and signed-out POSTs are refused. Run twice to cover re-uploads.
+- Fixed during testing: two test-script bugs (clicked Sign out instead of Upload; did not wait for page changes), a seed time one day in the future, Sign out wrapping on phones.
+- Not tested: real Cambridge files (no network access to Cambridge from this session).
+
 ## 2026-11-01: Admin sign-in (Step 1-lite)
 
 **What**
