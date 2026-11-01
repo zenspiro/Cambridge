@@ -41,6 +41,7 @@ jobs:
       - name: Browser smoke test
         run: |
           npx playwright install --with-deps chromium
+          cp .dev.vars.example .dev.vars
           npx wrangler dev --port 8787 > wrangler-dev.log 2>&1 &
           for i in $(seq 1 60); do curl -sf http://localhost:8787/health > /dev/null && break; sleep 1; done
           npm run test:e2e
