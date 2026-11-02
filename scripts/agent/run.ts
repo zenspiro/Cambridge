@@ -114,6 +114,8 @@ type Report = {
   robotsBlocked: string[];
   pageErrors: { url: string; status: string }[];
   driveFolders?: DriveSummary[];
+  /** Drive folders not read because they are for other subjects. */
+  driveSkipped?: number;
   error?: string;
 };
 
@@ -289,24 +291,50 @@ async function main() {
       const base = TEST_MODE && process.env.DRIVE_API_BASE ? process.env.DRIVE_API_BASE : "https://www.googleapis.com/drive/v3";
       drive = makeDrive({ key: DRIVE_KEY, base, delayMs: TEST_MODE ? 20 : Math.max(job.limits.driveDelayMs ?? 1000, 500) });
       report.driveFolders = [];
+      // Only the folders for this run's subject are read. A folder whose name names another
+      // subject ("IGCSE Chemistry (0620)") is skipped without a single call to Google.
+      const subjects = job.subjects ?? [];
+      const runSubject = subjects.find((s) => s.code === job.params.code);
+      const runName = runSubject ? `${runSubject.qualification} ${runSubject.name} (${runSubject.code})` : job.params.code;
+      const otherSubject = (name: string) => {
+        const c = readFolder(name, subjects).code;
+        return c !== null && c !== job.params.code;
+      };
+      const mine = folders.filter((f) => !f.label || !otherSubject(f.label));
+      const skippedLabels = folders.filter((f) => !mine.includes(f)).map((f) => f.label);
+      report.driveSkipped = skippedLabels.length;
+      await progress(findShare, "Google Drive",
+        mine.length === 0
+          ? `None of the ${folders.length} Google Drive folders is for ${runName}, so none were read (${skippedLabels.length} are for other subjects).`
+          : `Google Drive: reading ${mine.length === 1 ? "the folder" : `the ${mine.length} folders`} for ${runName}` +
+            (skippedLabels.length ? `; skipped ${skippedLabels.length} for other subjects (${skippedLabels.slice(0, 5).join(", ")}${skippedLabels.length > 5 ? ` and ${skippedLabels.length - 5} more` : ""}).` : "."));
       let n = 0;
-      for (const f of folders) {
+      for (const f of mine) {
         n++;
-        const step = `Reading ${f.label || "a Google Drive folder"} (${n} of ${folders.length})`;
+        const step = `Reading ${f.label || "a Google Drive folder"} (${n} of ${mine.length})`;
         await progress(findShare, step);
         try {
+          if (!f.label) {
+            // No name saved: ask Google for the folder's name first, and skip it if it is another subject's.
+            const root = await drive.folder(f.folderId);
+            if (otherSubject(root.name)) {
+              report.driveSkipped++;
+              await progress(findShare, step, `Skipped Google Drive folder "${root.name}": it is for another subject.`);
+              continue;
+            }
+          }
           const tree = await walk(drive, f.folderId, { maxFolders: job.limits.driveMaxFolders ?? 2000, maxDepth: job.limits.driveMaxDepth ?? 8 },
             async (path, count) => { if (count % 25 === 0) await progress(findShare, `${step}: ${count} folders so far (${path.join(" / ")})`); });
           const summary: DriveSummary = {
             folderId: f.folderId, name: tree.root, looksLike: "", folders: tree.folders, pdfs: tree.pdfs.length, recognised: 0,
             forThisSyllabus: 0, otherSubjects: {}, years: null, truncated: tree.truncated,
           };
-          const reading = readFolder(tree.root, job.subjects ?? []);
+          const reading = readFolder(f.label || tree.root, subjects);
           const fresh: string[] = [];
           let haveHere = 0;
           let outside = 0;
           for (const { item, path } of tree.pdfs) {
-            const c = classifyFile(path, item.name, job.subjects ?? []);
+            const c = classifyFile(path, item.name, subjects);
             if (!c.name) {
               if (c.code && c.code !== job.params.code) summary.otherSubjects[c.code] = (summary.otherSubjects[c.code] ?? 0) + 1;
               else if (report.unmatched.length < 300) report.unmatched.push(`${[...path, item.name].join(" / ")}: ${c.why}`);
@@ -334,12 +362,13 @@ async function main() {
             report.candidates.push({ name: c.name, url: `https://drive.google.com/file/d/${id}/view`, siteId: f.siteId, driveId: id, why: c.why });
             fresh.push(c.name);
           }
-          const subj = (job.subjects ?? []).find((s) => s.code === (reading.code ?? (summary.forThisSyllabus ? job.params.code : "")));
-          // A subject the library does not have yet still reads by its folder name ("Enterprise (0454)").
-          const otherCode = /\b(\d{4})\b/.exec(tree.root)?.[1];
+          const subj = subjects.find((s) => s.code === (reading.code ?? (summary.forThisSyllabus ? job.params.code : "")));
+          // A subject the library does not have yet still reads by its folder name ("History (0470)").
           summary.looksLike = subj
             ? `${subj.qualification} ${subj.name} ${subj.code}`
-            : reading.subject ?? (otherCode ? `${tree.root.replace(/\s+-\s+/g, ", ")}, a subject not in the library yet` : "not sure from the folder name");
+            : reading.code
+              ? `${(f.label || tree.root).replace(/\s+-\s+/g, ", ")}, a subject not in the library yet`
+              : "no subject in the folder name";
           report.driveFolders.push(summary);
           report.pagesVisited++;
           report.linksFound += tree.pdfs.length;

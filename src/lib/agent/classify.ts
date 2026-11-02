@@ -12,7 +12,15 @@ export type Classified = {
   /** Where each part came from, or what is missing: shown in the run report. */
   why: string;
 };
-export type FolderReading = { code: string | null; subject: string | null; year: number | null; session: "m" | "s" | "w" | "y" | null };
+export type FolderReading = {
+  code: string | null;
+  /** The subject's name when the library has it ("IGCSE Physics"), else null. */
+  subject: string | null;
+  /** True when the code (or name) matches a subject in the library. */
+  inLibrary: boolean;
+  year: number | null;
+  session: "m" | "s" | "w" | "y" | null;
+};
 
 const words = (s: string) =>
   ` ${s.toLowerCase().replace(/\.pdf$/i, "").replace(/[_\-\u2013\u2014.,()[\]{}+/\\]+/g, " ").replace(/\s+/g, " ").trim()} `;
@@ -40,11 +48,17 @@ function yearOf(w: string): number | null {
   return m ? Number(m[1]) : null;
 }
 
-function codeOf(w: string, subjects: KnownSubject[]): string | null {
-  for (const m of w.matchAll(/ (\d{4}) /g)) {
-    if (subjects.some((s) => s.code === m[1])) return m[1]!;
-  }
-  return null;
+/**
+ * The syllabus code in a name: a code in brackets, "(0478)", first, then a code of a subject in
+ * the library, then any other four-digit number that does not read as a year (1990 to 2039).
+ * So "Computer Science (0478)" is read even before 0478 is added to the library.
+ */
+function codeOf(raw: string, subjects: KnownSubject[]): string | null {
+  const isYear = (c: string) => /^(199\d|20[0-3]\d)$/.test(c);
+  const bracket = [...raw.matchAll(/\((\d{4})\)/g)].map((m) => m[1]!).find((c) => !isYear(c));
+  if (bracket) return bracket;
+  const all = [...words(raw).matchAll(/ (\d{4}) /g)].map((m) => m[1]!);
+  return all.find((c) => subjects.some((s) => s.code === c)) ?? all.find((c) => !isYear(c)) ?? null;
 }
 
 /** "physics" (and "igcse" if two qualifications share the name) picks a known subject. */
@@ -83,10 +97,12 @@ function paperOf(w: string): { paper: number; variant: number | null } | null {
 export function readFolder(name: string, subjects: KnownSubject[]): FolderReading {
   const w = words(name);
   const c = compactSession(w);
-  const subj = subjectByName(w, subjects);
+  const code = codeOf(name, subjects);
+  const subj = subjects.find((s) => s.code === code) ?? (code ? null : subjectByName(w, subjects));
   return {
-    code: codeOf(w, subjects) ?? subj?.code ?? null,
+    code: code ?? subj?.code ?? null,
     subject: subj ? `${subj.qualification} ${subj.name}` : null,
+    inLibrary: subj !== null,
     year: c?.year ?? yearOf(w),
     session: c?.session ?? sessionOf(w),
   };
@@ -98,16 +114,13 @@ export function classifyFile(path: string[], fileName: string, subjects: KnownSu
   // 1. Already a Cambridge name (allowing spaces, dashes, capitals and "(1)" copies).
   const tidy = fileName.toLowerCase().replace(/\s*\(\d+\)(?=\.pdf$)/, "").replace(/[\s-]+/g, "_");
   const direct = parseCambridgeName(tidy);
-  if (direct) {
-    const known = subjects.some((s) => s.code === direct.code);
-    return known
-      ? { name: direct.fileName, code: direct.code, confidence: "high", why: "Cambridge file name" }
-      : { name: null, code: direct.code, confidence: "none", why: `syllabus ${direct.code} is not in the library` };
-  }
+  // Files of subjects not in the library are named too: the agent counts them per subject.
+  if (direct) return { name: direct.fileName, code: direct.code, confidence: "high", why: "Cambridge file name" };
 
   // 2. Read the parts from the file name, then fill gaps from the folders (nearest first).
   const fw = words(fileName);
-  const folders = [...path].reverse().map(words);
+  const rawFolders = [...path].reverse();
+  const folders = rawFolders.map(words);
   const from: string[] = [];
   const pick = <T,>(label: string, own: T | null, read: (w: string) => T | null): T | null => {
     if (own !== null) {
@@ -125,8 +138,13 @@ export function classifyFile(path: string[], fileName: string, subjects: KnownSu
   };
 
   const own = compactSession(fw);
-  const code = pick("syllabus", codeOf(fw, subjects) ?? subjectByName(fw, subjects)?.code ?? null,
-    (w) => codeOf(w, subjects) ?? subjectByName(w, subjects)?.code ?? null);
+  // The subject: a code in the file name, else the nearest folder with a code or a subject name.
+  let code = codeOf(fileName, subjects) ?? subjectByName(fw, subjects)?.code ?? null;
+  if (code) from.push("syllabus from file name");
+  else {
+    for (let i = 0; i < rawFolders.length && !code; i++) code = codeOf(rawFolders[i]!, subjects) ?? subjectByName(folders[i]!, subjects)?.code ?? null;
+    if (code) from.push("syllabus from folder");
+  }
   const type = typeOf(fw);
   const session = pick("session", own?.session ?? sessionOf(fw), (w) => compactSession(w)?.session ?? sessionOf(w));
   const year = pick("year", own?.year ?? yearOf(fw), (w) => compactSession(w)?.year ?? yearOf(w));

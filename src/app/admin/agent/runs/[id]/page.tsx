@@ -256,9 +256,14 @@ export default async function RunPage({
         </section>
       ) : null}
 
-      {arr(rep.driveFolders).length > 0 ? (
+      {arr(rep.driveFolders).length > 0 || Number(rep.driveSkipped) > 0 ? (
         <section className="card stack">
           <h2 className="subtitle">Google Drive folders read</h2>
+          {Number(rep.driveSkipped) > 0 ? (
+            <p className="muted">
+              {Number(rep.driveSkipped)} folder{Number(rep.driveSkipped) === 1 ? " was" : "s were"} skipped because {Number(rep.driveSkipped) === 1 ? "it is" : "they are"} for other subjects.
+            </p>
+          ) : null}
           <ul className="list">
             {arr(rep.driveFolders).map((f) => (
               <li className="list-row" key={f.folderId}>

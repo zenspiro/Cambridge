@@ -41,6 +41,8 @@ export type RunReport = {
     folderId: string; name: string; looksLike: string; folders: number; pdfs: number; recognised: number;
     forThisSyllabus: number; otherSubjects: Record<string, number>; years: [number, number] | null; truncated: boolean; error?: string;
   }[];
+  /** Drive folders not read because their names are for other subjects. */
+  driveSkipped?: number;
   stored?: string[];
   skippedHave?: number;
   skippedNotRequested?: number;
