@@ -13,7 +13,17 @@ const PASS = vars.match(/^ADMIN_PASS=(.*)$/m)?.[1]?.trim();
 const SECRET = vars.match(/^AGENT_SECRET=(.*)$/m)?.[1]?.trim();
 let failures = 0;
 const check = (ok, label) => { console.log(`${ok ? "ok  " : "FAIL"} ${label}`); if (!ok) failures++; };
-const sql = (q) => execFileSync("npx", ["wrangler", "d1", "execute", "cambridge", "--local", "--json", "--command", q], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+// The local D1 tool can fail now and then while the dev server is using the same file; retry.
+const sql = (q) => {
+  for (let i = 0; ; i++) {
+    try {
+      return execFileSync("npx", ["wrangler", "d1", "execute", "cambridge", "--local", "--json", "--command", q], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    } catch (e) {
+      if (i >= 2) throw e;
+      execFileSync("sleep", ["1"]);
+    }
+  }
+};
 const rows = (q) => JSON.parse(sql(q))[0].results;
 const id = () => `e2e${Date.now()}${Math.floor(Math.random() * 1e6)}`;
 
@@ -82,9 +92,11 @@ try {
   check(fake.hits.every((h) => h.ua?.startsWith("ExamPrepLibraryAgent/1.0")), "agent names itself honestly");
   check(fake.hits[0]?.path === "/robots.txt", "robots.txt is read first");
   await page.goto(`${BASE}/admin/agent/runs/${dry}`);
-  const would = await page.locator("details", { hasText: "Would fetch" }).locator("li").allTextContents();
+  const would = await page.locator("details", { hasText: "Would download" }).locator("li .mono").allTextContents();
   const want = ["0625_s24_qp_11.pdf", "0625_s24_ms_11.pdf", "0625_s24_er.pdf", "0625_y23_sp_1.pdf", "0625_s24_qp_21.pdf", "0625_s24_ms_21.pdf"];
   check(want.every((w) => would.includes(w)) && would.length === want.length, `dry run lists the right ${want.length} files`);
+  check((await page.locator("details", { hasText: "Would download" }).locator("li").first().textContent())?.includes("June 2024, Paper 1 Multiple Choice (Core)"), "dry run list is described in words");
+  check((await page.locator("section", { hasText: "What a download would add" }).locator("a", { hasText: "June 2024" }).count()) === 1, "dry run says what a download would add");
   check((await page.locator("details", { hasText: "Blocked by robots.txt" }).locator("li").allTextContents()).some((t) => t.includes("/blocked/")), "robots.txt block is reported");
   check((await page.locator("details", { hasText: "Links not recognised" }).locator("li").allTextContents()).some((t) => t.includes("teacher-guide")), "unknown links are reported");
   check((await page.locator("text=Download these 6 files").count()) === 1, "dry run offers to download");
@@ -101,9 +113,18 @@ try {
   check(stored.map((s) => s.file_name).join(",") === "0625_s24_er.pdf,0625_s24_ms_11.pdf,0625_s24_qp_11.pdf,0625_y23_sp_1.pdf", "four real PDFs stored");
   check(stored.every((s) => s.origin === "agent" && s.source_site_id === "local-test"), "stored as agent files with their source");
   await page.goto(`${BASE}/admin/agent/runs/${dl}`);
+  const activity = await page.locator("section", { hasText: "Activity" }).locator("li").allTextContents();
+  check(activity.some((t) => t.includes("Stored: June 2024, Paper 1 Multiple Choice (Core), variant 1, question paper")), "file lines are described with paper names");
+  check(activity.some((t) => t.includes("Not stored: June 2024, Paper 2 Multiple Choice (Extended), variant 1, question paper") && t.includes("Not a PDF")), "failed file lines say why in words");
+  check(activity.some((t) => t.startsWith("Done: 4 stored (June 2024:")), "the run ends with a summary");
+  const after = page.locator("section", { hasText: "Library after this run" });
+  check((await after.locator("a", { hasText: "June 2024" }).count()) === 1, "summary links to the session it changed");
+  check((await after.locator(".pill").count()) >= 1, "summary shows each session's status");
+  await page.getByText(/^Stored \(\d+\)$/).click();
+  check((await page.locator("h3", { hasText: "June 2024: 1 question paper, 1 mark scheme, examiner report" }).count()) === 1, "stored list is grouped by session");
   const notStored = await page.locator("details", { hasText: "Not stored" }).locator("li").allTextContents();
   check(notStored.some((t) => t.includes("0625_s24_qp_21.pdf") && t.includes("Not a PDF")), "fake PDF is refused");
-  check(notStored.some((t) => t.includes("0625_s24_ms_21.pdf") && t.includes("http_404")), "missing file is reported");
+  check(notStored.some((t) => t.includes("0625_s24_ms_21.pdf") && t.includes("the website answered 404")), "missing file is reported in words");
   await page.goto(BASE + "/admin/library/0625?year=2024&session=s");
   check((await page.locator('a.cell-have[title^="0625_s24_qp_11.pdf:"]').count()) === 1, "library ticks agent files");
 
@@ -127,7 +148,9 @@ try {
   await page.goto(`${BASE}/admin/agent/runs/${live}`);
   check((await page.locator("meta[http-equiv=refresh]").count()) === 0, "refresh stops when the run is done");
   const liveEvents = await page.locator("section", { hasText: "Activity" }).locator("li").allTextContents();
-  check(liveEvents.some((t) => t.includes("Found 2 file(s)")), "activity log says what was found");
+  check(liveEvents.some((t) => t.includes("Found 2 files to list")), "activity log says what was found");
+  check(liveEvents.some((t) => t.includes('Read "Physics 0625 past papers (test site)"')), "activity names the page by its title");
+  check(liveEvents.some((t) => t.includes("robots.txt (the site's rules for automated visitors)")), "activity explains robots.txt");
 
   // 6. Cancel a run while the agent is working.
   const stop = newRun("download");

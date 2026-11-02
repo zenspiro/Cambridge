@@ -7,6 +7,8 @@ import { extractPdfLinks, toCambridgeName } from "../../src/lib/agent/links.ts";
 import { parseRobots } from "../../src/lib/agent/robots.ts";
 import { parseCambridgeName } from "../../src/lib/library/names.ts";
 import { REASON_LABELS } from "../../src/lib/library/labels.ts";
+import { pageTitle, summariseFiles } from "../../src/lib/library/summary.ts";
+import { SESSION_LABELS } from "../../src/lib/config.ts";
 
 type Job = {
   params: { code: string; years: number[]; sessions: string[]; mode: "dry" | "download" };
@@ -116,8 +118,10 @@ class Cancelled extends Error {}
  * Live update for the run page. A 409 means the admin cancelled the run (or it was
  * closed): stop at once. Other failures only skip this update; the run goes on.
  */
-async function progress(pct: number, step: string, event?: string) {
-  log(event ?? step);
+type Event = string | { text: string; file?: string; outcome?: "stored" | "failed" | "found"; reason?: string; bytes?: number };
+
+async function progress(pct: number, step: string, event?: Event) {
+  log(typeof event === "string" ? event : event?.text ?? step);
   try {
     const r = await api("/api/agent/progress", enc.encode(JSON.stringify({ jobId: JOB_ID, progress: pct, step, event, runUrl: RUN_URL })));
     if (r.status === 409) throw new Cancelled("the run was cancelled or closed in the admin panel");
@@ -163,7 +167,10 @@ async function main() {
   const totalPages = job.sources.reduce((n, s) => n + s.pages.length, 0);
   const findShare = job.params.mode === "dry" ? 95 : 20; // share of the bar for reading pages
   let pagesDone = 0;
-  await progress(1, "Starting", `Started: ${job.params.mode === "dry" ? "dry run" : "download"}, ${job.sources.length} source(s), ${totalPages} start page(s)`);
+  const sessionWords = job.params.sessions.map((s) => SESSION_LABELS[s] ?? s).join(", ");
+  await progress(1, "Starting",
+    `Started a ${job.params.mode === "dry" ? "dry run (nothing is downloaded)" : "download of missing files"} for ${job.params.years.join(", ")}, ${sessionWords}. ` +
+    `${job.sources.length} source${job.sources.length === 1 ? "" : "s"} with ${totalPages} start page${totalPages === 1 ? "" : "s"}; ${have.size} files already in the library.`);
 
   const allowedBySite = new Map<string, (path: string) => boolean>();
   for (const site of job.sources) {
@@ -184,7 +191,9 @@ async function main() {
       report.pageErrors.push({ url: `${base.origin}/robots.txt`, status: "unreachable" });
     }
     const robotsOk = report.pageErrors.every((e) => !e.url.startsWith(`${base.origin}/robots.txt`));
-    await progress(3, `Reading ${site.name}`, robotsOk ? `${site.name}: robots.txt read` : `${site.name}: robots.txt could not be read, so this source is skipped`);
+    await progress(3, `Reading ${site.name}`, robotsOk
+      ? `${site.name}: read its robots.txt (the site's rules for automated visitors) and will follow it`
+      : `${site.name}: its robots.txt could not be read, so this source is skipped to be safe`);
     allowedBySite.set(site.siteId, allowed);
 
     for (const page of site.pages) {
@@ -193,7 +202,7 @@ async function main() {
       await progress(pct, `Reading start page ${pagesDone} of ${totalPages}`);
       if (!allowed(new URL(page).pathname)) {
         report.robotsBlocked.push(page);
-        await progress(pct, `Reading start page ${pagesDone} of ${totalPages}`, `Page ${pagesDone}: blocked by robots.txt, skipped`);
+        await progress(pct, `Reading start page ${pagesDone} of ${totalPages}`, `Start page ${pagesDone} skipped: the site's robots.txt does not allow it (${page})`);
         continue;
       }
       let html = "";
@@ -201,20 +210,24 @@ async function main() {
         const r = await politeFetch(page, MAX_PAGE_BYTES);
         if (r.status !== 200) {
           report.pageErrors.push({ url: page, status: String(r.status) });
-          await progress(pct, `Reading start page ${pagesDone} of ${totalPages}`, `Page ${pagesDone}: failed (${r.status})`);
+          await progress(pct, `Reading start page ${pagesDone} of ${totalPages}`, `Start page ${pagesDone} could not be read: the website answered ${r.status} (${page})`);
           continue;
         }
         html = new TextDecoder().decode(r.bytes);
       } catch (e) {
         if (e instanceof Cancelled) throw e;
         report.pageErrors.push({ url: page, status: "unreachable" });
-        await progress(pct, `Reading start page ${pagesDone} of ${totalPages}`, `Page ${pagesDone}: could not be reached`);
+        await progress(pct, `Reading start page ${pagesDone} of ${totalPages}`, `Start page ${pagesDone} could not be reached (${page})`);
         continue;
       }
       report.pagesVisited++;
       const links = extractPdfLinks(html, page, site.baseUrl);
       report.linksFound += links.length;
       const before = report.candidates.length;
+      const haveBefore = report.skippedHave;
+      const outsideBefore = report.skippedNotRequested;
+      const unmatchedBefore = report.unmatched.length;
+      const title = pageTitle(html) ?? page;
       for (const link of links) {
         if (seen.has(link)) continue;
         seen.add(link);
@@ -238,12 +251,20 @@ async function main() {
         }
         report.candidates.push({ name, url: link, siteId: site.siteId });
       }
-      await progress(pct, `Reading start page ${pagesDone} of ${totalPages}`,
-        `Page ${pagesDone}: ${links.length} PDF links, ${report.candidates.length - before} new for this run`);
+      const fresh = report.candidates.slice(before).map((c) => c.name);
+      const parts = [
+        fresh.length ? `${fresh.length} new: ${summariseFiles(fresh)}` : "nothing new for this run",
+        report.skippedHave - haveBefore ? `${report.skippedHave - haveBefore} already in the library` : "",
+        report.skippedNotRequested - outsideBefore ? `${report.skippedNotRequested - outsideBefore} for years or sessions not in this run` : "",
+        report.unmatched.length - unmatchedBefore ? `${report.unmatched.length - unmatchedBefore} not recognised` : "",
+      ].filter(Boolean);
+      await progress(pct, `Reading start page ${pagesDone} of ${totalPages}`, `Read "${title}": ${links.length} PDF links. ${parts.join("; ")}.`);
     }
   }
-  await progress(findShare, "Pages read",
-    `Found ${report.candidates.length} file(s) to ${job.params.mode === "dry" ? "list" : "fetch"}, ${report.skippedHave} already stored, ${report.unmatched.length} link(s) not recognised`);
+  const found = report.candidates.map((c) => c.name);
+  await progress(findShare, "Pages read", found.length
+    ? `Found ${found.length} file${found.length === 1 ? "" : "s"} to ${job.params.mode === "dry" ? "list (not downloaded in a dry run)" : "download"}: ${summariseFiles(found, 6)}.`
+    : `Nothing new to ${job.params.mode === "dry" ? "list" : "download"}: every matching file is already in the library (${report.skippedHave}).`);
 
   if (job.params.mode === "download") {
     const todo = report.candidates.slice(0, job.limits.maxFiles);
@@ -254,11 +275,13 @@ async function main() {
       const step = `Downloading file ${n} of ${todo.length}`;
       await progress(pct, step);
       const failedBefore = report.failed.length;
+      let lastBytes = 0;
       try {
         const r = await politeFetch(c.url, job.limits.maxFileBytes);
         if (r.status !== 200) {
           report.failed.push({ name: c.name, reason: `http_${r.status}` });
         } else {
+          lastBytes = r.bytes.length;
           const res = await api("/api/agent/file", r.bytes, {
             "x-agent-job": JOB_ID, "x-agent-file": c.name, "x-agent-site": c.siteId, "x-agent-url": c.url,
           }, "application/pdf");
@@ -275,9 +298,14 @@ async function main() {
       const why = failed
         ? (REASON_LABELS as Record<string, string>)[failed.reason] ?? (failed.reason.startsWith("http_") ? `the website answered ${failed.reason.slice(5)}` : failed.reason)
         : "";
-      await progress(pct, step, failed ? `${n} of ${todo.length}: ${c.name} not stored (${why})` : `${n} of ${todo.length}: ${c.name} stored`);
+      const bytes = lastBytes;
+      await progress(pct, step, failed
+        ? { text: `${n} of ${todo.length}: ${c.name} not stored (${why})`, file: c.name, outcome: "failed", reason: failed.reason }
+        : { text: `${n} of ${todo.length}: ${c.name} stored`, file: c.name, outcome: "stored", bytes });
     }
-    await progress(99, "Finishing", `Stored ${report.stored.length}, not stored ${report.failed.length}`);
+    await progress(99, "Finishing", report.stored.length
+      ? `Done: ${report.stored.length} stored (${summariseFiles(report.stored, 6)})${report.failed.length ? `; ${report.failed.length} not stored, see the list below` : ""}.`
+      : `Done: nothing was stored${report.failed.length ? `; ${report.failed.length} not stored, see the list below` : ""}.`);
   }
 }
 

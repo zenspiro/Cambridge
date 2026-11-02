@@ -1,5 +1,5 @@
 import { agentRequest, json, JOB_ID_RE, parseJson } from "@/lib/agent/api";
-import { cleanEventText, cleanRunUrl, recordProgress } from "@/lib/agent/runs";
+import { cleanEvent, cleanEventText, cleanRunUrl, recordProgress } from "@/lib/agent/runs";
 
 // The agent's live updates for the run page. Signed only.
 // 409 means the run is no longer active (cancelled or closed): the agent stops.
@@ -13,7 +13,7 @@ export async function POST(request: Request) {
   const ok = await recordProgress(a.db, jobId, {
     progress,
     step: cleanEventText(b?.step, 120),
-    event: cleanEventText(b?.event),
+    event: cleanEvent(b?.event),
     runUrl: cleanRunUrl(b?.runUrl, a.env.GITHUB_REPO),
   });
   return ok ? json({ ok: true }) : json({ error: "no_run" }, 409);

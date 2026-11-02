@@ -79,3 +79,13 @@ export function describeFile(fileName: string, versionId: string | null, lookup:
   const paper = paperTitle(f.paper, lookup(versionId, f.paper));
   return `${when}, ${paper}${f.variant ? `, variant ${f.variant}` : ""}, ${type}`;
 }
+
+/** The syllabus version a file belongs to: by its year (specimens: the version's start year). */
+export function versionForFile(versions: { id: string; valid_from_year: number; valid_to_year: number }[], fileName: string): string | null {
+  const f = parseCambridgeName(fileName);
+  if (!f) return null;
+  const v = f.session === "y"
+    ? versions.find((x) => x.valid_from_year === f.year)
+    : versions.find((x) => x.valid_from_year <= f.year && x.valid_to_year >= f.year);
+  return v?.id ?? null;
+}

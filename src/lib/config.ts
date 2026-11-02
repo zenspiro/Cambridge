@@ -60,8 +60,8 @@ export const AGENT = {
   slowStartMs: 5 * 60_000,
   /** The run page reloads itself this often while a run is active. */
   refreshSeconds: 10,
-  /** Events kept per run for the live log. */
-  maxEvents: 30,
+  /** Events kept per run for the activity log (one per file plus a few, for a full run). */
+  maxEvents: 120,
   /** Agent runs an admin may start per hour. */
   runsPerHour: 10,
   /** Largest run report stored (bytes of JSON). */

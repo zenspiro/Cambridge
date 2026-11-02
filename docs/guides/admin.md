@@ -45,8 +45,9 @@ Each source lists the pages the agent reads (under "Start pages" on the Sources 
 1. Agent page: tick the years and sessions to look for. "Specimen" means specimen papers and syllabus documents.
 2. Keep **Dry run** the first time. Press Run agent.
 3. The run page follows the run by itself (it reloads every 10 seconds): a progress bar, the current step, time so far, and a line for every page read and file stored or skipped. "GitHub log" opens the agent's own log. A run waits 5 seconds between requests, so allow a few minutes.
-4. When it finishes, check "Would fetch". If it looks right, press **Download these files**.
-5. Files already in the library are never fetched again. "Links not recognised" lists PDFs whose names the agent could not read; upload those by hand if you need them.
+4. When it finishes, read "What a download would add": each session it found files for, and how many are essential. "Would download" lists every file in words. If it looks right, press **Download these files**.
+5. After a download, "Library after this run" shows each session that changed, its new status, and a link to it. The activity log says, file by file, what was stored or why not.
+6. Files already in the library are never fetched again. "Links not recognised" lists PDFs whose names the agent could not read; upload those by hand if you need them.
 
 Only one run can go at a time. To stop one, press **Cancel run**, then **Yes, cancel**. If GitHub has not started a run after 5 minutes, the page warns you; a run that stays silent for 15 minutes closes itself and says why. The usual cause of a run that never starts: `AGENT_SECRET` missing from GitHub's **Actions** secrets (not the "Agents" section). First-time setup: `agent-setup.md`.
 

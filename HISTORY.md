@@ -2,6 +2,21 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-02: Agent activity in plain words
+
+**What**
+- Activity lines describe what happened instead of file names: "Stored: June 2024, Paper 1 Multiple Choice (Core), variant 1, question paper (1.2 MB)", "Not stored: ... Not a PDF", "Read \"Cambridge IGCSE Physics (0625)\": 27 PDF links. 14 new: June 2024: 6 question papers, 6 mark schemes, ...", a start line saying what the run will do, a robots.txt line that explains it, and a closing summary.
+- Run page: "Library after this run" (or "What a download would add" for a dry run) with each session touched, what was added, how many are essential vs extras, its status and a link; file lists grouped by session and described in words; short explanations on "Links not recognised" and "Blocked by robots.txt".
+- Events are structured (file, outcome, reason, size), checked on the way in; up to 120 kept per run (was 30).
+
+**Why**
+- Owner: the activity showed only file names, which told the admin nothing.
+
+**Tested**
+- 71 unit tests pass (4 new: session summaries, page titles, event checking, reasons and version lookup).
+- 181 browser checks, run twice. New in the agent suite: page named by its title, robots.txt explained, files described with paper names, failures with reasons in words, closing summary, "Library after this run" links and statuses, lists grouped by session, dry run described and "What a download would add".
+- The agent test's local database helper now retries: Wrangler's local tool failed once with "internal error" while the dev server was using the same file.
+
 ## 2026-11-01: Papers, routes, variant 2, and the subject overview
 
 **What**
