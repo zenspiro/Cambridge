@@ -4,10 +4,11 @@ import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/auth/guard";
 import { getEnv } from "@/lib/env";
 import { AdminShell, Notice } from "@/components/AdminShell";
-import { DOC_TYPE_LABELS, LIBRARY, SESSION_LABELS } from "@/lib/config";
+import { LIBRARY } from "@/lib/config";
 import { parseCambridgeName } from "@/lib/library/names";
 import { LIST_SITES } from "@/lib/library/queries";
 import { REASON_LABELS } from "@/lib/library/labels";
+import { describeFile, loadPapers, paperLookup } from "@/lib/library/papers";
 
 export const metadata: Metadata = { title: "Add a file" };
 
@@ -28,15 +29,13 @@ export default async function AddPage({ searchParams }: { searchParams: Promise<
   const p = parseCambridgeName(q.file ?? "");
   if (!p) redirect("/admin/library");
   const env = await getEnv();
-  const [existing, { results: sites }] = await Promise.all([
+  const [existing, { results: sites }, { papers }, version] = await Promise.all([
     env.DB.prepare(`SELECT id FROM source_document WHERE file_name = ?1 AND status = 'stored'`).bind(p.fileName).first<{ id: string }>(),
     env.DB.prepare(LIST_SITES).all<{ id: string; name: string; base_url: string; enabled: number }>(),
+    loadPapers(env.DB, p.code),
+    env.DB.prepare(`SELECT id FROM syllabus WHERE code = ?1 AND valid_from_year <= ?2 AND valid_to_year >= ?2`).bind(p.code, p.year).first<{ id: string }>(),
   ]);
-  const what = [
-    p.session === "y" ? `Syllabus ${p.year} version` : `${SESSION_LABELS[p.session]} ${p.year}`,
-    DOC_TYPE_LABELS[p.docType],
-    p.paper ? `paper ${p.paper}${p.variant ? `, variant ${p.variant}` : ""}` : "",
-  ].filter(Boolean).join(", ");
+  const what = describeFile(p.fileName, version?.id ?? null, paperLookup(papers));
   const back = `/admin/library/${p.code}`;
 
   return (

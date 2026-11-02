@@ -35,3 +35,13 @@ test("the rebuild exception keeps every column and copies every row", () => {
   for (const c of cols) assert.ok(new RegExp(`\\b${c}\\b`).test(copy), `copy misses ${c}`);
   assert.ok(sql.indexOf("INSERT INTO source_document_new") < sql.indexOf("DROP TABLE source_document;"), "copy before drop");
 });
+
+test("no long UNION chains: D1 refuses them (too many terms in compound SELECT)", () => {
+  for (const f of files) {
+    const sql = readFileSync(new URL(f, dir), "utf8").replace(/--.*$/gm, "");
+    for (const stmt of sql.split(";")) {
+      const unions = (stmt.match(/\bUNION\b/gi) ?? []).length;
+      assert.ok(unions <= 3, `${f}: ${unions} UNIONs in one statement; use WITH ... AS (VALUES ...) instead`);
+    }
+  }
+});

@@ -9,7 +9,9 @@ A plain list of what the platform does today, for non-developers.
 - Admin sign-in with a password, at `/admin/login`. After 5 wrong tries from one network, sign-in pauses for 15 minutes.
 - Admin home showing recent activity.
 - Library (admin only): Cambridge files organised by qualification (IGCSE, O Level, AS & A Level) and subject. Each subject has a status bar: green when every essential file is in.
-- Inside a subject: the syllabus documents, specimens and every exam session laid out as a checklist. A green tick downloads the file; a red cross means an essential file is missing; grey + is an optional extra (other variants). Filters and a search box narrow it down.
+- Inside a subject: an overview with the status, the sessions missing most, a grid of every year and session (colour shows how complete each one is), the syllabus versions, and the papers (for example Paper 2: Multiple Choice, Extended) with the Core and Extended routes. Search and filters give a short list described in plain words.
+- One page per exam session: every paper with its name and Core or Extended tag; a green tick downloads, a red cross is a missing essential file, a grey + is an optional extra (other variants).
+- Variant 2 counts as essential, because that is what Pakistan sits. Each subject can change this.
 - Add any missing file from its cell: upload it (any file name) or paste a link from an approved website.
 - Upload: add up to 20 Cambridge PDFs at once; wrong names, non-PDFs and duplicates are skipped with a reason.
 - Approved sources: the list of websites the download agent may visit, which the admin can add to, switch off or remove, with the start pages the agent reads on each.

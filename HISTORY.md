@@ -2,6 +2,24 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-01: Papers, routes, variant 2, and the subject overview
+
+**What**
+- Subject page is now an overview: status with the most-missing sessions, search and filters that give a short described list, a year by session grid of coloured tiles (one row per year), syllabus version tiles, the papers table and the Core and Extended routes, and the subject's essential variants.
+- New pages: one per exam session (whole-session files, the essential variant table with paper names and Core / Extended tags, other variants folded, older and newer links) and one per syllabus version (syllabus documents and specimens).
+- Papers and routes per syllabus version (migration 0007): 0625 papers 1 to 6 with format, tier, time, marks and weighting; Core and Extended routes with grade ranges. Checked against Cambridge's syllabus PDFs for 2023 to 2025 and 2026 to 2028.
+- Variant 2 is essential (per syllabus, with a library-wide default).
+- Files are described in plain words on results, the add page and the catalog API.
+
+**Why**
+- Owner: the subject page was too long to read and will grow every year; paper codes (1 MCQ Core, 2 MCQ Extended and so on) matter for the admin and the AI engine; Pakistan sits variant 2.
+
+**Tested**
+- 67 unit tests pass (3 new: papers and routes seed, plain-word descriptions, per-syllabus variants; plus a guard against long UNION chains).
+- 171 browser checks, run twice: overview grid and rows per year, papers and routes, short overview, session page (breadcrumb, variant 2, paper names, tier tags, pager, unknown session is 404), version page, described search results, download, filters, per-syllabus variants (none refused, saved), add page wording, signed-out and cross-site attempts on the new pages and POST.
+- Fixed during testing: the 0007 seed used a six-part UNION ALL, which D1 refuses (unit tests on Node's SQLite passed; the local D1 migration caught it, and CI would have too); long paper names spilled into the next column on phones; uneven grid columns.
+- Note: the 14 June 2024 files downloaded earlier are variant 1, so they now count as extras.
+
 ## 2026-11-01: Library hierarchy, checklist, search and add-a-file
 
 **What**

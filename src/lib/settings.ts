@@ -12,8 +12,8 @@ export type LibrarySettings = {
   essentialVariants: EssentialVariants;
 };
 
-/** Owner decision: variant 1 is essential (March only has variant 2). */
-export const ESSENTIAL_DEFAULTS: EssentialVariants = { m: [2], s: [1], w: [1] };
+/** Owner decision (1 Nov 2026): Pakistan sits variant 2. Syllabuses can override this. */
+export const ESSENTIAL_DEFAULTS: EssentialVariants = { m: [2], s: [2], w: [2] };
 
 /** Used only if the row is missing or damaged, so pages never break. */
 export const LIBRARY_DEFAULTS: LibrarySettings = {
@@ -23,7 +23,7 @@ export const LIBRARY_DEFAULTS: LibrarySettings = {
   essentialVariants: ESSENTIAL_DEFAULTS,
 };
 
-function checkVariants(v: unknown): EssentialVariants | null {
+export function checkVariants(v: unknown): EssentialVariants | null {
   if (v === undefined) return ESSENTIAL_DEFAULTS;
   if (!v || typeof v !== "object") return null;
   const out: Partial<EssentialVariants> = {};

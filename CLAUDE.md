@@ -13,7 +13,10 @@ Current state, kept short. The full brief (product, copyright rules, standards) 
 - Step 0 (repo, CI, Cloudflare, docs) live.
 - Admin sign-in (Step 1-lite) live: one platform admin, password only (owner decision).
 - Build 3a (source library), 3b (agent, settings) and live run feedback are live; owner's secrets set. First real runs stored June 2024 (14 files) and the 2023 specimens.
-- Library hierarchy and checklist built (next merge): one Library screen, no separate checklist page (owner decision).
+- Library hierarchy and checklist live. Papers, routes, variant 2 and the subject overview built (next merge).
+- Owner's queue (1 Nov 2026), in order: 1 papers and overview (built), 2 plain-word agent activity, 3 guided upload page, 4 organised sources page (grouping, search, duplicate flags), 5 Step 2 with "Find on Cambridge".
+- Pakistan sits variant 2 (owner confirmed): essential variants are variant 2 for 0625. Cambridge's public site only has variant 1, so variant 2 files come by upload or another approved source.
+- UK GCSE (AQA, Edexcel, OCR) is wanted later: a separate qualification family and exam boards, its own sources and copyright review. Not started.
 - First production run failed because `AGENT_SECRET` sat under GitHub's "Agents" secrets (Copilot), not "Actions"; owner moved it.
 - Subject: Physics 0625 (owner decision). Library years 2022 to 2026 (owner decision), now a database setting.
 - Cambridge's public 0625 pages (checked 1 Nov 2026) carry only June 2024 variant 1, the 2023 specimens and the syllabus PDFs: about 30 files. Everything else in 2022 to 2026 needs manual upload or another approved source (owner's legal call).
@@ -45,7 +48,7 @@ Current state, kept short. The full brief (product, copyright rules, standards) 
 - Local password: `.dev.vars` (copy `.dev.vars.example`).
 
 ## Source library (build 3a)
-- Pages: `/admin/library` (qualifications with subject cards and status, search across all), `/admin/library/[code]` (one syllabus: status, filters, search, checklist), `/admin/library/add?file=` (add one missing file by upload or approved link), `/admin/library/upload` (bulk), `/admin/sources`, `/admin/settings`. Frame and nav: `src/components/AdminShell.tsx`. Admin form POSTs go through `adminPost()` (`src/lib/adminPost.ts`).
+- Pages: `/admin/library` (qualifications with subject cards and status, search across all), `/admin/library/[code]` (overview: status, most-missing sessions, search and filters as a flat described list, year by session grid of tiles, version tiles, papers and routes, essential variants form), `/admin/library/[code]/[year]/[march|june|november]` (one session: whole-session files, essential variant table, other variants folded, older and newer links), `/admin/library/[code]/version/[from]` (syllabus documents and specimens), `/admin/library/add?file=` (add one missing file by upload or approved link), `/admin/library/upload` (bulk), `/admin/sources`, `/admin/settings`. Frame and nav: `src/components/AdminShell.tsx`. Admin form POSTs go through `adminPost()` (`src/lib/adminPost.ts`).
 - Files live in R2 `SOURCE` at `code/year/session/file_name`; rows in `source_document`. Only `src/app/admin/` and the agent's store endpoint may touch `env.SOURCE` (unit test). Downloads are attachments, `no-store`, audited (`source.download`).
 - One store path for uploads and the agent: `storeDocument()` in `src/lib/library/store.ts`. It checks the Cambridge name (`names.ts`), year range, size, PDF header and syllabus version, then reserves the row as `pending` (unique name and SHA-256, so races and duplicates are caught), writes R2, marks `stored`, audits.
 - File types: qp, ms, in, ci, er, gt per exam session; sp, sm, in, ci, sy for specimens (session `y`). Brief listed qp, ms, er, gt, sp; the rest are real Cambridge types.
@@ -61,6 +64,9 @@ Current state, kept short. The full brief (product, copyright rules, standards) 
 - `loadCatalog()` / `loadSyllabus()` (`src/lib/library/catalog.ts`) read the tree; the admin library and the signed `/api/agent/catalog` (for the AI engine, metadata only) both use them.
 - Search: every word must match; numbers match whole words (so "4" is paper 4), other words match word starts, file names match inside. Filters: year, session, type, paper, status (missing essentials, stored, extras).
 - Cells: green tick downloads; red cross (essential) or grey + (extra) opens the add page. Adding by upload renames to the checklist name; by link only from an enabled source (robots.txt, same-site redirects, size cap; `fetchApprovedPdf`). Origin `link`.
+- Papers: `syllabus_paper` (number, name, format mcq / structured / practical / written, tier core / extended / all, time, marks, weighting) and `syllabus_route` (Core 1 + 3 + (5 or 6), grades C to G; Extended 2 + 4 + (5 or 6), A* to G) per version, migration 0007, checked against Cambridge's 2023 to 2025 and 2026 to 2028 syllabi; 2020 to 2022 rows say not checked. `src/lib/library/papers.ts`: `loadPapers`, `describeFile` ("June 2024, Paper 2 Multiple Choice (Extended), variant 2, mark scheme"), `routeText`. The catalog API carries papers and routes.
+- Essential variants: `syllabus.essential_variants` (per code, set on the overview) wins; else the library default in Settings. Both are variant 2 now.
+- D1 refuses long `UNION ALL` chains in one statement ("too many terms in compound SELECT"); seed with `WITH x (...) AS (VALUES ...)`. A migration test enforces it.
 - New types `su` (syllabus update) and `gd` (grade descriptions): `0625_y23_su.pdf`. Migration 0006 rebuilt `source_document` for them, a one-time owner-approved exception to additive only (allowed by name in `tests/unit/migrations.test.ts`).
 
 ## Acquisition agent (build 3b)
@@ -76,7 +82,7 @@ Current state, kept short. The full brief (product, copyright rules, standards) 
 ## Database
 - Migrations in `migrations/NNNN_name.sql`, additive only (a unit test blocks DROP, RENAME, DELETE). One named exception: 0006.
 - Conventions: TEXT random ids, INTEGER milliseconds for times, JSON as TEXT with `json_valid`, real foreign keys with `ON DELETE CASCADE` toward the owning user, so deletion and export find every row.
-- Tables: `job`, `admin_session`, `login_attempt` (all rate limits), `audit_log`, `subject`, `syllabus`, `source_site`, `source_document`, `setting`, `source_page`, `request_nonce`, `qualification`. `job` also has `heartbeat_at`, `step`, `events`, `run_url` (0005).
+- Tables: `job`, `admin_session`, `login_attempt` (all rate limits), `audit_log`, `subject`, `syllabus`, `source_site`, `source_document`, `setting`, `source_page`, `request_nonce`, `qualification`, `syllabus_paper`, `syllabus_route`. `job` also has `heartbeat_at`, `step`, `events`, `run_url` (0005).
 - Shared types `Db` and `Bucket`: `src/lib/db.ts`. Logic takes them as parameters so unit tests run it on SQLite and an in-memory bucket.
 
 ## Commands
