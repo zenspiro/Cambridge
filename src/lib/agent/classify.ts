@@ -15,7 +15,7 @@ export type Classified = {
 export type FolderReading = { code: string | null; subject: string | null; year: number | null; session: "m" | "s" | "w" | "y" | null };
 
 const words = (s: string) =>
-  ` ${s.toLowerCase().replace(/\.pdf$/i, "").replace(/[_\-–—.,()[\]{}+/\\]+/g, " ").replace(/\s+/g, " ").trim()} `;
+  ` ${s.toLowerCase().replace(/\.pdf$/i, "").replace(/[_\-\u2013\u2014.,()[\]{}+/\\]+/g, " ").replace(/\s+/g, " ").trim()} `;
 
 const SESSION_WORDS: [RegExp, "m" | "s" | "w" | "y"][] = [
   [/ (feb(ruary)? (and )?mar(ch)?|march|fm|feb mar) /, "m"],
