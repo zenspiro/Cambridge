@@ -92,8 +92,8 @@ test("hierarchy: qualifications hold subjects, subjects hold syllabuses", async 
   const b = testBucket();
   await storeDocument(db, b, { fileName: "0625_y23_su.pdf", bytes: pdf("su"), actorId: "a", origin: "link" });
   const { qualifications } = await loadCatalog(db);
-  assert.deepEqual(qualifications.map((q) => [q.shortName, q.subjects.length]), [["IGCSE", 1], ["O Level", 0], ["AS & A Level", 0]]);
-  const y = qualifications[0]!.subjects[0]!.syllabuses[0]!;
+  assert.deepEqual(qualifications.map((q) => [q.shortName, q.subjects.length]), [["IGCSE", 16], ["O Level", 0], ["AS & A Level", 0]]);
+  const y = qualifications[0]!.subjects.find((s) => s.name === "Physics")!.syllabuses[0]!;
   assert.equal(y.code, "0625");
   assert.equal(y.checklist.versions.find((g) => g.version.id === "0625-2023")!.docs[1]!.doc?.origin, "link");
   assert.equal(await loadSyllabus(db, "9999"), null);

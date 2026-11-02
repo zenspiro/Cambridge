@@ -7,6 +7,8 @@ export type ExpectedRules = {
   variants: Partial<Record<"m" | "s" | "w", number[]>>;
   perPaper: DocType[];
   ciPapers?: number[];
+  /** Papers that come with an insert (source booklet, case study, map), essential like the paper. */
+  inPapers?: number[];
   perSession?: DocType[];
   /** Per syllabus version: essential documents (syllabus) and extras (updates, grade descriptions). */
   versionDocs?: DocType[];
@@ -41,6 +43,7 @@ export function expectedFiles(code: string, rules: ExpectedRules, year: number, 
     for (const p of rules.papers) {
       for (const t of rules.perPaper) out.push(examName(code, session, year, t, p, v));
       if (rules.ciPapers?.includes(p)) out.push(examName(code, session, year, "ci", p, v));
+      if (rules.inPapers?.includes(p)) out.push(examName(code, session, year, "in", p, v));
     }
   }
   if ((rules.variants[session] ?? []).length > 0) {

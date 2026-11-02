@@ -2,6 +2,16 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-02: Step 2, all 16 IGCSE subjects in the library
+
+**What:** migration 0011 adds the 15 other subjects of the Revisiontown collection (Mathematics, Biology, Chemistry, ICT, Computer Science, Geography, Business Studies, Accounting, Economics, French, Literature in English, English First Language, History, Global Perspectives, Enterprise), each with its syllabus versions for 2022 to 2026, papers, routes, variant 2 as essential and Cambridge's two public pages as start pages. Coursework and speaking components show as "Marked by the school" and are never asked for. Inserts are asked for where the paper comes with one (Geography, Business Paper 2, English, Global Perspectives, Enterprise). The Run page has a subject picker (each subject's library page links to it), the run page names its subject, the Sources page names each start page's subject and lets you pick one when adding, and Home counts files across all subjects. The Physics-only lock is gone.
+
+**Why:** owner decision (option A): the agent read about 10,000 files across 13 subjects but could save only Physics, because the library knew no other subject.
+
+**Checked:** each current syllabus PDF on cambridgeinternational.org (Assessment overview, exam series), the specimen papers listed on each subject page, and the 2023 Geography and History syllabi Cambridge still hosts. Versions Cambridge no longer lists are marked "not checked" on their papers.
+
+**Tested:** 81 unit tests (new: every subject has one version per library year, papers, routes, exam-only checklist papers, variant 2, start pages; runs accept any library subject); 160 browser checks (new: the picker lists every subject by name, the run names its subject, a subject's run link picks it).
+
 ## 2026-11-02: Agent reads one subject, and reads any subject's names
 
 **What:** a run now reads only the Drive folders for its own subject: a folder named for another subject ("IGCSE Chemistry (0620)") is skipped without a call to Google, and the run page says how many were skipped. The classifier reads any syllabus code, not only those in the library: a code in brackets first, then a library code, then any four-digit number that is not a year. So "Computer Science (0478) / 2016 / Specimen Papers / 167432-specimen-paper-2-2016.pdf" becomes 0478_y16_sp_2.pdf (counted under other subjects), and a folder like "History (0470)" reads "History (0470), a subject not in the library yet".

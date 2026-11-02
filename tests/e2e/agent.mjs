@@ -74,12 +74,21 @@ try {
 
   // 1. The Run button without a GitHub token: the run is closed with a clear message.
   await page.goto(BASE + "/admin/agent");
+  const options = await page.locator("#run-code option").allTextContents();
+  check(options.includes("IGCSE Computer Science (0478)") && options.includes("IGCSE Physics (0625)") && options.length >= 17,
+    "run page offers every subject by name");
+  await page.selectOption("#run-code", "0625");
   await page.check("input[name=years][value='2024']");
   await page.check("input[name=sessions][value='s']");
   await page.click("form[action='/admin/agent/start'] button[type=submit]");
   await page.waitForURL(/\/admin\/agent\/runs\//);
   check((await page.locator("p.alert").textContent())?.includes("GITHUB_TOKEN"), "run button without a token says what is missing");
-  await page.goto(BASE + "/admin/agent");
+  check((await page.locator("h2.subtitle").first().textContent())?.startsWith("IGCSE Physics (0625): "), "run page names its subject");
+  // The subject's library page links to a run for that subject.
+  await page.goto(BASE + "/admin/library/0478");
+  await page.click("text=Run the agent for this subject");
+  await page.waitForURL(/\/admin\/agent\?code=0478/);
+  check((await page.locator("#run-code").inputValue()) === "0478", "a subject's run link picks that subject");
   await page.click("form[action='/admin/agent/start'] button[type=submit]");
   await page.waitForURL(/e=bad/);
   check(true, "run with nothing ticked is refused");
