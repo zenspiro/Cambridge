@@ -7,7 +7,8 @@ Current state, kept short. The full brief (product, copyright rules, standards) 
 - Never use the em dash character anywhere: replies, code, comments, commits, docs, page copy.
 - Plan first. Code only after the owner says "go", "start", "proceed" or similar. Give options with a recommendation.
 - Never ask for secret values. Never open a pull request unless asked. Commits carry no AI model names.
-- 375 px is the narrowest phone width to design and test for.
+- 375 px is the narrowest phone width to design and test for, for student and public pages.
+- The admin panel is desktop only (owner decision, 2 Nov 2026): design and test admin pages at desktop width (1400 px); do not test them on phone widths.
 
 ## Status
 - Step 0 (repo, CI, Cloudflare, docs) live.

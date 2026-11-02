@@ -4,13 +4,15 @@
 import { chromium } from "playwright";
 
 const BASE = process.env.BASE_URL ?? "http://localhost:8787";
-const PAGES = ["/", "/admin/login", "/does-not-exist"];
+// Public pages at phone and desktop width. Admin pages are desktop only (owner decision).
+const PAGES = ["/", "/does-not-exist"];
+const ADMIN_PAGES = ["/admin/login"];
 const WIDTHS = [375, 1400];
 
 const browser = await chromium.launch();
 let failures = 0;
 for (const width of WIDTHS) {
-  for (const path of PAGES) {
+  for (const path of width === 1400 ? [...PAGES, ...ADMIN_PAGES] : PAGES) {
     const page = await browser.newPage({ viewport: { width, height: 800 } });
     const problems = [];
     page.on("pageerror", (e) => problems.push(`script error: ${e.message}`));

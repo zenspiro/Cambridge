@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-02: Admin is desktop only
+
+**What:** admin browser suites (sign-in, library, agent) now run at desktop width only; the smoke test keeps public pages at 375 px and 1400 px and checks the sign-in page at 1400 px.
+
+**Why:** owner decision: the admin panel stays on the web (desktop); phones are for students.
+
+**Tested:** full e2e suite passes at the new widths (113 checks; the drop from 181 is the phone runs of admin pages); phone checks remain only for public pages.
+
 ## 2026-11-02: Agent activity in plain words
 
 **What**

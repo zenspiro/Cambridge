@@ -1,5 +1,7 @@
 # Tests
 
+Admin pages are desktop only (owner decision, 2 Nov 2026): the admin suites run at 1400 px. Public and student pages are tested at 375 px and 1400 px.
+
 ## Unit tests (`tests/unit/`, `npm run test:unit`)
 Node's built-in test runner, TypeScript loaded directly. Files must not import Next or Cloudflare modules. `helpers/d1.ts` gives a D1 stand-in on Node's SQLite with every migration applied, so database logic is tested with the real SQL.
 
@@ -20,13 +22,13 @@ Node's built-in test runner, TypeScript loaded directly. Files must not import N
 | `check-inline.test.ts` | The inline code scanner catches each banned pattern and passes normal React code |
 
 ## Browser smoke test (`tests/e2e/smoke.mjs`, `npm run test:e2e`)
-Needs a running Worker (`npx wrangler dev --port 8787`, or set `BASE_URL`). Each page at 375 px and 1400 px: right status, has an h1, no sideways scroll, no script or console errors (CSP violations show here), every script carries the nonce. Add new pages to `PAGES`.
+Needs a running Worker (`npx wrangler dev --port 8787`, or set `BASE_URL`). Public pages at 375 px and 1400 px, admin pages (sign-in) at 1400 px only: right status, has an h1, no sideways scroll, no script or console errors (CSP violations show here), every script carries the nonce. Add new pages to `PAGES`.
 
 ## Admin sign-in test (`tests/e2e/admin.mjs`, part of `npm run test:e2e`)
-Needs a running Worker and `.dev.vars` (copy `.dev.vars.example`). The full sign-in and sign-out flow at 375 px and 1400 px, cookie flags, replayed cookie, cross-site and Origin-less POSTs, forged cookie, and the lockout. Each run uses made-up networks (`cf-connecting-ip`), so lockouts do not carry over between runs.
+Needs a running Worker and `.dev.vars` (copy `.dev.vars.example`). The full sign-in and sign-out flow at desktop width (admin is desktop only), cookie flags, replayed cookie, cross-site and Origin-less POSTs, forged cookie, and the lockout. Each run uses made-up networks (`cf-connecting-ip`), so lockouts do not carry over between runs.
 
 ## Library test (`tests/e2e/library.mjs`, part of `npm run test:e2e`)
-Needs a running Worker with migrations applied and `.dev.vars`. Upload (good, bad name, fake PDF), library home (qualifications, subject cards, search), subject overview (breadcrumb, grid, papers, routes, kept short), session and version pages, described search results and download, junk filters, Missing filter, per-syllabus essential variants, adding a missing file (unapproved link refused, upload with any name), sources (add, refused address, switch off, inline confirm, remove) at 375 px and 1400 px, and signed-out and cross-site attempts on every library page and POST. Uses a random valid file name each run; re-running is safe. Click buttons by their form, not by `button[type=submit]`: the header's Sign out button comes first. Find messages with `p.alert` / `p.notice`, not `[role=alert]`: Next adds a hidden route announcer with that role.
+Needs a running Worker with migrations applied and `.dev.vars`. Upload (good, bad name, fake PDF), library home (qualifications, subject cards, search), subject overview (breadcrumb, grid, papers, routes, kept short), session and version pages, described search results and download, junk filters, Missing filter, per-syllabus essential variants, adding a missing file (unapproved link refused, upload with any name), sources (add, refused address, switch off, inline confirm, remove) at desktop width (admin is desktop only), and signed-out and cross-site attempts on every library page and POST. Uses a random valid file name each run; re-running is safe. Click buttons by their form, not by `button[type=submit]`: the header's Sign out button comes first. Find messages with `p.alert` / `p.notice`, not `[role=alert]`: Next adds a hidden route announcer with that role.
 
 ## Agent test (`tests/e2e/agent.mjs`, part of `npm run test:e2e`)
 Needs a running Worker, migrations and `.dev.vars` (with `AGENT_SECRET`). Starts a fake source website (`fake-source.mjs`, port 9911), switches Cambridge's source off for the test, sets up runs in the local D1, runs `scripts/agent/run.ts` in test mode (http allowed only for localhost, 50 ms gaps), and checks the reports (described in words, grouped by session, "Library after this run"), the library, live feedback (progress bar, auto-refresh, activity log in plain words), cancelling a run mid-way, the never-started warning, the settings page and attacks on the signed endpoints. Run the agent with async `spawn`, never `spawnSync`: the fake site lives in the test process. It never contacts Cambridge. Its local database helper retries up to 3 times (Wrangler's local tool can fail once while the dev server holds the file).

@@ -62,7 +62,7 @@ const newRun = (mode) => {
 
 const browser = await chromium.launch();
 try {
-  const ctx = await browser.newContext({ viewport: { width: 375, height: 900 }, extraHTTPHeaders: { "cf-connecting-ip": `203.0.113.${1 + Math.floor(Math.random() * 250)}` } });
+  const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 }, extraHTTPHeaders: { "cf-connecting-ip": `203.0.113.${1 + Math.floor(Math.random() * 250)}` } });
   const page = await ctx.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
@@ -100,7 +100,7 @@ try {
   check((await page.locator("details", { hasText: "Blocked by robots.txt" }).locator("li").allTextContents()).some((t) => t.includes("/blocked/")), "robots.txt block is reported");
   check((await page.locator("details", { hasText: "Links not recognised" }).locator("li").allTextContents()).some((t) => t.includes("teacher-guide")), "unknown links are reported");
   check((await page.locator("text=Download these 6 files").count()) === 1, "dry run offers to download");
-  check(!(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)), "375px run report: no sideways scroll");
+  check(!(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)), "run report: no sideways scroll");
 
   // 3. Download run.
   const dl = newRun("download");
@@ -143,7 +143,7 @@ try {
   check((await page.locator("meta[http-equiv=refresh]").count()) === 1, "run page refreshes itself while running");
   check((await page.locator("section", { hasText: "Activity" }).locator("li").count()) >= 1, "run page shows the activity log");
   check((await page.locator("text=so far").count()) === 1, "run page shows time elapsed");
-  check(!(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)), "375px live run page: no sideways scroll");
+  check(!(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)), "live run page: no sideways scroll");
   await liveDone;
   await page.goto(`${BASE}/admin/agent/runs/${live}`);
   check((await page.locator("meta[http-equiv=refresh]").count()) === 0, "refresh stops when the run is done");
