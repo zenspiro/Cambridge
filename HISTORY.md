@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-02: Drive folders by name, clearer errors
+
+**What:** migration 0010 names the 16 Revisiontown folders from the subject heading above each link (IGCSE Mathematics (0580) and so on). The agent, the run page and the Sources page now show the folder's name, never its Drive code; the Sources page has an "Open in Google Drive" link instead. A folder Google will not show now says why in words: "does not exist or is not shared publicly", "refused access", or "refused the API key". The run page's failure list reads as sentences.
+
+**Why:** owner feedback: "Google Drive folder 1Ji-VoRo... could not be read: not found" means nothing to a person. That folder is IGCSE Chemistry (0620).
+
+**Tested:** 79 unit tests (seed test now checks every folder has a name); local migration; 156 browser checks, including checks that run and Sources pages never show folder codes and that an unreadable folder is named and explained.
+
 ## 2026-11-02: Revisiontown Drive collection seeded
 
 **What:** migration 0009 adds the source "Revisiontown collection (Google Drive)" and the 16 shared folders linked from revisiontown.com's IGCSE past papers page, so the owner does not type them. The folders attach to whichever source has the Drive address, in case one was added by hand.
