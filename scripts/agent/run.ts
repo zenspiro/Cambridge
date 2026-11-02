@@ -292,7 +292,7 @@ async function main() {
       let n = 0;
       for (const f of folders) {
         n++;
-        const step = `Reading Google Drive folder ${n} of ${folders.length}`;
+        const step = `Reading ${f.label || "a Google Drive folder"} (${n} of ${folders.length})`;
         await progress(findShare, step);
         try {
           const tree = await walk(drive, f.folderId, { maxFolders: job.limits.driveMaxFolders ?? 2000, maxDepth: job.limits.driveMaxDepth ?? 8 },
@@ -349,14 +349,17 @@ async function main() {
             `${haveHere ? `; ${haveHere} already in the library` : ""}${outside ? `; ${outside} for years or sessions not in this run` : ""}.`);
         } catch (e) {
           if (e instanceof Cancelled) throw e;
+          // Google answers 404 both for a deleted folder and for one not shared with "anyone with the link".
           const why = e instanceof DriveError
-            ? e.status === 404 ? "not found (check the link)"
-              : e.status === 403 ? "access denied: the folder is not shared as \"anyone with the link\", or the API key is limited"
+            ? e.status === 404 ? "Google Drive says it does not exist or is not shared publicly. Open its link to check it still opens for anyone with the link"
+              : e.status === 403 ? "Google Drive refused access: it is not shared as \"anyone with the link\", or the API key is limited"
+              : e.status === 400 ? "Google Drive refused the API key. Check the GOOGLE_DRIVE_API secret in GitHub"
               : e.message
-            : "could not be read";
-          report.pageErrors.push({ url: `Google Drive folder ${f.folderId}`, status: why });
-          report.driveFolders.push({ folderId: f.folderId, name: f.label || f.folderId, looksLike: "", folders: 0, pdfs: 0, recognised: 0, forThisSyllabus: 0, otherSubjects: {}, years: null, truncated: false, error: why });
-          await progress(findShare, step, `Google Drive folder ${f.label || f.folderId} could not be read: ${why}.`);
+            : "it could not be read";
+          const title = f.label || "An unnamed Google Drive folder";
+          report.pageErrors.push({ url: title, status: why });
+          report.driveFolders.push({ folderId: f.folderId, name: title, looksLike: "", folders: 0, pdfs: 0, recognised: 0, forThisSyllabus: 0, otherSubjects: {}, years: null, truncated: false, error: why });
+          await progress(findShare, step, `${title} could not be read: ${why}.`);
         }
       }
     }

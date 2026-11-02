@@ -72,7 +72,7 @@ function List({ title, items, note }: { title: string; items: string[]; note?: s
         <summary className="subtitle summary">{title} ({items.length})</summary>
         {note ? <p className="muted">{note}</p> : null}
         <ul className="list">
-          {items.map((t, i) => <li className="list-row mono" key={i}>{t}</li>)}
+          {items.map((t, i) => <li className="list-row" key={i}>{t}</li>)}
         </ul>
       </details>
     </section>
@@ -287,7 +287,7 @@ export default async function RunPage({
       <List title="Links not recognised" items={arr(rep.unmatched)}
         note="PDFs whose names do not match a Cambridge paper, specimen or syllabus document. Nothing was fetched. If one is needed, add it by hand from the library." />
       <List title="Blocked by robots.txt" items={arr(rep.robotsBlocked)} note="The website asks automated visitors not to fetch these, so the agent skipped them." />
-      <List title="Pages that failed" items={arr(rep.pageErrors).map((e) => `${e.url} (${e.status})`)} />
+      <List title="Pages and folders that could not be read" items={arr(rep.pageErrors).map((e) => `${e.url}: ${e.status}`)} />
     </AdminShell>
   );
 }
