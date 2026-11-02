@@ -149,7 +149,7 @@ test("source sites: add, duplicate, switch, remove, all audited", async () => {
 
 test("the official Cambridge site is seeded and switched on", () => {
   const db = testDb();
-  const s = db.raw.prepare("SELECT base_url, enabled FROM source_site").all() as { base_url: string; enabled: number }[];
+  const s = db.raw.prepare("SELECT base_url, enabled FROM source_site WHERE kind = 'web'").all() as { base_url: string; enabled: number }[];
   assert.deepEqual(s.map((x) => ({ ...x })), [{ base_url: "https://www.cambridgeinternational.org/", enabled: 1 }]);
 });
 
@@ -172,4 +172,13 @@ test("only admin code can reach the source bucket (brief 3.1)", () => {
     const allowed = f.startsWith("app/admin/") || f === "app/health/route.ts" || f === "app/api/agent/file/route.ts";
     assert.ok(allowed, `${f} touches env.SOURCE outside the admin area`);
   }
+});
+
+test("the Revisiontown Drive collection is seeded: one Drive source, 16 folders", () => {
+  const db = testDb();
+  const site = db.raw.prepare("SELECT kind, base_url, enabled FROM source_site WHERE id = 'revisiontown-drive'").get() as Record<string, unknown>;
+  assert.deepEqual({ ...site }, { kind: "gdrive", base_url: "https://drive.google.com/", enabled: 1 });
+  const folders = db.raw.prepare("SELECT folder_id FROM source_drive_folder WHERE site_id = 'revisiontown-drive'").all() as { folder_id: string }[];
+  assert.equal(folders.length, 16);
+  assert.ok(folders.every((f) => /^[A-Za-z0-9_-]{25,40}$/.test(f.folder_id)));
 });

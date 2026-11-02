@@ -39,6 +39,7 @@ The websites the download agent may visit. It starts with Cambridge's official s
 Only add a source if you are sure its files may be used (brief section 3).
 
 ## Google Drive folders
+The Revisiontown collection (16 folders) is already set up as a source. To add another collection:
 1. Sources page: add a source named for the collection (for example "Revisiontown Drive") with the address `https://drive.google.com/`. It becomes a Google Drive source.
 2. Under it, paste the shared folder links, one per line (up to 50 at a time), and press Add folders. Duplicates and lines that are not folder links are skipped and counted.
 3. Run the agent (dry run first). The run page shows "Google Drive folders read": what each folder looks like (for example "IGCSE Physics 0625"), how many PDFs and years it holds, and files for other subjects. "Would download" lists each file with how its name was worked out; "Links not recognised" lists files it could not read, with the reason.

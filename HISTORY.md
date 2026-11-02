@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-02: Revisiontown Drive collection seeded
+
+**What:** migration 0009 adds the source "Revisiontown collection (Google Drive)" and the 16 shared folders linked from revisiontown.com's IGCSE past papers page, so the owner does not type them. The folders attach to whichever source has the Drive address, in case one was added by hand.
+
+**Why:** owner feedback: the links were already known and should not have been left for manual entry.
+
+**Tested:** 79 unit tests (new: one Drive source, 16 folders seeded); local migration applied; 153 browser checks (the agent suite now uses its own test Drive address and parks the seeded source during the test).
+
 ## 2026-11-02: Google Drive folders as sources
 
 **What**

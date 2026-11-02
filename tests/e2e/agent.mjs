@@ -176,7 +176,9 @@ try {
   // 8. Google Drive folders: the agent works out what each folder and file is.
   sql(`UPDATE source_site SET enabled = 0 WHERE id = 'local-test'`);
   sql(`DELETE FROM source_document WHERE file_name IN ('0625_s24_qp_12.pdf','0625_s24_ms_12.pdf','0625_s24_er.pdf','0625_y23_sp_2.pdf')`);
-  sql(`INSERT OR REPLACE INTO source_site (id, name, base_url, enabled, notes, created_at, kind) VALUES ('local-drive', 'Test Drive', 'https://drive.google.com/', 1, '', 2, 'gdrive')`);
+  // The seeded Revisiontown Drive source is parked for the test; the test source has its own address.
+  sql(`UPDATE source_site SET enabled = 0 WHERE kind = 'gdrive' AND id <> 'local-drive'`);
+  sql(`INSERT OR REPLACE INTO source_site (id, name, base_url, enabled, notes, created_at, kind) VALUES ('local-drive', 'Test Drive', 'https://drive.google.com/e2e-test/', 1, '', 2, 'gdrive')`);
   await page.goto(BASE + "/admin/sources");
   await page.fill("#links-local-drive", "https://drive.google.com/drive/folders/ROOTFOLDER01?usp=sharing\nhttps://drive.google.com/drive/folders/PRIVATEFOLDR\nnot a link");
   await page.click("form[action='/admin/sources/folders/add'] button");
@@ -257,6 +259,7 @@ try {
   sql(`DELETE FROM source_site WHERE id = 'local-test'`);
   sql(`UPDATE source_document SET source_site_id = NULL WHERE source_site_id = 'local-drive'`);
   sql(`DELETE FROM source_site WHERE id = 'local-drive'`);
+  sql(`UPDATE source_site SET enabled = 1 WHERE id = 'revisiontown-drive'`);
   sql(`UPDATE source_site SET enabled = 1 WHERE id = 'cambridge-official'`);
   sql(`UPDATE job SET status = 'failed' WHERE type = 'agent' AND status IN ('queued', 'running')`);
 }
