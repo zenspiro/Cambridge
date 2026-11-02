@@ -335,7 +335,11 @@ async function main() {
             fresh.push(c.name);
           }
           const subj = (job.subjects ?? []).find((s) => s.code === (reading.code ?? (summary.forThisSyllabus ? job.params.code : "")));
-          summary.looksLike = subj ? `${subj.qualification} ${subj.name} ${subj.code}` : reading.subject ?? "not sure from the folder name";
+          // A subject the library does not have yet still reads by its folder name ("Enterprise (0454)").
+          const otherCode = /\b(\d{4})\b/.exec(tree.root)?.[1];
+          summary.looksLike = subj
+            ? `${subj.qualification} ${subj.name} ${subj.code}`
+            : reading.subject ?? (otherCode ? `${tree.root.replace(/\s+-\s+/g, ", ")}, a subject not in the library yet` : "not sure from the folder name");
           report.driveFolders.push(summary);
           report.pagesVisited++;
           report.linksFound += tree.pdfs.length;
