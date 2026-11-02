@@ -7,7 +7,7 @@ import { AdminShell } from "@/components/AdminShell";
 import { closeStaleRuns, getRun, type RunParams } from "@/lib/agent/runs";
 import { arr, describeRun, elapsed, readEvents, readReport, reasonText, STATUS_LABELS } from "@/lib/agent/labels";
 import { GroupPill } from "@/components/LibraryBits";
-import { loadSyllabus } from "@/lib/library/catalog";
+import { listSubjects, loadSyllabus, subjectLabel } from "@/lib/library/catalog";
 import { describeFile, loadPapers, paperLookup, versionForFile } from "@/lib/library/papers";
 import { countTypes, groupFiles } from "@/lib/library/summary";
 import { formatBytes } from "@/lib/library/labels";
@@ -96,7 +96,8 @@ export default async function RunPage({
   if (!run) notFound();
   const p = JSON.parse(run.params) as RunParams;
   const rep = readReport(run.result);
-  const [checklist, { papers }] = await Promise.all([loadSyllabus(env.DB, p.code), loadPapers(env.DB, p.code)]);
+  const [checklist, { papers }, subjects] = await Promise.all([loadSyllabus(env.DB, p.code), loadPapers(env.DB, p.code), listSubjects(env.DB)]);
+  const subjectName = subjectLabel(subjects, p.code);
   const versions = checklist?.versions.map((g) => g.version) ?? [];
   const look = paperLookup(papers);
   const describe: Describe = (name) => describeFile(name, versionForFile(versions, name), look);
@@ -122,7 +123,7 @@ export default async function RunPage({
       {!done ? <meta httpEquiv="refresh" content={String(AGENT.refreshSeconds)} /> : null}
       <section className="card stack">
         <div className="row-between">
-          <h2 className="subtitle">{describeRun(p)}</h2>
+          <h2 className="subtitle">{subjectName}: {describeRun(p)}</h2>
           <span className={run.status === "succeeded" ? "pill pill-ok" : run.status === "failed" ? "pill pill-gap" : "pill"}>
             {STATUS_LABELS[run.status] ?? run.status}
           </span>
@@ -274,8 +275,8 @@ export default async function RunPage({
                   ) : (
                     <span className="muted">
                       {f.pdfs} PDFs in {f.folders} folders{f.years ? `, ${f.years[0]} to ${f.years[1]}` : ""}{f.truncated ? " (stopped at the folder limit)" : ""}.
-                      {" "}{f.forThisSyllabus} recognised for {p.code}
-                      {Object.keys(f.otherSubjects ?? {}).length ? `; other subjects: ${Object.entries(f.otherSubjects).map(([c, n]) => `${c} (${n})`).join(", ")}` : ""}.
+                      {" "}{f.forThisSyllabus} recognised for {subjectName}
+                      {Object.keys(f.otherSubjects ?? {}).length ? `; other subjects: ${Object.entries(f.otherSubjects).map(([c, n]) => `${subjectLabel(subjects, c)}: ${n}`).join(", ")}` : ""}.
                     </span>
                   )}
                 </span>

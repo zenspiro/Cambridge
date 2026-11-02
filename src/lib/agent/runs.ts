@@ -13,13 +13,18 @@ export type RunParams = { code: string; years: number[]; sessions: RunSession[];
 const SESSIONS: readonly RunSession[] = ["m", "s", "w", "y"];
 
 /** Checks run choices against the library settings. Untrusted input in, clean params out. */
-export function checkRunParams(input: { code: unknown; years: unknown[]; sessions: unknown[]; mode: unknown }, lib: LibrarySettings): RunParams | null {
-  if (input.code !== "0625") return null;
+export function checkRunParams(
+  input: { code: unknown; years: unknown[]; sessions: unknown[]; mode: unknown },
+  lib: LibrarySettings,
+  codes: readonly string[],
+): RunParams | null {
+  if (typeof input.code !== "string" || !codes.includes(input.code)) return null;
+  const code = input.code;
   if (input.mode !== "dry" && input.mode !== "download") return null;
   const years = [...new Set(input.years.map((y) => Number(y)))].filter((y) => Number.isInteger(y) && y >= lib.fromYear && y <= lib.toYear);
   const sessions = [...new Set(input.sessions)].filter((s): s is RunSession => SESSIONS.includes(s as RunSession));
   if (years.length === 0 || years.length !== input.years.length || sessions.length === 0 || sessions.length !== input.sessions.length) return null;
-  return { code: "0625", years: years.sort((a, b) => b - a), sessions: SESSIONS.filter((s) => sessions.includes(s)), mode: input.mode };
+  return { code, years: years.sort((a, b) => b - a), sessions: SESSIONS.filter((s) => sessions.includes(s)), mode: input.mode };
 }
 
 /**

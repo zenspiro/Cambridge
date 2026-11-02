@@ -51,3 +51,18 @@ export function tone(s: Status): "ok" | "part" | "none" {
   if (s.essentialTotal > 0 && s.essentialHave === s.essentialTotal) return "ok";
   return s.essentialHave > 0 ? "part" : "none";
 }
+
+export type SubjectOption = { code: string; label: string; qualification: string };
+
+/** Every syllabus code in the library, for pickers: "IGCSE Physics (0625)". Cheap: one query. */
+export async function listSubjects(db: Db): Promise<SubjectOption[]> {
+  const { results } = await db
+    .prepare(`SELECT q.short_name, s.name AS subject_name, y.code FROM syllabus y JOIN subject s ON s.id = y.subject_id
+              JOIN qualification q ON q.id = s.qualification_id GROUP BY q.id, s.id, y.code ORDER BY q.sort_order, s.name, y.code`)
+    .bind()
+    .all<{ short_name: string; subject_name: string; code: string }>();
+  return results.map((r) => ({ code: r.code, label: `${r.short_name} ${r.subject_name} (${r.code})`, qualification: r.short_name }));
+}
+
+/** "IGCSE Physics (0625)" for a code, or the code itself when it is not in the list. */
+export const subjectLabel = (subjects: SubjectOption[], code: string) => subjects.find((s) => s.code === code)?.label ?? code;

@@ -58,7 +58,7 @@ export default async function SessionPage({
 
       <section className="card stack">
         <h2 className="subtitle">Essential: variant {[...new Set(essential.map((r) => r.variant))].join(", ")}</h2>
-        <PaperTable rows={essential} types={["qp", "ms", "ci"]} papers={names} />
+        <PaperTable rows={essential} types={["qp", "in", "ms", "ci"]} papers={names} />
       </section>
 
       {extras.length > 0 ? (
@@ -68,7 +68,7 @@ export default async function SessionPage({
             <span className="pill">{extras.reduce((n, r) => n + Object.values(r.cells).filter((c) => c?.doc).length, 0)} stored</span>
           </summary>
           <div className="group-body">
-            <PaperTable rows={extras} types={["qp", "ms", "ci"]} papers={names} />
+            <PaperTable rows={extras} types={["qp", "in", "ms", "ci"]} papers={names} />
           </div>
         </details>
       ) : null}

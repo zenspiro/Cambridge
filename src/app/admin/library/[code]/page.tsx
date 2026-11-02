@@ -92,6 +92,7 @@ export default async function SyllabusOverview({
         ) : (
           <p className="notice">Every essential file is in.</p>
         )}
+        <p><Link className="btn btn-small" href={`/admin/agent?code=${code}`}>Run the agent for this subject</Link></p>
       </section>
 
       <form className="card filters filters-compact" method="get" role="search">
@@ -224,8 +225,11 @@ export default async function SyllabusOverview({
                   {newestPapers.map((p) => (
                     <tr key={p.paper}>
                       <th scope="row">{p.paper}</th>
-                      <td>{p.name}{p.tier !== "all" ? <span className={`tag tag-${p.tier}`}>{TIER_LABELS[p.tier]}</span> : null}</td>
-                      <td>{duration(p.duration_min)}</td>
+                      <td>
+                        {p.name}{p.tier !== "all" ? <span className={`tag tag-${p.tier}`}>{TIER_LABELS[p.tier]}</span> : null}
+                        {p.note ? <span className="muted"> · {p.note}</span> : null}
+                      </td>
+                      <td>{p.school_assessed ? "Marked by the school" : duration(p.duration_min)}</td>
                       <td>{p.marks}{p.weighting_pct ? ` (${p.weighting_pct}%)` : ""}</td>
                     </tr>
                   ))}

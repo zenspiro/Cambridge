@@ -9,6 +9,7 @@ import { looksLikePdf, storeDocument } from "../../src/lib/library/store.ts";
 import { addSite, normaliseSiteUrl, removeSite, setSiteEnabled } from "../../src/lib/library/sources.ts";
 import { LIBRARY } from "../../src/lib/config.ts";
 import { createJob, finishJob, getJob } from "../../src/lib/jobs.ts";
+import { getLibrarySettings } from "../../src/lib/settings.ts";
 
 const pdf = (extra = "") => new TextEncoder().encode(`%PDF-1.7\n${extra}\n%%EOF`);
 
@@ -88,7 +89,7 @@ test("store: rejects bad names, years, sizes, non-PDFs and unknown syllabi", asy
   assert.equal(((await go("0625_s23_qp_42.pdf", new Uint8Array())) as { reason: string }).reason, "size");
   assert.equal(((await go("0625_s23_qp_42.pdf", new Uint8Array(LIBRARY.maxFileBytes + 1))) as { reason: string }).reason, "size");
   assert.equal(((await go("0625_s23_qp_42.pdf", new TextEncoder().encode("<script>"))) as { reason: string }).reason, "not_pdf");
-  assert.equal(((await go("0620_s23_qp_42.pdf")) as { reason: string }).reason, "no_syllabus");
+  assert.equal(((await go("0999_s23_qp_42.pdf")) as { reason: string }).reason, "no_syllabus");
   assert.equal(b.objects.size, 0);
   assert.equal((db.raw.prepare("SELECT COUNT(*) n FROM source_document").get() as { n: number }).n, 0);
 });
@@ -185,4 +186,33 @@ test("the Revisiontown Drive collection is seeded: one Drive source, 16 folders"
   assert.ok(labels.every((l) => /^IGCSE .+ \(\d{4}\)$/.test(l.label)), "every folder has a human name");
   assert.equal(labels.find((l) => l.folder_id === "1Ji-VoRovspqnZtvxhJW1CCdeMilxQBCX")?.label, "IGCSE Chemistry (0620)");
   assert.equal(labels.find((l) => l.folder_id === "1Baa4OKIzjjtHzwcy1-xwjBuCDMLh2FlW")?.label, "IGCSE Physics (0625)");
+});
+
+test("every Revisiontown subject is in the library, ready for a run", async () => {
+  const db = testDb();
+  const raw = db.raw;
+  const folderCodes = (raw.prepare("SELECT label FROM source_drive_folder WHERE site_id = 'revisiontown-drive'").all() as { label: string }[])
+    .map((l) => /\((\d{4})\)$/.exec(l.label)![1]!);
+  const lib = await getLibrarySettings(db);
+  for (const code of folderCodes) {
+    const versions = raw.prepare("SELECT id, valid_from_year, valid_to_year, expected, essential_variants FROM syllabus WHERE code = ? ORDER BY valid_from_year")
+      .all(code) as { id: string; valid_from_year: number; valid_to_year: number; expected: string; essential_variants: string }[];
+    // Every library year has exactly one version, and each version has papers, routes and checklist rules.
+    for (let y = lib.fromYear; y <= lib.toYear; y++) {
+      assert.equal(versions.filter((v) => v.valid_from_year <= y && v.valid_to_year >= y).length, 1, `${code}: one version for ${y}`);
+    }
+    for (const v of versions) {
+      const rules = parseRules(v.expected);
+      assert.ok(rules && rules.papers.length > 0, `${v.id}: checklist rules`);
+      const papers = raw.prepare("SELECT paper, school_assessed FROM syllabus_paper WHERE syllabus_id = ?").all(v.id) as { paper: number; school_assessed: number }[];
+      assert.ok(papers.length > 0, `${v.id}: papers`);
+      // The checklist asks only for papers that have a question paper (not coursework or speaking).
+      for (const p of rules!.papers) assert.equal(papers.find((x) => x.paper === p)?.school_assessed, 0, `${v.id}: paper ${p} is an exam paper`);
+      assert.ok((raw.prepare("SELECT COUNT(*) AS n FROM syllabus_route WHERE syllabus_id = ?").get(v.id) as { n: number }).n > 0, `${v.id}: routes`);
+      assert.equal(v.essential_variants, '{"m":[2],"s":[2],"w":[2]}', `${v.id}: variant 2 essential`);
+    }
+    const pages = raw.prepare("SELECT url FROM source_page WHERE syllabus_code = ?").all(code) as { url: string }[];
+    assert.ok(pages.length >= 2 && pages.every((p) => p.url.startsWith("https://www.cambridgeinternational.org/")), `${code}: Cambridge start pages`);
+  }
+  assert.equal(new Set(folderCodes).size, 16);
 });

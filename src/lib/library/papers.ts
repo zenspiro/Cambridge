@@ -7,6 +7,8 @@ import { parseCambridgeName } from "./names.ts";
 export type Paper = {
   syllabus_id: string; paper: number; name: string; format: "mcq" | "structured" | "practical" | "written";
   tier: "core" | "extended" | "all"; duration_min: number | null; marks: number | null; weighting_pct: number | null; note: string;
+  /** Coursework or speaking, marked by the school: no question paper. */
+  school_assessed?: number;
 };
 export type Route = { syllabus_id: string; name: string; papers: string; grades: string };
 
@@ -21,7 +23,7 @@ export const TIER_LABELS: Record<Paper["tier"], string> = { core: "Core", extend
 export async function loadPapers(db: Db, code: string): Promise<{ papers: Paper[]; routes: Route[] }> {
   const [{ results: papers }, { results: routes }] = await Promise.all([
     db
-      .prepare(`SELECT p.syllabus_id, p.paper, p.name, p.format, p.tier, p.duration_min, p.marks, p.weighting_pct, p.note
+      .prepare(`SELECT p.syllabus_id, p.paper, p.name, p.format, p.tier, p.duration_min, p.marks, p.weighting_pct, p.note, p.school_assessed
                 FROM syllabus_paper p JOIN syllabus y ON y.id = p.syllabus_id WHERE y.code = ?1 ORDER BY p.syllabus_id, p.paper`)
       .bind(code)
       .all<Paper>(),

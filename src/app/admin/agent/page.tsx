@@ -8,23 +8,27 @@ import { getLibrarySettings, libraryYears } from "@/lib/settings";
 import { closeStaleRuns, listRuns, type RunParams } from "@/lib/agent/runs";
 import { describeRun, readReport, STATUS_LABELS, arr } from "@/lib/agent/labels";
 import { dateFmt } from "@/lib/library/labels";
+import { listSubjects, subjectLabel } from "@/lib/library/catalog";
 
 export const metadata: Metadata = { title: "Download agent" };
 
 const MESSAGES = {
-  bad: "Choose at least one year and one session.",
+  bad: "Choose a subject, at least one year and one session.",
   running: "A run is already waiting or running. Open it below to follow it or cancel it.",
   missing: "That run no longer exists.",
   busy: "Too many runs this hour. Please wait a little.",
 };
 
-export default async function AgentPage({ searchParams }: { searchParams: Promise<{ e?: string; ref?: string }> }) {
+export default async function AgentPage({ searchParams }: { searchParams: Promise<{ e?: string; ref?: string; code?: string }> }) {
   await requireAdmin();
   const q = await searchParams;
   const env = await getEnv();
   const lib = await getLibrarySettings(env.DB);
   await closeStaleRuns(env.DB);
   const runs = await listRuns(env.DB, 20);
+  const subjects = await listSubjects(env.DB);
+  const chosen = subjects.some((s) => s.code === q.code) ? q.code : "";
+  const quals = [...new Set(subjects.map((s) => s.qualification))];
 
   return (
     <AdminShell current="/admin/agent" title="Download agent">
@@ -35,6 +39,20 @@ export default async function AgentPage({ searchParams }: { searchParams: Promis
       </p>
 
       <form className="card stack" method="post" action="/admin/agent/start">
+        <div className="field stack">
+          <label className="label-inline" htmlFor="run-code">Subject</label>
+          <select className="input" id="run-code" name="code" required defaultValue={chosen}>
+            <option value="" disabled>Choose a subject</option>
+            {quals.map((ql) => (
+              <optgroup label={ql} key={ql}>
+                {subjects.filter((s) => s.qualification === ql).map((s) => (
+                  <option value={s.code} key={s.code}>{s.label}</option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+          <p className="muted">The agent reads only this subject&apos;s start pages and Google Drive folders.</p>
+        </div>
         <fieldset className="fieldset">
           <legend className="label-inline">Years</legend>
           <div className="checks">
@@ -63,7 +81,6 @@ export default async function AgentPage({ searchParams }: { searchParams: Promis
             <label className="check"><input type="radio" name="mode" value="download" /> Download missing files</label>
           </div>
         </fieldset>
-        <input type="hidden" name="code" value="0625" />
         <button className="btn btn-primary btn-block" type="submit">Run agent</button>
       </form>
 
@@ -83,7 +100,7 @@ export default async function AgentPage({ searchParams }: { searchParams: Promis
               return (
                 <li className="list-row" key={r.id}>
                   <span className="doc-main">
-                    <Link className="link" href={`/admin/agent/runs/${encodeURIComponent(r.id)}`}>{describeRun(p)}</Link>
+                    <Link className="link" href={`/admin/agent/runs/${encodeURIComponent(r.id)}`}>{subjectLabel(subjects, p.code)}: {describeRun(p)}</Link>
                     <span className="muted">{dateFmt.format(r.created_at)}</span>
                   </span>
                   <span className="actions">

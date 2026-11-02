@@ -4,6 +4,7 @@ import { requireAdmin } from "@/lib/auth/guard";
 import { getEnv } from "@/lib/env";
 import { AdminShell, Notice } from "@/components/AdminShell";
 import { LIST_SITES } from "@/lib/library/queries";
+import { listSubjects, subjectLabel } from "@/lib/library/catalog";
 
 export const metadata: Metadata = { title: "Approved sources" };
 
@@ -38,11 +39,15 @@ export default async function SourcesPage({ searchParams }: { searchParams: Prom
   await requireAdmin();
   const q = await searchParams;
   const env = await getEnv();
-  const [{ results: sites }, { results: pages }, { results: folders }] = await Promise.all([
+  const [{ results: sites }, { results: pageRows }, { results: folders }, subjects] = await Promise.all([
     env.DB.prepare(LIST_SITES).all<Site>(),
     env.DB.prepare(`SELECT id, site_id, syllabus_code, url FROM source_page ORDER BY created_at`).all<Page>(),
     env.DB.prepare(`SELECT id, site_id, folder_id, label, last_seen, last_seen_at FROM source_drive_folder ORDER BY created_at`).all<Folder>(),
+    listSubjects(env.DB),
   ]);
+  // Start pages in subject order, each named by its subject ("IGCSE Physics (0625)").
+  const order = (code: string) => { const i = subjects.findIndex((x) => x.code === code); return i < 0 ? 999 : i; };
+  const pages = [...pageRows].sort((a, b) => order(a.syllabus_code) - order(b.syllabus_code));
   const counts = (n: string | undefined) => (n && /^\d{1,3}$/.test(n) ? Number(n) : 0);
 
   return (
@@ -141,7 +146,10 @@ export default async function SourcesPage({ searchParams }: { searchParams: Prom
                     .filter((pg) => pg.site_id === s.id)
                     .map((pg) => (
                       <li className="list-row" key={pg.id}>
-                        <span className="mono muted">{pg.syllabus_code}: {pg.url}</span>
+                        <span className="doc-main">
+                          <strong>{subjectLabel(subjects, pg.syllabus_code)}</strong>
+                          <span className="mono muted">{pg.url}</span>
+                        </span>
                         {q.removepage === pg.id ? (
                           <span className="confirm">
                             <span>Remove this page?</span>
@@ -159,7 +167,11 @@ export default async function SourcesPage({ searchParams }: { searchParams: Prom
                 </ul>
                 <form className="inline-form" method="post" action="/admin/sources/pages/add">
                   <input type="hidden" name="site" value={s.id} />
-                  <input type="hidden" name="code" value="0625" />
+                  <label className="sr-only" htmlFor={`page-code-${s.id}`}>Subject for the new start page</label>
+                  <select className="input" id={`page-code-${s.id}`} name="code" required defaultValue="">
+                    <option value="" disabled>Subject</option>
+                    {subjects.map((x) => <option value={x.code} key={x.code}>{x.label}</option>)}
+                  </select>
                   <label className="sr-only" htmlFor={`page-${s.id}`}>New start page for {s.name}</label>
                   <input className="input" id={`page-${s.id}`} name="url" type="url" required maxLength={300} placeholder={`${s.base_url}...`} />
                   <button className="btn btn-small" type="submit">Add page</button>

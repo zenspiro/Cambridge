@@ -5,6 +5,9 @@ import { signRequest, verifyRequest, MAX_SKEW_MS } from "../../src/lib/agent/sig
 import { parseRobots } from "../../src/lib/agent/robots.ts";
 import { extractPdfLinks, toCambridgeName } from "../../src/lib/agent/links.ts";
 import { checkRunParams, claimRun, finishRun, startRun, spendNonce, activeRun, recordProgress, cancelRun, closeStaleRuns, cleanEventText, cleanRunUrl, getRun } from "../../src/lib/agent/runs.ts";
+
+/** Syllabus codes in the library, for run checks. */
+const CODES = ["0625", "0478"];
 import { checkLibrarySettings, getLibrarySettings, saveLibrarySettings, LIBRARY_DEFAULTS } from "../../src/lib/settings.ts";
 import { addPage, checkPageUrl, removePage } from "../../src/lib/library/sources.ts";
 import { AGENT } from "../../src/lib/config.ts";
@@ -122,9 +125,11 @@ test("library settings: checked, saved, audited, safe defaults", async () => {
 
 test("run choices are checked against the library years", () => {
   const lib = LIBRARY_DEFAULTS;
-  assert.deepEqual(checkRunParams({ code: "0625", years: ["2024", "2023"], sessions: ["s", "y"], mode: "dry" }, lib), {
+  assert.deepEqual(checkRunParams({ code: "0625", years: ["2024", "2023"], sessions: ["s", "y"], mode: "dry" }, lib, CODES), {
     code: "0625", years: [2024, 2023], sessions: ["s", "y"], mode: "dry",
   });
+  // Any subject in the library can be run, not only Physics.
+  assert.equal(checkRunParams({ code: "0478", years: ["2024"], sessions: ["s"], mode: "dry" }, lib, CODES)?.code, "0478");
   for (const bad of [
     { code: "0625", years: [], sessions: ["s"], mode: "dry" },
     { code: "0625", years: ["2024"], sessions: [], mode: "dry" },
@@ -133,7 +138,8 @@ test("run choices are checked against the library years", () => {
     { code: "0625", years: ["2024"], sessions: ["s", "q"], mode: "dry" },
     { code: "0625", years: ["2024"], sessions: ["s"], mode: "delete" },
     { code: "9999", years: ["2024"], sessions: ["s"], mode: "dry" },
-  ]) assert.equal(checkRunParams(bad, lib), null, JSON.stringify(bad));
+    { code: 625, years: ["2024"], sessions: ["s"], mode: "dry" },
+  ]) assert.equal(checkRunParams(bad, lib, CODES), null, JSON.stringify(bad));
 });
 
 test("runs: one at a time, claimed once, finished once, stale runs closed", async () => {
@@ -164,7 +170,7 @@ test("start pages stay inside their source", async () => {
   assert.equal(checkPageUrl("http://a.org/papers/", "https://a.org/papers/"), null);
   const db = testDb();
   const pages = () => db.raw.prepare("SELECT COUNT(*) n FROM source_page").get() as { n: number };
-  assert.equal(pages().n, 2, "two Cambridge 0625 pages seeded");
+  assert.equal(pages().n, 32, "two Cambridge pages seeded per subject, 16 subjects");
   assert.deepEqual(await addPage(db, { siteId: "cambridge-official", url: "https://evil.example/", code: "0625" }, "a"), { ok: false, error: "page_url" });
   assert.deepEqual(await addPage(db, { siteId: "cambridge-official", url: "https://www.cambridgeinternational.org/x/", code: "9999" }, "a"), { ok: false, error: "code" });
   assert.deepEqual(await addPage(db, { siteId: "nope-nope", url: "https://www.cambridgeinternational.org/x/", code: "0625" }, "a"), { ok: false, error: "missing" });

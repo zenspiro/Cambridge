@@ -4,7 +4,7 @@ import { requireAdmin } from "@/lib/auth/guard";
 import { recentAudit } from "@/lib/auth/session";
 import { getEnv } from "@/lib/env";
 import { AdminShell } from "@/components/AdminShell";
-import { COUNT_DOCUMENTS } from "@/lib/library/queries";
+import { COUNT_ALL_DOCUMENTS } from "@/lib/library/queries";
 import { dateFmt } from "@/lib/library/labels";
 
 export const metadata: Metadata = { title: "Admin" };
@@ -38,14 +38,14 @@ export default async function AdminHome() {
   const env = await getEnv();
   const [events, count] = await Promise.all([
     recentAudit(env.DB, 15),
-    env.DB.prepare(COUNT_DOCUMENTS).bind("0625").first<{ n: number }>(),
+    env.DB.prepare(COUNT_ALL_DOCUMENTS).first<{ n: number; subjects: number }>(),
   ]);
   return (
     <AdminShell current="/admin" title="Admin">
       <section className="card stack">
         <h2 className="subtitle">Source library</h2>
         <p className="muted">
-          {count?.n ?? 0} Physics 0625 files stored. <Link className="link" href="/admin/library">See the library</Link>.
+          {count?.n ?? 0} files stored, across {count?.subjects ?? 0} subject{count?.subjects === 1 ? "" : "s"}. <Link className="link" href="/admin/library">See the library</Link>.
         </p>
       </section>
 

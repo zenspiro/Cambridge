@@ -44,9 +44,9 @@ ORDER BY d.year DESC, CASE d.session WHEN 'w' THEN 0 WHEN 's' THEN 1 WHEN 'm' TH
          d.paper, d.variant, d.doc_type
 LIMIT ?6`;
 
-export const COUNT_DOCUMENTS = `
-SELECT COUNT(*) AS n FROM source_document d JOIN syllabus s ON s.id = d.syllabus_id
-WHERE d.status = 'stored' AND s.code = ?1`;
+export const COUNT_ALL_DOCUMENTS = `
+SELECT COUNT(*) AS n, COUNT(DISTINCT s.code) AS subjects FROM source_document d JOIN syllabus s ON s.id = d.syllabus_id
+WHERE d.status = 'stored'`;
 
 export const STORED_NAMES = `
 SELECT d.file_name FROM source_document d JOIN syllabus s ON s.id = d.syllabus_id

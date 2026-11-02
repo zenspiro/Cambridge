@@ -5,6 +5,7 @@ import { allow, limitKey } from "@/lib/ratelimit";
 import { getLibrarySettings } from "@/lib/settings";
 import { checkRunParams, finishRun, startRun } from "@/lib/agent/runs";
 import { dispatchAgent } from "@/lib/agent/github";
+import { listSubjects } from "@/lib/library/catalog";
 
 export async function POST(request: Request) {
   // adminPost checks the admin session before anything else.
@@ -12,6 +13,7 @@ export async function POST(request: Request) {
     const params = checkRunParams(
       { code: form.get("code"), years: form.getAll("years"), sessions: form.getAll("sessions"), mode: form.get("mode") },
       await getLibrarySettings(db),
+      (await listSubjects(db)).map((s) => s.code),
     );
     if (!params) return "bad";
     if (!(await allow(db, await limitKey("agent-run", actorId), AGENT.runsPerHour, 3_600_000))) return "busy";
