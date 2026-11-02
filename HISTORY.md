@@ -8,7 +8,7 @@ Newest first. What changed, why, and how it was tested.
 
 **Why:** owner decision: the admin panel stays on the web (desktop); phones are for students.
 
-**Tested:** full e2e suite passes at the new widths (113 checks; the drop from 181 is the phone runs of admin pages); phone checks remain only for public pages.
+**Tested:** full e2e suite passes at the new widths (140 checks; the drop from 181 is the phone runs of admin pages); phone checks remain only for public pages.
 
 ## 2026-11-02: Agent activity in plain words
 
