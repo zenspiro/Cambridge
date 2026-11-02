@@ -55,7 +55,7 @@ WHERE d.status = 'stored' AND s.code = ?1`;
 export const GET_DOCUMENT = `
 SELECT id, file_name, r2_key, size_bytes FROM source_document WHERE id = ?1 AND status = 'stored'`;
 
-export const LIST_SITES = `SELECT id, name, base_url, enabled, notes, created_at FROM source_site ORDER BY created_at`;
+export const LIST_SITES = `SELECT id, name, base_url, enabled, notes, created_at, kind FROM source_site ORDER BY created_at`;
 export const GET_SITE = `SELECT id, name, base_url, enabled FROM source_site WHERE id = ?1`;
 export const INSERT_SITE = `
 INSERT INTO source_site (id, name, base_url, enabled, notes, created_by, created_at)

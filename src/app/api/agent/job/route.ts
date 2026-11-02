@@ -14,14 +14,24 @@ export async function POST(request: Request) {
   const params = await claimRun(a.db, jobId);
   if (!params) return json({ error: "no_run" }, 409);
 
-  const [{ results: rows }, { results: names }, lib] = await Promise.all([
+  const [{ results: rows }, { results: names }, lib, { results: folders }, { results: subjects }] = await Promise.all([
     a.db
       .prepare(`SELECT s.id, s.name, s.base_url, p.url FROM source_site s JOIN source_page p ON p.site_id = s.id
-                WHERE s.enabled = 1 AND p.syllabus_code = ?1 ORDER BY s.created_at, p.created_at`)
+                WHERE s.enabled = 1 AND s.kind = 'web' AND p.syllabus_code = ?1 ORDER BY s.created_at, p.created_at`)
       .bind(params.code)
       .all<{ id: string; name: string; base_url: string; url: string }>(),
     a.db.prepare(STORED_NAMES).bind(params.code).all<{ file_name: string }>(),
     getLibrarySettings(a.db),
+    a.db
+      .prepare(`SELECT f.folder_id, f.label, s.id AS site_id FROM source_drive_folder f JOIN source_site s ON s.id = f.site_id
+                WHERE s.enabled = 1 AND s.kind = 'gdrive' ORDER BY f.created_at`)
+      .bind()
+      .all<{ folder_id: string; label: string; site_id: string }>(),
+    a.db
+      .prepare(`SELECT DISTINCT y.code, s.name, q.short_name AS qualification FROM syllabus y JOIN subject s ON s.id = y.subject_id
+                JOIN qualification q ON q.id = s.qualification_id ORDER BY y.code`)
+      .bind()
+      .all<{ code: string; name: string; qualification: string }>(),
   ]);
   const sources = new Map<string, { siteId: string; name: string; baseUrl: string; pages: string[] }>();
   for (const r of rows) {
@@ -33,7 +43,12 @@ export async function POST(request: Request) {
     params,
     library: lib,
     sources: [...sources.values()],
+    driveFolders: folders.map((f) => ({ siteId: f.site_id, folderId: f.folder_id, label: f.label })),
+    subjects,
     have: names.map((n) => n.file_name),
-    limits: { maxFiles: AGENT.maxFilesPerRun, maxFileBytes: LIBRARY.maxFileBytes, delayMs: AGENT.delayMs, userAgentToken: AGENT.userAgentToken },
+    limits: {
+      maxFiles: AGENT.maxFilesPerRun, maxFileBytes: LIBRARY.maxFileBytes, delayMs: AGENT.delayMs, userAgentToken: AGENT.userAgentToken,
+      driveDelayMs: AGENT.driveDelayMs, driveMaxFolders: AGENT.driveMaxFolders, driveMaxDepth: AGENT.driveMaxDepth,
+    },
   });
 }

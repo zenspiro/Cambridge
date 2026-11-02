@@ -2,6 +2,25 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-02: Google Drive folders as sources
+
+**What**
+- Sources: a source with the address `https://drive.google.com/` becomes a Google Drive source; paste many shared folder links at once (one per line), remove one with the inline confirm; each folder shows what the agent last found there.
+- Agent: walks each Drive folder tree through Google's official Drive API (API key from the GitHub secret `GOOGLE_DRIVE_API`, sent in a header), works out every PDF's subject, year, session, type, paper and variant from file and folder names, reports each folder's reading and every unclear file with the reason, and downloads only what the run asks for and the library lacks, through the usual checks.
+- Run page: "Google Drive folders read" (looks like, PDFs, folders, years, other subjects, errors); "Would download" says how each name was worked out.
+- Migration 0008: `source_site.kind`, `source_drive_folder`.
+- Brief rule 3.8 updated with the owner's decision.
+
+**Why**
+- Owner found a large shared collection (linked from revisiontown.com, held on Google Drive) and wants the agent, not manual downloads, to collect it, and to understand folders and files by itself.
+- revisiontown.com's robots.txt blocks AI agents and says ai-train=no, so its pages are never crawled; the owner pastes the Drive links. Google's official API is the sanctioned way into Drive.
+
+**Tested**
+- 78 unit tests pass (7 new: Cambridge names in any spelling, descriptive names read with folder help, specimens and syllabus documents, unclear files with reasons, folder readings, Drive link parsing; and a guard that agent scripts load in Node's strip-only mode).
+- 153 browser checks, run twice; the agent suite runs a fake Drive API: bulk folder paste, dry run naming files from folder and file names, unclear and other-subject files reported, a private folder reported without stopping the run, the key only ever in a header, run page folder reading and "worked out" notes, download storing four files tagged with Drive links, Sources page showing the folder's contents, and a Drive source refusing non-Drive links.
+- Fixed during testing: a constructor shorthand Node cannot run without a compiler (would have failed on GitHub); a syllabus document wrongly needing a session.
+- Not tested: the real Google Drive (this session's safety check refused a probe). The first dry run on GitHub is the real test.
+
 ## 2026-11-02: Admin is desktop only
 
 **What:** admin browser suites (sign-in, library, agent) now run at desktop width only; the smoke test keeps public pages at 375 px and 1400 px and checks the sign-in page at 1400 px.

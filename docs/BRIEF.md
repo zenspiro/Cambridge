@@ -45,6 +45,7 @@ An exam preparation platform for Cambridge IGCSE, O Level and A Level students.
 6. **Students may see an index** (year, paper, question number, topic, marks) and a link to an official Cambridge-hosted copy where one exists. Never a copy we host.
 7. **Statistics about papers are allowed** (topic frequency, typical marks, command words).
 8. **Acquisition agent** downloads only publicly accessible files. No logins, no paywall or CAPTCHA bypass. Respects robots.txt and site terms. Approved source list is set by the owner.
+   - **Owner update, 2 Nov 2026:** the owner lifted the "official Cambridge only / no third-party copies" limit and asked for the agent to collect from shared Google Drive collections (third-party copies of Cambridge papers). The agent uses Google's official Drive API with an API key for folders shared as "anyone with the link". Still in force: no paywall or CAPTCHA bypass, robots.txt and AI opt-outs on websites are honoured (revisiontown.com blocks AI agents, so its pages are never crawled; only the Drive folder links are used), and students never see source files (rule 1). The copyright position of third-party copies is the owner's call (open decision 8).
 
 ---
 

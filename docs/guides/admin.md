@@ -38,6 +38,14 @@ The websites the download agent may visit. It starts with Cambridge's official s
 
 Only add a source if you are sure its files may be used (brief section 3).
 
+## Google Drive folders
+1. Sources page: add a source named for the collection (for example "Revisiontown Drive") with the address `https://drive.google.com/`. It becomes a Google Drive source.
+2. Under it, paste the shared folder links, one per line (up to 50 at a time), and press Add folders. Duplicates and lines that are not folder links are skipped and counted.
+3. Run the agent (dry run first). The run page shows "Google Drive folders read": what each folder looks like (for example "IGCSE Physics 0625"), how many PDFs and years it holds, and files for other subjects. "Would download" lists each file with how its name was worked out; "Links not recognised" lists files it could not read, with the reason.
+4. Each folder on the Sources page then shows what the agent last found there.
+
+The folders must be shared as "anyone with the link". A folder that needs an invitation shows "access denied" in the run. First-time setup: the `GOOGLE_DRIVE_API` key in GitHub (`agent-setup.md`).
+
 ## Start pages
 Each source lists the pages the agent reads (under "Start pages" on the Sources page). The agent only follows PDF links on these pages that stay inside the source's address. Add a page with its full https address; remove one with "Remove page", then "Yes, remove" or "Never mind". A source with no start pages is skipped.
 

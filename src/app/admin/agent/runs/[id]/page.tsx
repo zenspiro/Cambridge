@@ -256,7 +256,31 @@ export default async function RunPage({
         </section>
       ) : null}
 
-      <FileList title={p.mode === "dry" ? "Would download" : "Found"} files={candidates.map((c) => ({ name: c.name }))} describe={describe}
+      {arr(rep.driveFolders).length > 0 ? (
+        <section className="card stack">
+          <h2 className="subtitle">Google Drive folders read</h2>
+          <ul className="list">
+            {arr(rep.driveFolders).map((f) => (
+              <li className="list-row" key={f.folderId}>
+                <span className="doc-main">
+                  <span><strong>{f.name}</strong>{f.looksLike ? <span className="muted"> · looks like {f.looksLike}</span> : null}</span>
+                  {f.error ? (
+                    <span className="event-bad">Could not be read: {f.error}</span>
+                  ) : (
+                    <span className="muted">
+                      {f.pdfs} PDFs in {f.folders} folders{f.years ? `, ${f.years[0]} to ${f.years[1]}` : ""}{f.truncated ? " (stopped at the folder limit)" : ""}.
+                      {" "}{f.forThisSyllabus} recognised for {p.code}
+                      {Object.keys(f.otherSubjects ?? {}).length ? `; other subjects: ${Object.entries(f.otherSubjects).map(([c, n]) => `${c} (${n})`).join(", ")}` : ""}.
+                    </span>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      <FileList title={p.mode === "dry" ? "Would download" : "Found"} files={candidates.map((c) => ({ name: c.name, note: c.why && c.why !== "Cambridge file name" ? `worked out: ${c.why}` : undefined }))} describe={describe}
         note={p.mode === "dry" ? "Nothing has been downloaded yet. Press the button above to fetch these." : undefined} />
       <FileList title="Stored" files={arr(rep.stored).map((name) => ({ name }))} describe={describe} />
       <FileList title="Not stored" files={arr(rep.failed).map((f) => ({ name: f.name, note: reasonText(f.reason) }))} describe={describe} />
