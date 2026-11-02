@@ -1,4 +1,5 @@
 import { SESSION_LABELS } from "../config.ts";
+import { REASON_LABELS } from "../library/labels.ts";
 import type { RunParams } from "./runs.ts";
 
 export const STATUS_LABELS: Record<string, string> = {
@@ -16,7 +17,7 @@ export function elapsed(ms: number): string {
   return m > 0 ? `${m} min ${s % 60} s` : `${s} s`;
 }
 
-export function readEvents(json: string): { at: number; text: string }[] {
+export function readEvents(json: string): import("./runs.ts").RunEvent[] {
   try {
     const v = JSON.parse(json);
     return Array.isArray(v) ? v.filter((e) => e && typeof e.at === "number" && typeof e.text === "string") : [];
@@ -56,3 +57,13 @@ export function readReport(json: string): RunReport {
 }
 
 export const arr = <T>(v: T[] | undefined, max = 1000): T[] => (Array.isArray(v) ? v.slice(0, max) : []);
+
+/** "Not a PDF", "the website answered 404", or the code itself. */
+export function reasonText(reason: string | undefined): string {
+  if (!reason) return "";
+  const known = (REASON_LABELS as Record<string, string>)[reason];
+  if (known) return known;
+  if (reason.startsWith("http_")) return `the website answered ${reason.slice(5)}`;
+  if (reason === "download_failed") return "the download did not finish";
+  return reason.replace(/_/g, " ");
+}

@@ -7,14 +7,15 @@ Current state, kept short. The full brief (product, copyright rules, standards) 
 - Never use the em dash character anywhere: replies, code, comments, commits, docs, page copy.
 - Plan first. Code only after the owner says "go", "start", "proceed" or similar. Give options with a recommendation.
 - Never ask for secret values. Never open a pull request unless asked. Commits carry no AI model names.
-- 375 px is the narrowest phone width to design and test for.
+- 375 px is the narrowest phone width to design and test for, for student and public pages.
+- The admin panel is desktop only (owner decision, 2 Nov 2026): design and test admin pages at desktop width (1400 px); do not test them on phone widths.
 
 ## Status
 - Step 0 (repo, CI, Cloudflare, docs) live.
 - Admin sign-in (Step 1-lite) live: one platform admin, password only (owner decision).
 - Build 3a (source library), 3b (agent, settings) and live run feedback are live; owner's secrets set. First real runs stored June 2024 (14 files) and the 2023 specimens.
-- Library hierarchy and checklist live. Papers, routes, variant 2 and the subject overview built (next merge).
-- Owner's queue (1 Nov 2026), in order: 1 papers and overview (built), 2 plain-word agent activity, 3 guided upload page, 4 organised sources page (grouping, search, duplicate flags), 5 Step 2 with "Find on Cambridge".
+- Library hierarchy, checklist, papers, routes, variant 2 and the subject overview live. Plain-word agent activity built (next merge).
+- Owner's queue (1 Nov 2026), in order: 1 papers and overview (live), 2 plain-word agent activity (built), 3 guided upload page, 4 organised sources page (grouping, search, duplicate flags), 5 Step 2 with "Find on Cambridge".
 - Pakistan sits variant 2 (owner confirmed): essential variants are variant 2 for 0625. Cambridge's public site only has variant 1, so variant 2 files come by upload or another approved source.
 - UK GCSE (AQA, Edexcel, OCR) is wanted later: a separate qualification family and exam boards, its own sources and copyright review. Not started.
 - First production run failed because `AGENT_SECRET` sat under GitHub's "Agents" secrets (Copilot), not "Actions"; owner moved it.
@@ -60,7 +61,7 @@ Current state, kept short. The full brief (product, copyright rules, standards) 
 
 ## Library hierarchy and checklist
 - Hierarchy: `qualification` (IGCSE, O Level, AS & A Level) > `subject` (`qualification_id`) > syllabus code > `syllabus` versions > `source_document`. Adding a subject or syllabus is Step 2 (not built); empty qualifications still show.
-- `buildChecklist()` (`src/lib/library/checklist.ts`, pure) lists every expected file: per version the syllabus (essential), update and grade descriptions (extras) and specimens; per public session each paper and variant (qp, ms, ci for paper 5) plus er and gt. Rules are JSON in `syllabus.expected`. Essential variants per session are the setting `essentialVariants` (owner: variant 1, March 2). Stored files the checklist does not ask for show under "Other stored files".
+- `buildChecklist()` (`src/lib/library/checklist.ts`, pure) lists every expected file: per version the syllabus (essential), update and grade descriptions (extras) and specimens; per public session each paper and variant (qp, ms, ci for paper 5) plus er and gt. Rules are JSON in `syllabus.expected`. Essential variants: see below (variant 2). Stored files the checklist does not ask for show under "Other stored files".
 - `loadCatalog()` / `loadSyllabus()` (`src/lib/library/catalog.ts`) read the tree; the admin library and the signed `/api/agent/catalog` (for the AI engine, metadata only) both use them.
 - Search: every word must match; numbers match whole words (so "4" is paper 4), other words match word starts, file names match inside. Filters: year, session, type, paper, status (missing essentials, stored, extras).
 - Cells: green tick downloads; red cross (essential) or grey + (extra) opens the add page. Adding by upload renames to the checklist name; by link only from an enabled source (robots.txt, same-site redirects, size cap; `fetchApprovedPdf`). Origin `link`.
@@ -70,12 +71,13 @@ Current state, kept short. The full brief (product, copyright rules, standards) 
 - New types `su` (syllabus update) and `gd` (grade descriptions): `0625_y23_su.pdf`. Migration 0006 rebuilt `source_document` for them, a one-time owner-approved exception to additive only (allowed by name in `tests/unit/migrations.test.ts`).
 
 ## Acquisition agent (build 3b)
-- Run button: `/admin/agent` (years, sessions incl. Specimen, dry run or download) creates a `job` of type `agent` (one at a time, checked inside the insert; runs silent for 3 hours are closed) and calls GitHub `workflow_dispatch` on `.github/workflows/agent.yml` (`src/lib/agent/github.ts`). Report page: `/admin/agent/runs/[id]`; a dry run offers "Download these N files".
+- Run button: `/admin/agent` (years, sessions incl. Specimen, dry run or download) creates a `job` of type `agent` (one at a time, checked inside the insert; runs silent for 15 minutes are closed) and calls GitHub `workflow_dispatch` on `.github/workflows/agent.yml` (`src/lib/agent/github.ts`). Report page: `/admin/agent/runs/[id]`; a dry run offers "Download these N files".
 - Agent: `scripts/agent/run.ts`, Node built-ins only (no npm install in Actions). Reads its run from `/api/agent/job`, reads robots.txt first (missing means allowed, unreachable means nothing allowed), visits only the start pages (`source_page`, edited on `/admin/sources`), follows PDF links inside the source's address, waits 5 s between requests, never follows redirects off the site, sends each PDF to `/api/agent/file`, reports to `/api/agent/finish`.
 - Name translation: `toCambridgeName()` in `src/lib/agent/links.ts`, built from Cambridge's real names (`570010-june-2024-question-paper-11.pdf` to `0625_s24_qp_11.pdf`; specimens and syllabi too). Unknown links go in the report, never guessed.
 - `/api/agent/*` have no session: every request must pass `agentRequest()` (HMAC-SHA256 over time, nonce, method, path and body hash; 5 minute window; nonce spent once in `request_nonce`). Files must come from an enabled source's address, at most 400 per run, and go through `storeDocument()`.
 - Secrets (owner sets them, never in code): Worker `GITHUB_TOKEN` (Actions read and write on this repo only), Worker and GitHub `AGENT_SECRET` (same value, 32+ characters). Vars in `wrangler.jsonc`: `GITHUB_REPO`, `AGENT_WORKFLOW`, `AGENT_REF`. Local: `.dev.vars`.
-- Live feedback: the agent posts signed updates to `/api/agent/progress` (progress, step, event, its GitHub log link); `recordProgress()` keeps the last 30 events and a heartbeat. A 409 there means cancelled or closed, and the agent stops. The run page reloads itself every 10 s while active (`<meta http-equiv="refresh">`, no script), shows a progress bar, elapsed time, activity log, GitHub log link and Cancel (inline confirm).
+- Live feedback: the agent posts signed updates to `/api/agent/progress` (progress, step, event, its GitHub log link); `recordProgress()` keeps the last 120 events and a heartbeat. A 409 there means cancelled or closed, and the agent stops. The run page reloads itself every 10 s while active (`<meta http-equiv="refresh">`, no script), shows a progress bar, elapsed time, activity log, GitHub log link and Cancel (inline confirm).
+- Activity in plain words: the agent sends structured events (`text`, and for a file `file`, `outcome`, `reason`, `bytes`; checked by `cleanEvent()`), page lines use the page's own title (`pageTitle`) and `summariseFiles()` ("June 2024: 6 question papers, 6 mark schemes"). The run page describes file events with paper names (`describeFile`), groups the file lists by session, and ends with "Library after this run" (or "What a download would add"): each session touched, essential vs extras, its status and a link. Up to 120 events kept per run.
 - `closeStaleRuns()` (on start and when agent pages load): no sign of life for 15 minutes closes a run as `never_started` (GitHub never ran it, usually the GitHub secret) or `timeout`. A queued run older than 5 minutes shows a warning.
 - Local CSP: `upgrade-insecure-requests` is left out only when the request itself is plain http (local test server); https always has it.
 

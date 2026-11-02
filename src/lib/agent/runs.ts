@@ -4,6 +4,7 @@ import type { Db } from "../db.ts";
 import { randomId } from "../auth/crypto.ts";
 import { audit } from "../auth/session.ts";
 import type { LibrarySettings } from "../settings.ts";
+import { parseCambridgeName } from "../library/names.ts";
 
 export type RunMode = "dry" | "download";
 export type RunSession = "m" | "s" | "w" | "y";
@@ -80,7 +81,36 @@ export async function finishRun(db: Db, id: string, ok: boolean, report: string,
   return !!row;
 }
 
-export type RunEvent = { at: number; text: string };
+/** One activity line. With a file, the run page describes it in words using the paper names. */
+export type RunEvent = {
+  at: number;
+  text: string;
+  file?: string;
+  outcome?: "stored" | "failed" | "found";
+  reason?: string;
+  bytes?: number;
+};
+export type EventInput = Omit<RunEvent, "at">;
+
+/** Checks an event from the agent: plain text, or text with a Cambridge file name and outcome. */
+export function cleanEvent(v: unknown): EventInput | null {
+  if (typeof v === "string") {
+    const text = cleanEventText(v);
+    return text ? { text } : null;
+  }
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  const text = cleanEventText(o.text);
+  if (!text) return null;
+  const out: EventInput = { text };
+  const f = typeof o.file === "string" ? parseCambridgeName(o.file) : null;
+  if (f) out.file = f.fileName;
+  if (o.outcome === "stored" || o.outcome === "failed" || o.outcome === "found") out.outcome = o.outcome;
+  const reason = typeof o.reason === "string" && /^[a-z0-9_]{1,40}$/.test(o.reason) ? o.reason : null;
+  if (reason) out.reason = reason;
+  if (typeof o.bytes === "number" && Number.isInteger(o.bytes) && o.bytes >= 0 && o.bytes < 1e10) out.bytes = o.bytes;
+  return out;
+}
 export type RunRow = {
   id: string; status: string; params: string; result: string; error_ref: string | null; created_at: number;
   started_at: number | null; finished_at: number | null; heartbeat_at: number | null; progress: number;
@@ -126,7 +156,7 @@ export function cleanRunUrl(v: unknown, repo: string | undefined): string | null
 export async function recordProgress(
   db: Db,
   id: string,
-  update: { progress: number; step: string | null; event: string | null; runUrl: string | null },
+  update: { progress: number; step: string | null; event: EventInput | string | null; runUrl: string | null },
   now = Date.now(),
 ): Promise<boolean> {
   const row = await db.prepare(`SELECT events FROM job WHERE id = ?1 AND type = 'agent' AND status = 'running'`).bind(id).first<{ events: string }>();
@@ -137,7 +167,8 @@ export async function recordProgress(
   } catch {
     events = [];
   }
-  if (update.event) events = [...events, { at: now, text: update.event }].slice(-AGENT.maxEvents);
+  const ev = typeof update.event === "string" ? cleanEvent(update.event) : update.event;
+  if (ev) events = [...events, { at: now, ...ev }].slice(-AGENT.maxEvents);
   const pct = Math.max(0, Math.min(99, Math.round(update.progress)));
   const done = await db
     .prepare(`UPDATE job SET progress = ?2, step = COALESCE(?3, step), events = ?4, heartbeat_at = ?5, run_url = COALESCE(run_url, ?6)

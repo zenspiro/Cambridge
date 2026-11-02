@@ -19,7 +19,9 @@ writeFileSync(join(dir, "holiday-photo.pdf"), "%PDF-1.4\n%%EOF");
 writeFileSync(join(dir, "0625_s24_ms_21.pdf"), "<html>not a pdf</html>");
 
 const browser = await chromium.launch();
-for (const width of [375, 1400]) {
+// Admin is desktop only (owner decision): tested at desktop width.
+const DESKTOP = 1400;
+for (const width of [DESKTOP]) {
   const ctx = await browser.newContext({ viewport: { width, height: 900 }, acceptDownloads: true, extraHTTPHeaders: { "cf-connecting-ip": `203.0.113.${1 + rnd(250)}` } });
   const page = await ctx.newPage();
   const errors = [];
@@ -33,7 +35,7 @@ for (const width of [375, 1400]) {
   await page.click("button[type=submit]");
   await page.waitForURL(BASE + "/admin");
 
-  if (width === 375) {
+  if (width === DESKTOP) {
     await page.goto(BASE + "/admin/library/upload");
     await page.setInputFiles("#files", [join(dir, good), join(dir, "holiday-photo.pdf"), join(dir, "0625_s24_ms_21.pdf")]);
     await page.click("form[action='/admin/library/upload/send'] button[type=submit]");
@@ -100,7 +102,7 @@ for (const width of [375, 1400]) {
   await page.goto(BASE + "/admin/library/9999");
   check(page.url().includes("e=unknown"), `${width}px unknown syllabus goes back to the library`);
 
-  if (width === 1400) {
+  if (width === DESKTOP) {
     // Essential variants per syllabus.
     await page.goto(BASE + "/admin/library/0625");
     for (const sess of ["m", "s", "w"]) for (const v of ["1", "2", "3"]) await page.uncheck(`input[name=ev_${sess}][value='${v}']`);
@@ -113,7 +115,7 @@ for (const width of [375, 1400]) {
     check((await page.locator("p.notice", { hasText: "Essential variants saved" }).count()) === 1, "variants: saved");
   }
 
-  if (width === 375) {
+  if (width === DESKTOP) {
     // Add a missing essential file from its cell, with any file name.
     await page.goto(BASE + "/admin/library/0625?status=missing");
     const missing = page.locator("a.cell-miss").first();
@@ -140,7 +142,7 @@ for (const width of [375, 1400]) {
   check((await page.locator(".doc-main", { hasText: "Cambridge International (official)" }).count()) === 1, `${width}px sources lists Cambridge`);
   await noOverflow("sources");
 
-  if (width === 1400) {
+  if (width === DESKTOP) {
     await page.fill("#name", "Test site");
     await page.fill("#url", "https://127.0.0.1/");
     await page.click("text=Add source");

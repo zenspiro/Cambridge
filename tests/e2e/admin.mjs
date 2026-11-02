@@ -16,7 +16,8 @@ const check = (ok, label) => {
 const net = () => `198.51.100.${Math.floor(Math.random() * 250) + 1}`;
 
 const browser = await chromium.launch();
-for (const width of [375, 1400]) {
+// Admin is desktop only (owner decision): tested at desktop width.
+for (const width of [1400]) {
   const ctx = await browser.newContext({ viewport: { width, height: 800 }, extraHTTPHeaders: { "cf-connecting-ip": net() } });
   const page = await ctx.newPage();
   const errors = [];

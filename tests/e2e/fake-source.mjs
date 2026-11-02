@@ -13,7 +13,7 @@ export function startFakeSource(port = 9911) {
     "/Images/117-2023-2025-teacher-guide.pdf": pdf("guide"),
     "/blocked/118-june-2024-question-paper-31.pdf": pdf("blocked"),
   };
-  const page = `<html><body>
+  const page = `<html><head><title>Physics 0625 past papers (test site)</title></head><body>
     ${Object.keys(files).map((f) => `<a href="${f}">x</a>`).join("\n")}
     <a href="https://evil.example/june-2024-question-paper-41.pdf">off site</a>
     <a href="/Images/119-june-2024-mark-scheme-paper-21.pdf">404</a>
