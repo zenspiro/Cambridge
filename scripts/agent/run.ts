@@ -9,13 +9,23 @@ import { parseCambridgeName } from "../../src/lib/library/names.ts";
 import { REASON_LABELS } from "../../src/lib/library/labels.ts";
 import { pageTitle, summariseFiles } from "../../src/lib/library/summary.ts";
 import { SESSION_LABELS } from "../../src/lib/config.ts";
+import { classifyFile, readFolder, type KnownSubject } from "../../src/lib/agent/classify.ts";
+import { DriveError, makeDrive, targetId, walk, type Drive } from "./drive.ts";
 
 type Job = {
   params: { code: string; years: number[]; sessions: string[]; mode: "dry" | "download" };
   sources: { siteId: string; name: string; baseUrl: string; pages: string[] }[];
+  driveFolders?: { siteId: string; folderId: string; label: string }[];
+  subjects?: KnownSubject[];
   have: string[];
-  limits: { maxFiles: number; maxFileBytes: number; delayMs: number; userAgentToken: string };
+  limits: {
+    maxFiles: number; maxFileBytes: number; delayMs: number; userAgentToken: string;
+    driveDelayMs?: number; driveMaxFolders?: number; driveMaxDepth?: number;
+  };
 };
+
+// Google Drive API key (GitHub secret GOOGLE_DRIVE_API). Never logged or sent to our site.
+const DRIVE_KEY = process.env.GOOGLE_DRIVE_API ?? "";
 
 const APP_URL = (process.env.APP_URL ?? "").replace(/\/$/, "");
 const SECRET = process.env.AGENT_SECRET ?? "";
@@ -95,7 +105,7 @@ async function politeFetch(url: string, maxBytes: number): Promise<{ status: num
 type Report = {
   pagesVisited: number;
   linksFound: number;
-  candidates: { name: string; url: string; siteId: string }[];
+  candidates: { name: string; url: string; siteId: string; driveId?: string; why?: string }[];
   stored: string[];
   skippedHave: number;
   skippedNotRequested: number;
@@ -103,6 +113,7 @@ type Report = {
   unmatched: string[];
   robotsBlocked: string[];
   pageErrors: { url: string; status: string }[];
+  driveFolders?: DriveSummary[];
   error?: string;
 };
 
@@ -130,6 +141,11 @@ async function progress(pct: number, step: string, event?: Event) {
   }
 }
 
+type DriveSummary = {
+  folderId: string; name: string; looksLike: string; folders: number; pdfs: number; recognised: number;
+  forThisSyllabus: number; otherSubjects: Record<string, number>; years: [number, number] | null; truncated: boolean; error?: string;
+};
+
 const report: Report = {
   pagesVisited: 0, linksFound: 0, candidates: [], stored: [], skippedHave: 0, skippedNotRequested: 0,
   failed: [], unmatched: [], robotsBlocked: [], pageErrors: [],
@@ -142,10 +158,11 @@ async function finish(ok: boolean) {
     ok,
     report: {
       ...report,
-      candidates: trim(report.candidates, 1000).map(({ name, url }) => ({ name, url })),
+      candidates: trim(report.candidates, 1000).map(({ name, url, why }) => ({ name, url, ...(why ? { why } : {}) })),
       stored: trim(report.stored, 1000),
       failed: trim(report.failed, 500),
       unmatched: trim(report.unmatched, 300),
+      driveFolders: trim(report.driveFolders ?? [], 100),
       robotsBlocked: trim(report.robotsBlocked, 300),
       pageErrors: trim(report.pageErrors, 100),
     },
@@ -261,6 +278,90 @@ async function main() {
       await progress(pct, `Reading start page ${pagesDone} of ${totalPages}`, `Read "${title}": ${links.length} PDF links. ${parts.join("; ")}.`);
     }
   }
+  // Google Drive folders: walk each tree, work out what every PDF is, keep what this run asks for.
+  let drive: Drive | null = null;
+  const folders = job.driveFolders ?? [];
+  if (folders.length > 0) {
+    if (!DRIVE_KEY) {
+      report.pageErrors.push({ url: "Google Drive", status: "the GOOGLE_DRIVE_API secret is missing in GitHub" });
+      await progress(findShare, "Google Drive", "Google Drive folders skipped: the GOOGLE_DRIVE_API secret is missing in GitHub (Settings, Secrets and variables, Actions).");
+    } else {
+      const base = TEST_MODE && process.env.DRIVE_API_BASE ? process.env.DRIVE_API_BASE : "https://www.googleapis.com/drive/v3";
+      drive = makeDrive({ key: DRIVE_KEY, base, delayMs: TEST_MODE ? 20 : Math.max(job.limits.driveDelayMs ?? 1000, 500) });
+      report.driveFolders = [];
+      let n = 0;
+      for (const f of folders) {
+        n++;
+        const step = `Reading Google Drive folder ${n} of ${folders.length}`;
+        await progress(findShare, step);
+        try {
+          const tree = await walk(drive, f.folderId, { maxFolders: job.limits.driveMaxFolders ?? 2000, maxDepth: job.limits.driveMaxDepth ?? 8 },
+            async (path, count) => { if (count % 25 === 0) await progress(findShare, `${step}: ${count} folders so far (${path.join(" / ")})`); });
+          const summary: DriveSummary = {
+            folderId: f.folderId, name: tree.root, looksLike: "", folders: tree.folders, pdfs: tree.pdfs.length, recognised: 0,
+            forThisSyllabus: 0, otherSubjects: {}, years: null, truncated: tree.truncated,
+          };
+          const reading = readFolder(tree.root, job.subjects ?? []);
+          const fresh: string[] = [];
+          let haveHere = 0;
+          let outside = 0;
+          for (const { item, path } of tree.pdfs) {
+            const c = classifyFile(path, item.name, job.subjects ?? []);
+            if (!c.name) {
+              if (c.code && c.code !== job.params.code) summary.otherSubjects[c.code] = (summary.otherSubjects[c.code] ?? 0) + 1;
+              else if (report.unmatched.length < 300) report.unmatched.push(`${[...path, item.name].join(" / ")}: ${c.why}`);
+              continue;
+            }
+            summary.recognised++;
+            const p = parseCambridgeName(c.name)!;
+            if (p.code !== job.params.code) {
+              summary.otherSubjects[p.code] = (summary.otherSubjects[p.code] ?? 0) + 1;
+              continue;
+            }
+            summary.forThisSyllabus++;
+            summary.years = summary.years ? [Math.min(summary.years[0], p.year), Math.max(summary.years[1], p.year)] : [p.year, p.year];
+            if (!years.has(p.year) || !sessions.has(p.session)) {
+              outside++;
+              report.skippedNotRequested++;
+              continue;
+            }
+            if (have.has(c.name) || report.candidates.some((x) => x.name === c.name)) {
+              haveHere++;
+              report.skippedHave++;
+              continue;
+            }
+            const id = targetId(item);
+            report.candidates.push({ name: c.name, url: `https://drive.google.com/file/d/${id}/view`, siteId: f.siteId, driveId: id, why: c.why });
+            fresh.push(c.name);
+          }
+          const subj = (job.subjects ?? []).find((s) => s.code === (reading.code ?? (summary.forThisSyllabus ? job.params.code : "")));
+          summary.looksLike = subj ? `${subj.qualification} ${subj.name} ${subj.code}` : reading.subject ?? "not sure from the folder name";
+          report.driveFolders.push(summary);
+          report.pagesVisited++;
+          report.linksFound += tree.pdfs.length;
+          const others = Object.entries(summary.otherSubjects).map(([code, k]) => `${code}: ${k}`).join(", ");
+          await progress(findShare, step,
+            `Read Google Drive folder "${tree.root}": looks like ${summary.looksLike}. ${tree.pdfs.length} PDFs in ${tree.folders} folders` +
+            `${summary.years ? `, ${summary.years[0] === summary.years[1] ? summary.years[0] : `${summary.years[0]} to ${summary.years[1]}`}` : ""}` +
+            `${tree.truncated ? " (stopped at the folder limit)" : ""}. ${summary.forThisSyllabus} recognised as ${job.params.code} papers` +
+            `${others ? `, others for subjects not in this run (${others})` : ""}; ${tree.pdfs.length - summary.recognised - Object.values(summary.otherSubjects).reduce((a, b) => a + b, 0)} not recognised. ` +
+            (fresh.length ? `${fresh.length} new: ${summariseFiles(fresh)}` : "Nothing new for this run") +
+            `${haveHere ? `; ${haveHere} already in the library` : ""}${outside ? `; ${outside} for years or sessions not in this run` : ""}.`);
+        } catch (e) {
+          if (e instanceof Cancelled) throw e;
+          const why = e instanceof DriveError
+            ? e.status === 404 ? "not found (check the link)"
+              : e.status === 403 ? "access denied: the folder is not shared as \"anyone with the link\", or the API key is limited"
+              : e.message
+            : "could not be read";
+          report.pageErrors.push({ url: `Google Drive folder ${f.folderId}`, status: why });
+          report.driveFolders.push({ folderId: f.folderId, name: f.label || f.folderId, looksLike: "", folders: 0, pdfs: 0, recognised: 0, forThisSyllabus: 0, otherSubjects: {}, years: null, truncated: false, error: why });
+          await progress(findShare, step, `Google Drive folder ${f.label || f.folderId} could not be read: ${why}.`);
+        }
+      }
+    }
+  }
+
   const found = report.candidates.map((c) => c.name);
   await progress(findShare, "Pages read", found.length
     ? `Found ${found.length} file${found.length === 1 ? "" : "s"} to ${job.params.mode === "dry" ? "list (not downloaded in a dry run)" : "download"}: ${summariseFiles(found, 6)}.`
@@ -277,7 +378,11 @@ async function main() {
       const failedBefore = report.failed.length;
       let lastBytes = 0;
       try {
-        const r = await politeFetch(c.url, job.limits.maxFileBytes);
+        const r = c.driveId && drive
+          ? await drive.download(c.driveId, job.limits.maxFileBytes)
+              .then((bytes) => ({ status: 200, bytes, type: "application/pdf" }))
+              .catch((e) => ({ status: e instanceof DriveError ? e.status : 0, bytes: new Uint8Array(), type: "" }))
+          : await politeFetch(c.url, job.limits.maxFileBytes);
         if (r.status !== 200) {
           report.failed.push({ name: c.name, reason: `http_${r.status}` });
         } else {

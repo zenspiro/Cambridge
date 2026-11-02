@@ -34,5 +34,6 @@ jobs:
         env:
           APP_URL: ${{ vars.APP_URL || 'https://cambridge.zenspiroapps.workers.dev' }}
           AGENT_SECRET: ${{ secrets.AGENT_SECRET }}
+          GOOGLE_DRIVE_API: ${{ secrets.GOOGLE_DRIVE_API }}
           JOB_ID: ${{ inputs.job_id }}
         run: node scripts/agent/run.ts

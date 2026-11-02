@@ -35,10 +35,10 @@ sql(`INSERT OR REPLACE INTO source_page (id, site_id, syllabus_code, url, create
 sql(`UPDATE job SET status = 'failed' WHERE type = 'agent' AND status IN ('queued', 'running')`);
 
 // Async spawn: the fake source runs in this process and must keep answering.
-const runAgent = (jobId, delayMs = 50) =>
+const runAgent = (jobId, delayMs = 50, extra = {}) =>
   new Promise((resolve) => {
     const child = spawn("node", ["scripts/agent/run.ts"], {
-      env: { ...process.env, APP_URL: BASE, AGENT_SECRET: SECRET, JOB_ID: jobId, AGENT_TEST_MODE: "1", AGENT_DELAY_MS: String(delayMs) },
+      env: { ...process.env, APP_URL: BASE, AGENT_SECRET: SECRET, JOB_ID: jobId, AGENT_TEST_MODE: "1", AGENT_DELAY_MS: String(delayMs), ...extra },
     });
     let stderr = "";
     let stdout = "";
@@ -173,7 +173,51 @@ try {
   await page.goto(`${BASE}/admin/agent/runs/${ghost}`);
   check((await page.locator("p.alert").textContent())?.includes("AGENT_SECRET"), "never-started run explains the likely cause");
 
-  // 8. Settings page.
+  // 8. Google Drive folders: the agent works out what each folder and file is.
+  sql(`UPDATE source_site SET enabled = 0 WHERE id = 'local-test'`);
+  sql(`DELETE FROM source_document WHERE file_name IN ('0625_s24_qp_12.pdf','0625_s24_ms_12.pdf','0625_s24_er.pdf','0625_y23_sp_2.pdf')`);
+  // The seeded Revisiontown Drive source is parked for the test; the test source has its own address.
+  sql(`UPDATE source_site SET enabled = 0 WHERE kind = 'gdrive' AND id <> 'local-drive'`);
+  sql(`INSERT OR REPLACE INTO source_site (id, name, base_url, enabled, notes, created_at, kind) VALUES ('local-drive', 'Test Drive', 'https://drive.google.com/e2e-test/', 1, '', 2, 'gdrive')`);
+  await page.goto(BASE + "/admin/sources");
+  await page.fill("#links-local-drive", "https://drive.google.com/drive/folders/ROOTFOLDER01?usp=sharing\nhttps://drive.google.com/drive/folders/PRIVATEFOLDR\nnot a link");
+  await page.click("form[action='/admin/sources/folders/add'] button");
+  await page.waitForURL(/e=ok_folders/);
+  check((await page.locator("p.muted", { hasText: "Added 2, already listed 0, not a folder link 1" }).count()) === 1, "drive: folder links pasted in bulk");
+  const driveEnv = { GOOGLE_DRIVE_API: "test-drive-key", DRIVE_API_BASE: fake.base + "drive/v3" };
+  const dd = newRun("dry");
+  const r5 = await runAgent(dd, 20, driveEnv);
+  check(r5.status === 0, `drive dry run exits cleanly${r5.status ? ": " + r5.stderr : ""}`);
+  const drep = JSON.parse(rows(`SELECT result FROM job WHERE id = '${dd}'`)[0].result);
+  const dnames = drep.candidates.map((c) => c.name).sort();
+  check(dnames.join(",") === "0625_s24_er.pdf,0625_s24_ms_12.pdf,0625_s24_qp_12.pdf,0625_y23_sp_2.pdf", `drive: files worked out from folder and file names (${dnames.join(",")})`);
+  check(drep.unmatched.some((u) => u.includes("Revision notes.pdf: could not tell the document type")), "drive: unclear files are reported with the reason");
+  const root = drep.driveFolders.find((f) => f.folderId === "ROOTFOLDER01");
+  check(root?.looksLike === "IGCSE Physics 0625" && root.pdfs === 6 && root.otherSubjects["0620"] === 1, "drive: the folder is understood (subject, counts, other subjects)");
+  check(drep.driveFolders.find((f) => f.folderId === "PRIVATEFOLDR")?.error?.includes("access denied"), "drive: a private folder is reported, not fatal");
+  check(fake.driveHits.every((h) => h.key === "test-drive-key" && !h.path.includes("test-drive-key")), "drive: API key sent only in a header, never in a URL");
+  await page.goto(`${BASE}/admin/agent/runs/${dd}`);
+  check((await page.locator("section", { hasText: "Google Drive folders read" }).locator("li", { hasText: "looks like IGCSE Physics 0625" }).count()) === 1, "drive: run page shows the folder reading");
+  check((await page.locator("text=worked out: syllabus from folder").count()) > 0, "drive: run page says how names were worked out");
+  const dl2 = newRun("download");
+  const r6 = await runAgent(dl2, 20, driveEnv);
+  check(r6.status === 0, `drive download exits cleanly${r6.status ? ": " + r6.stderr : ""}`);
+  const dstored = rows(`SELECT file_name, source_site_id, source_url FROM source_document WHERE job_id = '${dl2}' ORDER BY file_name`);
+  check(dstored.length === 4 && dstored.every((d) => d.source_site_id === "local-drive" && /^https:\/\/drive\.google\.com\/file\/d\/DRVFILE000\d\/view$/.test(d.source_url)), "drive: four files stored, tagged with their Drive link");
+  await page.goto(BASE + "/admin/sources");
+  const folderLine = page.locator(".doc-main", { hasText: "looks like IGCSE Physics 0625" });
+  check((await folderLine.count()) === 1 && (await folderLine.textContent())?.includes("6 PDFs in 4 folders"), "drive: sources page shows what the folder held");
+  const fileApi = await apiRequest.newContext({ baseURL: BASE });
+  const pdfBody = new TextEncoder().encode("%PDF-1.4\n%%EOF");
+  const sneaky = await fileApi.post("/api/agent/file", {
+    data: Buffer.from(pdfBody),
+    headers: { ...(await signRequest(SECRET, "POST", "/api/agent/file", pdfBody)), "x-agent-job": dl2, "x-agent-file": "0625_s24_qp_13.pdf", "x-agent-site": "local-drive", "x-agent-url": "https://drive.google.com/evil" },
+  });
+  check([403, 409].includes(sneaky.status()), "drive: only Drive file links are accepted for a Drive source");
+  await fileApi.dispose();
+  sql(`UPDATE source_site SET enabled = 1 WHERE id = 'local-test'`);
+
+  // 9. Settings page.
   await page.goto(BASE + "/admin/settings");
   await page.fill("input[name=fromYear]", "2030");
   await page.click("form[action='/admin/settings/save'] button");
@@ -213,6 +257,9 @@ try {
   sql(`DELETE FROM source_page WHERE site_id = 'local-test'`);
   sql(`UPDATE source_document SET source_site_id = NULL WHERE source_site_id = 'local-test'`);
   sql(`DELETE FROM source_site WHERE id = 'local-test'`);
+  sql(`UPDATE source_document SET source_site_id = NULL WHERE source_site_id = 'local-drive'`);
+  sql(`DELETE FROM source_site WHERE id = 'local-drive'`);
+  sql(`UPDATE source_site SET enabled = 1 WHERE id = 'revisiontown-drive'`);
   sql(`UPDATE source_site SET enabled = 1 WHERE id = 'cambridge-official'`);
   sql(`UPDATE job SET status = 'failed' WHERE type = 'agent' AND status IN ('queued', 'running')`);
 }

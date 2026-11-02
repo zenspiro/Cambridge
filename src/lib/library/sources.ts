@@ -3,6 +3,7 @@ import type { Db } from "../db.ts";
 import { randomId } from "../auth/crypto.ts";
 import { audit } from "../auth/session.ts";
 import * as Q from "./queries.ts";
+import { driveFolderId } from "../agent/classify.ts";
 
 export type SiteError = "name" | "url" | "notes" | "exists";
 
@@ -46,6 +47,8 @@ export async function addSite(
   if (notes === null) return { ok: false, error: "notes" };
   const row = await db.prepare(Q.INSERT_SITE).bind(randomId(), name, url, notes, actorId, now).first<{ id: string }>();
   if (!row) return { ok: false, error: "exists" };
+  // drive.google.com itself is a Google Drive source: it holds folders, not start pages.
+  if (url === DRIVE_BASE) await db.prepare(`UPDATE source_site SET kind = 'gdrive' WHERE id = ?1`).bind(row.id).run();
   await audit(db, { actorId, action: "source_site.add", entity: "source_site", entityId: row.id }, now);
   return { ok: true, id: row.id };
 }
@@ -108,5 +111,36 @@ export async function addPage(
 export async function removePage(db: Db, id: string, actorId: string, now = Date.now()) {
   const row = await db.prepare(`DELETE FROM source_page WHERE id = ?1 RETURNING id`).bind(id).first<{ id: string }>();
   if (row) await audit(db, { actorId, action: "source_page.remove", entity: "source_page", entityId: id }, now);
+  return !!row;
+}
+
+// Google Drive sources: a site whose address is drive.google.com holds shared folders.
+export const DRIVE_BASE = "https://drive.google.com/";
+const MAX_FOLDERS_PER_ADD = 50;
+
+/** Adds every Drive folder link in the text (one per line). Duplicates and bad lines are counted, not stored. */
+export async function addDriveFolders(db: Db, siteId: string, text: unknown, actorId: string, now = Date.now()) {
+  const site = await db.prepare(`SELECT id, kind FROM source_site WHERE id = ?1`).bind(siteId).first<{ id: string; kind: string }>();
+  if (!site || site.kind !== "gdrive") return { ok: false as const, error: "missing" as const };
+  const lines = typeof text === "string" ? text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, MAX_FOLDERS_PER_ADD) : [];
+  let added = 0, dupes = 0, bad = 0;
+  for (const line of lines) {
+    const id = driveFolderId(line);
+    if (!id) { bad++; continue; }
+    const row = await db
+      .prepare(`INSERT INTO source_drive_folder (id, site_id, folder_id, created_by, created_at) VALUES (?1, ?2, ?3, ?4, ?5)
+                ON CONFLICT DO NOTHING RETURNING id`)
+      .bind(randomId(), site.id, id, actorId, now)
+      .first<{ id: string }>();
+    if (row) added++;
+    else dupes++;
+  }
+  if (added) await audit(db, { actorId, action: "drive_folder.add", entity: "source_site", entityId: site.id, detail: { added } }, now);
+  return { ok: true as const, added, dupes, bad };
+}
+
+export async function removeDriveFolder(db: Db, id: string, actorId: string, now = Date.now()) {
+  const row = await db.prepare(`DELETE FROM source_drive_folder WHERE id = ?1 RETURNING id`).bind(id).first<{ id: string }>();
+  if (row) await audit(db, { actorId, action: "drive_folder.remove", entity: "source_drive_folder", entityId: id }, now);
   return !!row;
 }

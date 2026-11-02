@@ -68,6 +68,7 @@
   .actions { @apply flex flex-wrap items-center gap-2; }
   .pages { @apply mt-2 flex w-full flex-col gap-2 rounded-lg bg-wash p-3; }
   .inline-form { @apply flex flex-col gap-2 sm:flex-row sm:items-center; }
+  .textarea { @apply min-h-24 font-mono text-xs; }
   .form-grid { @apply grid grid-cols-1 gap-3 sm:grid-cols-2; }
   .fieldset { @apply border-0 p-0; }
   .checks { @apply mt-2 flex flex-wrap gap-x-5 gap-y-2; }

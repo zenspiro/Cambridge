@@ -25,3 +25,10 @@ This lets the Run agent button start the agent on GitHub.
 3. If it says the agent is not set up, or GitHub refused the token, the message names what to fix.
 
 The agent only works once `.github/workflows/agent.yml` is on the `main` branch.
+
+## 4. Google Drive (only for Drive sources)
+1. Google Cloud Console: create a project (any name), enable the **Google Drive API**.
+2. APIs and Services, Credentials, Create credentials, API key. Restrict it: API restrictions, Google Drive API only.
+3. GitHub: the Cambridge repository, Settings, Secrets and variables, **Actions**, New repository secret. Name `GOOGLE_DRIVE_API`, paste the key.
+
+The key only reads folders shared as "anyone with the link". It is sent to Google in a header and never shown or logged.

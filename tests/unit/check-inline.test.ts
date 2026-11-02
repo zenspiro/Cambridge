@@ -25,3 +25,15 @@ test("normal React code passes", () => {
   const ok = `<button className="btn" onClick={save}>Save</button>\nconst onConfirm = () => api.confirm(id);\nel.textContent = name;`;
   assert.ok(Object.values(scan(ok)).every((n) => n === 0));
 });
+
+test("agent scripts load in Node's strip-only TypeScript mode (no parameter properties, enums or namespaces)", async () => {
+  const { readdirSync, readFileSync } = await import("node:fs");
+  const dir = new URL("../../scripts/agent/", import.meta.url);
+  for (const f of readdirSync(dir).filter((x) => x.endsWith(".ts"))) {
+    const src = readFileSync(new URL(f, dir), "utf8");
+    assert.ok(!/constructor\s*\([^)]*\b(public|private|protected|readonly)\s/.test(src), `${f}: parameter properties`);
+    assert.ok(!/^\s*(export\s+)?(const\s+)?enum\s/m.test(src), `${f}: enum`);
+    assert.ok(!/^\s*(export\s+)?namespace\s/m.test(src), `${f}: namespace`);
+  }
+  await import("../../scripts/agent/drive.ts");
+});

@@ -36,7 +36,11 @@ export function describeRun(p: RunParams): string {
 export type RunReport = {
   pagesVisited?: number;
   linksFound?: number;
-  candidates?: { name: string; url: string }[];
+  candidates?: { name: string; url: string; why?: string }[];
+  driveFolders?: {
+    folderId: string; name: string; looksLike: string; folders: number; pdfs: number; recognised: number;
+    forThisSyllabus: number; otherSubjects: Record<string, number>; years: [number, number] | null; truncated: boolean; error?: string;
+  }[];
   stored?: string[];
   skippedHave?: number;
   skippedNotRequested?: number;

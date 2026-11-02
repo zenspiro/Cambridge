@@ -15,6 +15,7 @@ A plain list of what the platform does today, for non-developers.
 - Add any missing file from its cell: upload it (any file name) or paste a link from an approved website.
 - Upload: add up to 20 Cambridge PDFs at once; wrong names, non-PDFs and duplicates are skipped with a reason.
 - Approved sources: the list of websites the download agent may visit, which the admin can add to, switch off or remove, with the start pages the agent reads on each.
+- Google Drive collections: paste shared folder links on the Sources page; the agent reads the folders, works out what every file is (subject, year, session, paper, variant) from the folder and file names, and takes only what is missing.
 - Download agent: pick years and sessions, do a dry run to see what it would fetch, then download only the missing files. It reads each site's robots.txt, waits between requests and never logs in.
 - Live run page: progress bar, current step, time so far, and a plain-words line for every page and file (for example "Stored: June 2024, Paper 1 Multiple Choice (Core), variant 1, question paper"), a link to the GitHub log, and a Cancel button. It updates itself every 10 seconds.
 - After a run: what changed in the library, session by session, with how many of the files were essential.

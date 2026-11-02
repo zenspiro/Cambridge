@@ -68,4 +68,8 @@ export const AGENT = {
   maxReportBytes: 400_000,
   /** Honest name sent to websites and matched in robots.txt. */
   userAgentToken: "ExamPrepLibraryAgent",
+  /** Google Drive: pause between API calls, and how far one run may walk. */
+  driveDelayMs: 1_000,
+  driveMaxFolders: 2_000,
+  driveMaxDepth: 8,
 } as const;

@@ -20,11 +20,12 @@ export async function POST(request: Request) {
   const params = await activeRun(a.db, jobId);
   if (!params || params.mode !== "download") return json({ error: "no_run" }, 409);
   const site = await a.db
-    .prepare(`SELECT base_url FROM source_site WHERE id = ?1 AND enabled = 1`)
+    .prepare(`SELECT base_url, kind FROM source_site WHERE id = ?1 AND enabled = 1`)
     .bind(siteId)
-    .first<{ base_url: string }>();
-  // The file must come from an enabled, approved source (brief 3.8).
-  if (!site || !sourceUrl.startsWith(site.base_url)) return json({ error: "source" }, 403);
+    .first<{ base_url: string; kind: string }>();
+  // The file must come from an enabled, approved source; Drive files carry their Drive file link.
+  const fromDrive = site?.kind === "gdrive" && /^https:\/\/drive\.google\.com\/file\/d\/[A-Za-z0-9_-]{10,100}\/view$/.test(sourceUrl);
+  if (!site || !(site.kind === "gdrive" ? fromDrive : sourceUrl.startsWith(site.base_url))) return json({ error: "source" }, 403);
   if (!(await allow(a.db, await limitKey("agent-files", jobId), AGENT.maxFilesPerRun, 24 * 3_600_000))) {
     return json({ error: "limit" }, 429);
   }
