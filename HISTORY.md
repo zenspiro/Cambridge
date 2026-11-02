@@ -2,6 +2,22 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-02: Agent reads one subject, and reads any subject's names
+
+**What:** a run now reads only the Drive folders for its own subject: a folder named for another subject ("IGCSE Chemistry (0620)") is skipped without a call to Google, and the run page says how many were skipped. The classifier reads any syllabus code, not only those in the library: a code in brackets first, then a library code, then any four-digit number that is not a year. So "Computer Science (0478) / 2016 / Specimen Papers / 167432-specimen-paper-2-2016.pdf" becomes 0478_y16_sp_2.pdf (counted under other subjects), and a folder like "History (0470)" reads "History (0470), a subject not in the library yet".
+
+**Why:** owner feedback: the agent said "could not tell the subject" for a file whose folder names it, said "not sure" about History (0470), and a Physics run walked all 16 folders and listed thousands of links.
+
+**Tested:** 80 unit tests (new: subjects outside the library, years never taken for codes, the owner's 0478 example); 157 browser checks (new: a folder for another subject is skipped and Google is never asked about it).
+
+## 2026-11-02: Drive folders by name, clearer errors
+
+**What:** migration 0010 names the 16 Revisiontown folders from the subject heading above each link (IGCSE Mathematics (0580) and so on). The agent, the run page and the Sources page now show the folder's name, never its Drive code; the Sources page has an "Open in Google Drive" link instead. A folder Google will not show now says why in words: "does not exist or is not shared publicly", "refused access", or "refused the API key". The run page's failure list reads as sentences.
+
+**Why:** owner feedback: "Google Drive folder 1Ji-VoRo... could not be read: not found" means nothing to a person. That folder is IGCSE Chemistry (0620).
+
+**Tested:** 79 unit tests (seed test now checks every folder has a name); local migration; 156 browser checks, including checks that run and Sources pages never show folder codes and that an unreadable folder is named and explained.
+
 ## 2026-11-02: Revisiontown Drive collection seeded
 
 **What:** migration 0009 adds the source "Revisiontown collection (Google Drive)" and the 16 shared folders linked from revisiontown.com's IGCSE past papers page, so the owner does not type them. The folders attach to whichever source has the Drive address, in case one was added by hand.

@@ -10,9 +10,8 @@ test("Cambridge-named files are taken as they are, in any spelling", () => {
     const c = classifyFile(["anything"], f, SUBJECTS);
     assert.deepEqual([c.name, c.confidence], ["0625_s23_qp_42.pdf", "high"], f);
   }
-  assert.deepEqual(classifyFile([], "0620_s23_qp_42.pdf", SUBJECTS), {
-    name: null, code: "0620", confidence: "none", why: "syllabus 0620 is not in the library",
-  });
+  // Subjects not in the library are named too, so the agent can count them per subject.
+  assert.equal(name([], "0620_s23_qp_42.pdf"), "0620_s23_qp_42.pdf");
 });
 
 test("descriptive names are read with help from the folders", () => {
@@ -46,16 +45,25 @@ test("incomplete or unrelated files are left out, with the reason", () => {
   assert.match(c1.why, /session/);
   const c2 = classifyFile(["Physics 0625", "2023", "May June"], "Question Paper 4.pdf", SUBJECTS);
   assert.match(c2.why, /variant/);
-  assert.match(classifyFile(["Chemistry 0620", "2023", "May June"], "Question Paper 42.pdf", SUBJECTS).why, /subject/);
+  assert.match(classifyFile(["Chemistry", "2023", "May June"], "Question Paper 42.pdf", SUBJECTS).why, /subject/);
   assert.match(classifyFile(["Physics 0625"], "notes.docx", SUBJECTS).why, /not a PDF/);
   assert.match(classifyFile(["Physics 0625", "2023", "May June"], "Revision notes.pdf", SUBJECTS).why, /document type/);
 });
 
 test("a folder name says what it can on its own", () => {
-  assert.deepEqual(readFolder("IGCSE Physics (0625)", SUBJECTS), { code: "0625", subject: "IGCSE Physics", year: null, session: null });
-  assert.deepEqual(readFolder("2023 May-June", SUBJECTS), { code: null, subject: null, year: 2023, session: "s" });
-  assert.deepEqual(readFolder("w22", SUBJECTS), { code: null, subject: null, year: 2022, session: "w" });
-  assert.deepEqual(readFolder("Specimens", SUBJECTS), { code: null, subject: null, year: null, session: "y" });
+  assert.deepEqual(readFolder("IGCSE Physics (0625)", SUBJECTS), { code: "0625", subject: "IGCSE Physics", inLibrary: true, year: null, session: null });
+  assert.deepEqual(readFolder("2023 May-June", SUBJECTS), { code: null, subject: null, inLibrary: false, year: 2023, session: "s" });
+  assert.deepEqual(readFolder("w22", SUBJECTS), { code: null, subject: null, inLibrary: false, year: 2022, session: "w" });
+  assert.deepEqual(readFolder("Specimens", SUBJECTS), { code: null, subject: null, inLibrary: false, year: null, session: "y" });
+  // Subjects not in the library yet are still read by their code; years are never taken for codes.
+  assert.deepEqual(readFolder("History (0470)", SUBJECTS), { code: "0470", subject: null, inLibrary: false, year: null, session: null });
+  assert.equal(readFolder("Specimen Papers (2023)", SUBJECTS).code, null);
+  assert.equal(readFolder("O Level Computer Science 2210", SUBJECTS).code, "2210");
+});
+
+test("files of subjects not in the library are understood from their folders", () => {
+  assert.deepEqual(classifyFile(["Computer Science (0478)", "2016", "Specimen Papers"], "167432-specimen-paper-2-2016.pdf", SUBJECTS).name, "0478_y16_sp_2.pdf");
+  assert.equal(name(["IGCSE History (0470)", "2023", "May June"], "Question Paper 21.pdf"), "0470_s23_qp_21.pdf");
 });
 
 test("Drive folder links give their id; anything else does not", () => {

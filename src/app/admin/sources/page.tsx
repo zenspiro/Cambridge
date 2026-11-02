@@ -101,17 +101,17 @@ export default async function SourcesPage({ searchParams }: { searchParams: Prom
                       return (
                         <li className="list-row" key={f.id}>
                           <span className="doc-main">
-                            <span>{seen.name ?? f.label ?? "Not read yet"}{seen.looksLike ? <span className="muted"> · looks like {seen.looksLike}</span> : null}</span>
+                            <span>{f.label || seen.name || "Unnamed Google Drive folder"}{seen.looksLike ? <span className="muted"> · looks like {seen.looksLike}</span> : null}</span>
                             <span className="muted">
                               {seen.error ? `Last run: ${seen.error}` : seen.pdfs !== undefined
                                 ? `${seen.pdfs} PDFs in ${seen.folders ?? 0} folders${seen.years ? `, ${seen.years[0]} to ${seen.years[1]}` : ""}; ${seen.forThisSyllabus ?? 0} recognised for the syllabus run`
                                 : "Not read by the agent yet"}
                             </span>
-                            <a className="mono muted link" href={`https://drive.google.com/drive/folders/${encodeURIComponent(f.folder_id)}`} rel="noopener noreferrer" target="_blank">{f.folder_id}</a>
+                            <a className="muted link" href={`https://drive.google.com/drive/folders/${encodeURIComponent(f.folder_id)}`} rel="noopener noreferrer" target="_blank">Open in Google Drive</a>
                           </span>
                           {q.removefolder === f.id ? (
                             <span className="confirm">
-                              <span>Remove this folder?</span>
+                              <span>Remove {f.label || "this folder"}?</span>
                               <form method="post" action="/admin/sources/folders/remove">
                                 <input type="hidden" name="id" value={f.id} />
                                 <button className="btn btn-small btn-danger" type="submit">Yes, remove</button>

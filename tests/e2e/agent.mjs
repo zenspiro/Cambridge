@@ -184,6 +184,8 @@ try {
   await page.click("form[action='/admin/sources/folders/add'] button");
   await page.waitForURL(/e=ok_folders/);
   check((await page.locator("p.muted", { hasText: "Added 2, already listed 0, not a folder link 1" }).count()) === 1, "drive: folder links pasted in bulk");
+  // A folder named for another subject is skipped without asking Google (its id does not exist in the fake).
+  sql(`INSERT OR REPLACE INTO source_drive_folder (id, site_id, folder_id, label, created_by, created_at) VALUES ('e2e-other', 'local-drive', 'OTHERSUBJECT01', 'IGCSE Chemistry (0620)', 'platform-admin', 3)`);
   const driveEnv = { GOOGLE_DRIVE_API: "test-drive-key", DRIVE_API_BASE: fake.base + "drive/v3" };
   const dd = newRun("dry");
   const r5 = await runAgent(dd, 20, driveEnv);
@@ -194,11 +196,17 @@ try {
   check(drep.unmatched.some((u) => u.includes("Revision notes.pdf: could not tell the document type")), "drive: unclear files are reported with the reason");
   const root = drep.driveFolders.find((f) => f.folderId === "ROOTFOLDER01");
   check(root?.looksLike === "IGCSE Physics 0625" && root.pdfs === 6 && root.otherSubjects["0620"] === 1, "drive: the folder is understood (subject, counts, other subjects)");
-  check(drep.driveFolders.find((f) => f.folderId === "PRIVATEFOLDR")?.error?.includes("access denied"), "drive: a private folder is reported, not fatal");
+  check(drep.driveFolders.find((f) => f.folderId === "PRIVATEFOLDR")?.error?.includes("refused access"), "drive: a private folder is reported, not fatal");
+  check(drep.driveSkipped === 1 && !drep.driveFolders.some((f) => f.folderId === "OTHERSUBJECT01") && !fake.driveHits.some((h) => h.path.includes("OTHERSUBJECT01")),
+    "drive: folders for other subjects are skipped without a call to Google");
   check(fake.driveHits.every((h) => h.key === "test-drive-key" && !h.path.includes("test-drive-key")), "drive: API key sent only in a header, never in a URL");
   await page.goto(`${BASE}/admin/agent/runs/${dd}`);
   check((await page.locator("section", { hasText: "Google Drive folders read" }).locator("li", { hasText: "looks like IGCSE Physics 0625" }).count()) === 1, "drive: run page shows the folder reading");
   check((await page.locator("text=worked out: syllabus from folder").count()) > 0, "drive: run page says how names were worked out");
+  const runText = await page.locator("main").innerText();
+  check(!runText.includes("PRIVATEFOLDR") && !runText.includes("ROOTFOLDER01"), "drive: run page shows folder names, never folder codes");
+  const failedLine = await page.locator("section", { hasText: "Google Drive folders read" }).locator("li", { hasText: "An unnamed Google Drive folder" }).textContent();
+  check(failedLine?.includes("Could not be read: Google Drive refused access"), "drive: an unreadable folder is named and explained");
   const dl2 = newRun("download");
   const r6 = await runAgent(dl2, 20, driveEnv);
   check(r6.status === 0, `drive download exits cleanly${r6.status ? ": " + r6.stderr : ""}`);
@@ -207,6 +215,7 @@ try {
   await page.goto(BASE + "/admin/sources");
   const folderLine = page.locator(".doc-main", { hasText: "looks like IGCSE Physics 0625" });
   check((await folderLine.count()) === 1 && (await folderLine.textContent())?.includes("6 PDFs in 4 folders"), "drive: sources page shows what the folder held");
+  check(!(await page.locator("main").innerText()).includes("ROOTFOLDER01"), "drive: sources page shows names, not folder codes");
   const fileApi = await apiRequest.newContext({ baseURL: BASE });
   const pdfBody = new TextEncoder().encode("%PDF-1.4\n%%EOF");
   const sneaky = await fileApi.post("/api/agent/file", {

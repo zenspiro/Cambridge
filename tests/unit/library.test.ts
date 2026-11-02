@@ -181,4 +181,8 @@ test("the Revisiontown Drive collection is seeded: one Drive source, 16 folders"
   const folders = db.raw.prepare("SELECT folder_id FROM source_drive_folder WHERE site_id = 'revisiontown-drive'").all() as { folder_id: string }[];
   assert.equal(folders.length, 16);
   assert.ok(folders.every((f) => /^[A-Za-z0-9_-]{25,40}$/.test(f.folder_id)));
+  const labels = db.raw.prepare("SELECT folder_id, label FROM source_drive_folder WHERE site_id = 'revisiontown-drive'").all() as { folder_id: string; label: string }[];
+  assert.ok(labels.every((l) => /^IGCSE .+ \(\d{4}\)$/.test(l.label)), "every folder has a human name");
+  assert.equal(labels.find((l) => l.folder_id === "1Ji-VoRovspqnZtvxhJW1CCdeMilxQBCX")?.label, "IGCSE Chemistry (0620)");
+  assert.equal(labels.find((l) => l.folder_id === "1Baa4OKIzjjtHzwcy1-xwjBuCDMLh2FlW")?.label, "IGCSE Physics (0625)");
 });
