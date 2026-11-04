@@ -46,8 +46,8 @@ export type RunReport = {
   summary?: string;
   summaryBy?: "ai" | "rules";
   ai?: { calls: number; note?: string };
-  /** Files the AI could not place: for a person to look at. */
-  review?: string[];
+  /** Files the agent could not place, for a person to decide (read with readReviewItems). */
+  review?: unknown[];
   /** Files the AI judged not to be original Cambridge files. */
   notNeeded?: { count: number; examples: string[] };
   /** Drive folders not read because their names are for other subjects. */

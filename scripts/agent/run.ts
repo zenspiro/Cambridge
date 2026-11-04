@@ -19,6 +19,8 @@ type Job = {
   driveFolders?: { siteId: string; folderId: string; label: string }[];
   subjects?: KnownSubject[];
   have: string[];
+  /** The owner's decisions on files that needed an eye (by Drive file id within a source). */
+  decisions?: { siteId: string; id: string; decision: "accept" | "reject"; name: string | null }[];
   limits: {
     maxFiles: number; maxFileBytes: number; delayMs: number; userAgentToken: string;
     driveDelayMs?: number; driveMaxFolders?: number; driveMaxDepth?: number;
@@ -105,6 +107,9 @@ async function politeFetch(url: string, maxBytes: number): Promise<{ status: num
   return { status: 310, bytes: new Uint8Array(), type: "" };
 }
 
+type ReviewEntry = { where: string; why: string; driveId: string; siteId: string; suggest?: string; by: "ai" | "rules" };
+const MAX_REVIEW = 200;
+
 type Report = {
   pagesVisited: number;
   linksFound: number;
@@ -117,8 +122,10 @@ type Report = {
   robotsBlocked: string[];
   pageErrors: { url: string; status: string }[];
   driveFolders?: DriveSummary[];
-  /** Files the rules could not name and the AI was not sure about: for a person to look at. */
-  review?: string[];
+  /** Drive files nobody could place: for the owner to accept (as a checklist file) or reject. */
+  review?: ReviewEntry[];
+  /** Files skipped because the owner rejected them on an earlier run page. */
+  rejected?: number;
   /** Files the AI says are not original Cambridge files (notes, topic questions), with a few examples. */
   notNeeded?: { count: number; examples: string[] };
   /** Plain-English summary of the run (by the AI, or by rules when AI is not available). */
@@ -208,6 +215,7 @@ async function finish(ok: boolean) {
       stored: trim(report.stored, 1000),
       failed: trim(report.failed, 500),
       unmatched: trim(report.unmatched, 300),
+      review: trim(report.review ?? [], MAX_REVIEW),
       driveFolders: trim(report.driveFolders ?? [], 100),
       robotsBlocked: trim(report.robotsBlocked, 300),
       pageErrors: trim(report.pageErrors, 100),
@@ -226,6 +234,7 @@ async function main() {
   const years = new Set(job.params.years);
   const sessions = new Set(job.params.sessions);
   const have = new Set(job.have);
+  const decided = new Map((job.decisions ?? []).map((d) => [`${d.siteId}:${d.id}`, d]));
   const seen = new Set<string>();
   const totalPages = job.sources.reduce((n, s) => n + s.pages.length, 0);
   const findShare = job.params.mode === "dry" ? 95 : 20; // share of the bar for reading pages
@@ -402,11 +411,19 @@ async function main() {
           };
           const reading = readFolder(f.label || tree.root, subjects);
           const fresh: string[] = [];
-          const leftovers: { path: string[]; item: (typeof tree.pdfs)[number]["item"]; why: string; done?: boolean }[] = [];
+          const leftovers: { path: string[]; item: (typeof tree.pdfs)[number]["item"]; why: string; done?: boolean; answered?: boolean; by?: "ai" | "rules"; suggest?: string }[] = [];
           let haveHere = 0;
           let outside = 0;
           for (const { item, path } of tree.pdfs) {
-            const c = classifyFile(path, item.name, subjects);
+            // The owner's word on a file from an earlier run page beats the rules.
+            const d = decided.get(`${f.siteId}:${targetId(item)}`);
+            if (d?.decision === "reject") {
+              report.rejected = (report.rejected ?? 0) + 1;
+              continue;
+            }
+            const c = d?.name && parseCambridgeName(d.name)
+              ? { name: d.name, code: parseCambridgeName(d.name)!.code, why: "you accepted it on a run page" }
+              : classifyFile(path, item.name, subjects);
             if (!c.name) {
               if (c.code && c.code !== job.params.code) summary.otherSubjects[c.code] = (summary.otherSubjects[c.code] ?? 0) + 1;
               else leftovers.push({ path, item, why: c.why });
@@ -445,7 +462,8 @@ async function main() {
             const verdicts = Array.isArray(answer?.files) ? (answer.files as { i: number; outcome: string; name?: string; why: string }[]) : [];
             for (const v of verdicts) {
               const l = batch[v.i];
-              if (!l || l.done) continue;
+              if (!l || l.answered) continue;
+              l.answered = true;
               l.done = true;
               const where = [...l.path, l.item.name].join(" / ");
               if (v.outcome === "named" && v.name && parseCambridgeName(v.name)?.code === job.params.code) {
@@ -465,12 +483,22 @@ async function main() {
                 report.notNeeded.count++;
                 if (report.notNeeded.examples.length < 10) report.notNeeded.examples.push(`${where}: ${v.why}`);
               } else {
-                report.review ??= [];
-                if (report.review.length < 200) report.review.push(`${where}: ${v.why}`);
+                l.done = false; // left for the owner below, with the AI's reason
+                l.why = v.why || l.why;
+                l.by = "ai";
+                l.suggest = v.name;
               }
             }
           }
-          for (const l of leftovers) if (!l.done && report.unmatched.length < 300) report.unmatched.push(`${[...l.path, l.item.name].join(" / ")}: ${l.why}`);
+          // Files nobody could place go to "Needs your eye", where the owner can accept or reject them.
+          for (const l of leftovers) {
+            if (l.done) continue;
+            const where = [...l.path, l.item.name].join(" / ");
+            report.review ??= [];
+            if (report.review.length < MAX_REVIEW) {
+              report.review.push({ where, why: l.why, driveId: targetId(l.item), siteId: f.siteId, by: l.by ?? "rules", ...(l.suggest ? { suggest: l.suggest } : {}) });
+            } else if (report.unmatched.length < 300) report.unmatched.push(`${where}: ${l.why}`);
+          }
           summary.aiNamed = aiNamed;
           const subj = subjects.find((s) => s.code === (reading.code ?? (summary.forThisSyllabus ? job.params.code : "")));
           // A subject the library does not have yet still reads by its folder name ("History (0470)").
@@ -619,6 +647,7 @@ async function summarise(job: Job) {
     failed: report.failed.length,
     notNeeded: report.notNeeded?.count ?? 0,
     review: report.review?.length ?? 0,
+    rejected: report.rejected ?? 0,
     notNamed: report.unmatched.length,
     maxFiles: job.limits.maxFiles,
     drivePaused: report.drivePaused

@@ -18,6 +18,8 @@ export type SummaryFacts = {
   failed: number;
   notNeeded: number;
   review: number;
+  /** Files skipped because the owner rejected them on an earlier run page. */
+  rejected?: number;
   notNamed: number;
   maxFiles: number;
   /** Google Drive kept refusing downloads and the agent stopped asking (a real limit). */
@@ -58,6 +60,7 @@ export function ruleSummary(f: SummaryFacts): string {
   const leftovers = [
     f.review ? `${plural(f.review, "file")} need${f.review === 1 ? "s" : ""} your eye` : "",
     f.notNeeded ? `${plural(f.notNeeded, "file")} judged not needed` : "",
+    f.rejected ? `${plural(f.rejected, "file")} you rejected earlier skipped` : "",
     f.notNamed ? `${plural(f.notNamed, "file")} could not be named` : "",
   ].filter(Boolean);
   if (leftovers.length) out.push(`${leftovers.join(", ")}.`.replace(/^./, (c) => c.toUpperCase()));

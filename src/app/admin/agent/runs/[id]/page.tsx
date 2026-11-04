@@ -13,6 +13,8 @@ import { countTypes, groupFiles } from "@/lib/library/summary";
 import { formatBytes } from "@/lib/library/labels";
 import { sessionHref, versionHref } from "@/lib/library/slugs";
 import { AGENT } from "@/lib/config";
+import { ReviewList } from "@/components/ReviewList";
+import { acceptChoices, decisionKey, decisionsFor, readReviewItems } from "@/lib/agent/review";
 import { dateFmt, REASON_LABELS, timeFmt } from "@/lib/library/labels";
 
 export const metadata: Metadata = { title: "Agent run" };
@@ -84,7 +86,7 @@ export default async function RunPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ cancel?: string; ref?: string }>;
+  searchParams: Promise<{ cancel?: string; ref?: string; r?: string; at?: string }>;
 }) {
   await requireAdmin();
   const { id } = await params;
@@ -111,6 +113,15 @@ export default async function RunPage({
   const candidates = arr(rep.candidates);
   const done = !["queued", "running"].includes(run.status);
   const events = readEvents(run.events).reverse();
+  const reviewItems = readReviewItems(rep.review);
+  const [decisions, choices] = done && reviewItems.some((it) => it.driveId)
+    ? await Promise.all([decisionsFor(env.DB, reviewItems), acceptChoices(env.DB, p)])
+    : [new Map(), [] as string[]];
+  const isStored = (name: string) => !!cellsByName.get(name)?.doc;
+  const acceptedWaiting = reviewItems.filter((it) => {
+    const d = it.driveId && it.siteId ? decisions.get(decisionKey(it.siteId, it.driveId)) : undefined;
+    return d?.decision === "accept" && d.fileName && !isStored(d.fileName);
+  }).length;
   const slowStart = run.status === "queued" && now - run.created_at > AGENT.slowStartMs;
   const actionsUrl = env.GITHUB_REPO && /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(env.GITHUB_REPO)
     ? `https://github.com/${env.GITHUB_REPO}/actions/workflows/${env.AGENT_WORKFLOW ?? "agent.yml"}`
@@ -300,8 +311,20 @@ export default async function RunPage({
         note={p.mode === "dry" ? "Nothing has been downloaded yet. Press the button above to fetch these." : undefined} />
       <FileList title="Stored" files={arr(rep.stored).map((name) => ({ name }))} describe={describe} />
       <FileList title="Not stored" files={arr(rep.failed).map((f) => ({ name: f.name, note: reasonText(f.reason) }))} describe={describe} />
-      <List title="Needs your eye" items={arr(rep.review, 200)}
-        note="The AI looked at these and could not place them, or placed them outside this run. Nothing was fetched. If one is needed, add it by hand from the library." />
+      {acceptedWaiting > 0 ? (
+        <section className="card stack">
+          <p>{acceptedWaiting} accepted file{acceptedWaiting === 1 ? " is" : "s are"} waiting to be fetched.</p>
+          <form method="post" action="/admin/agent/start">
+            <input type="hidden" name="code" value={p.code} />
+            {p.years.map((y) => <input key={y} type="hidden" name="years" value={y} />)}
+            {p.sessions.map((s) => <input key={s} type="hidden" name="sessions" value={s} />)}
+            <input type="hidden" name="mode" value="download" />
+            <button className="btn btn-primary" type="submit">Download accepted files</button>
+          </form>
+        </section>
+      ) : null}
+      <ReviewList runId={run.id} items={reviewItems} decisions={decisions} choices={choices} stored={isStored} describe={describe}
+        message={q.r} at={q.r && /^\d{1,3}$/.test(q.at ?? "") ? Number(q.at) : undefined} />
       <List title={`Not needed: ${Number(rep.notNeeded?.count ?? 0)} files, examples`} items={arr(rep.notNeeded?.examples, 10)}
         note="The AI judged these are not original Cambridge files, for example notes or topic questions." />
       <List title="Folders the AI did not open" items={arr(rep.driveFolders).flatMap((f) => arr(f.aiSkipped, 20))}

@@ -202,7 +202,8 @@ try {
   const drep = JSON.parse(rows(`SELECT result FROM job WHERE id = '${dd}'`)[0].result);
   const dnames = drep.candidates.map((c) => c.name).sort();
   check(dnames.join(",") === "0625_s24_er.pdf,0625_s24_gt.pdf,0625_s24_ms_12.pdf,0625_s24_qp_12.pdf,0625_y23_sp_2.pdf", `drive: files worked out from folder and file names (${dnames.join(",")})`);
-  check(drep.unmatched.some((u) => u.includes("Revision notes.pdf: could not tell the document type")), "drive: unclear files are reported with the reason");
+  const notes = drep.review?.find((u) => u.where?.endsWith("Revision notes.pdf"));
+  check(notes?.why?.includes("could not tell the document type") && notes.driveId === "DRVFILE0004" && notes.by === "rules", "drive: unclear files go to Needs your eye with the reason");
   const root = drep.driveFolders.find((f) => f.folderId === "ROOTFOLDER01");
   check(root?.looksLike === "IGCSE Physics 0625" && root.pdfs === 7 && root.otherSubjects["0620"] === 1, "drive: the folder is understood (subject, counts, other subjects)");
   check(drep.driveFolders.find((f) => f.folderId === "PRIVATEFOLDR")?.error?.includes("refused access"), "drive: a private folder is reported, not fatal");
@@ -220,15 +221,48 @@ try {
   check(!runText.includes("PRIVATEFOLDR") && !runText.includes("ROOTFOLDER01"), "drive: run page shows folder names, never folder codes");
   const failedLine = await page.locator("section", { hasText: "Google Drive folders read" }).locator("li", { hasText: "An unnamed Google Drive folder" }).textContent();
   check(failedLine?.includes("Could not be read: Google Drive refused access"), "drive: an unreadable folder is named and explained");
+  // Needs your eye: reject, undo, then accept the unclear file as a missing checklist file.
+  sql(`DELETE FROM review_decision`);
+  await page.click("#review summary");
+  const notesRow = () => page.locator("#review li", { hasText: "Revision notes.pdf" });
+  check((await notesRow().locator("text=The rules say: could not tell the document type").count()) === 1, "review: the reason is shown in words");
+  await notesRow().locator("button", { hasText: "Reject" }).click();
+  await page.waitForURL(/r=ok_rejected/);
+  check((await notesRow().locator("text=Rejected: later runs skip it.").count()) === 1, "review: a file can be rejected");
+  await notesRow().locator("button", { hasText: "Undo" }).click();
+  await page.waitForURL(/r=ok_undone/);
+  const chosen = await notesRow().locator("select option:not([disabled])").first().getAttribute("value");
+  await notesRow().locator("select").selectOption(chosen);
+  await notesRow().locator("button", { hasText: "Accept" }).click();
+  await page.waitForURL(/r=ok_accepted/);
+  check((await notesRow().locator("text=fetched by the next download").count()) === 1 && (await page.locator("button", { hasText: "Download accepted files" }).count()) === 1,
+    `review: accepted as ${chosen}, with a button to fetch it`);
+  check(rows(`SELECT COUNT(*) AS n FROM audit_log WHERE action LIKE 'review.%'`)[0].n >= 3, "review: decisions are audited");
   const dl2 = newRun("download");
   const r6 = await runAgent(dl2, 20, driveEnv);
   check(r6.status === 0, `drive download exits cleanly${r6.status ? ": " + r6.stderr : ""}`);
   const dstored = rows(`SELECT file_name, source_site_id, source_url FROM source_document WHERE job_id = '${dl2}' ORDER BY file_name`);
-  check(dstored.length === 4 && dstored.every((d) => d.source_site_id === "local-drive" && /^https:\/\/drive\.google\.com\/file\/d\/DRVFILE000\d\/view$/.test(d.source_url)), "drive: four files stored, tagged with their Drive link");
+  check(dstored.length === 5 && dstored.every((d) => d.source_site_id === "local-drive" && /^https:\/\/drive\.google\.com\/file\/d\/DRVFILE000\d\/view$/.test(d.source_url)), "drive: five files stored, tagged with their Drive link");
+  check(dstored.some((d) => d.file_name === chosen && d.source_url.includes("DRVFILE0004")), "review: the accepted file is fetched under the chosen name");
   const dlrep = JSON.parse(rows(`SELECT result FROM job WHERE id = '${dl2}'`)[0].result);
   check(dlrep.failed.some((f) => f.name === "0625_s24_gt.pdf" && f.reason === "drive_quota"), "drive: a download Google refuses is recorded with Google's reason (quota)");
   await page.goto(BASE + `/admin/agent/runs/${dl2}`);
   check((await page.locator("main").innerText()).includes("download limit for this file was reached"), "drive: the run page explains a refused download in words");
+  // A rejected file is skipped by later runs.
+  await page.goto(`${BASE}/admin/agent/runs/${dd}`);
+  await page.click("#review summary");
+  check((await notesRow().locator("text=now in the library").count()) === 1, "review: the run page shows the accepted file is in the library");
+  await notesRow().locator("button", { hasText: "Undo" }).click();
+  await page.waitForURL(/r=ok_undone/);
+  await notesRow().locator("button", { hasText: "Reject" }).click();
+  await page.waitForURL(/r=ok_rejected/);
+  const dd2 = newRun("dry");
+  const r7 = await runAgent(dd2, 20, driveEnv);
+  const rrep = JSON.parse(rows(`SELECT result FROM job WHERE id = '${dd2}'`)[0].result);
+  check(r7.status === 0 && rrep.rejected === 1 && !(rrep.review ?? []).some((u) => u.where?.endsWith("Revision notes.pdf")) && /you rejected earlier/.test(rrep.summary ?? ""),
+    "review: a rejected file is skipped by later runs and counted in the summary");
+  sql(`DELETE FROM review_decision`);
+  sql(`DELETE FROM source_document WHERE file_name = '${chosen}' AND job_id = '${dl2}'`);
   await page.goto(BASE + "/admin/sources");
   const folderLine = page.locator(".doc-main", { hasText: "looks like IGCSE Physics 0625" });
   check((await folderLine.count()) === 1 && (await folderLine.textContent())?.includes("7 PDFs in 4 folders"), "drive: sources page shows what the folder held");

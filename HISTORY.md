@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-04: Accept or reject on "Needs your eye"
+
+**What:** every Drive file the agent could not place now sits under "Needs your eye" on the run page with the reason (from the rules or the AI) and two buttons. Accept asks which file it is, from this run's missing checklist files described in words (the AI's guess is picked when it has one); Reject drops it. Decisions are saved (`review_decision`, migration 0012), audited and can be undone. Later runs read them: an accepted file is fetched under the chosen name, a rejected one is skipped and counted in the summary. A "Download accepted files" button starts the download. Files the rules could not name now go here too, not only the AI's unsure ones.
+
+**Why:** owner's next pick: decide on unclear files in place instead of adding them by hand.
+
+**Tested:** 99 unit tests (new: report items checked, accept only a missing file this run looks for, one source file per name, runs must be finished, Drive sources only, audit, summary); 178 browser checks (new: reject, undo, accept on the run page, the download fetches the accepted file under its name, a rejected file is skipped by the next run).
+
 ## 2026-11-04: Google Drive download refusals handled
 
 **What:** when Google Drive refuses a download, the run now records Google's reason in words (download limit for a busy shared file, slow down, downloads turned off, file gone) instead of "the website answered 403". Downloads are paced a few seconds apart; a limit refusal waits 30 seconds and tries once more; after five refusals in a row the agent stops asking Drive for that run, marks the rest "not tried" and the summary says so, with "run the download again later". A later run fetches only what is still missing.

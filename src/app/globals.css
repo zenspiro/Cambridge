@@ -80,6 +80,9 @@
   .stack-tight { @apply flex flex-col gap-2; }
   .file-group { @apply mt-3; }
   .event-row { @apply items-start; }
+  .review-row { @apply items-center; }
+  .review-act { @apply flex flex-wrap items-center gap-2; }
+  .review-select { @apply mt-0 w-auto max-w-md py-1 text-sm; }
   .event-good { @apply font-semibold text-green-800; }
   .event-bad { @apply font-semibold text-red-700; }
   .bar { @apply h-3 w-full overflow-hidden rounded-full; accent-color: var(--color-brand); }

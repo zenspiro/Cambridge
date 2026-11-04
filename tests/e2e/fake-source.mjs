@@ -38,7 +38,7 @@ export function startFakeSource(port = 9911) {
     ] },
     SPECFOLDER1: { name: "Specimen Papers 2023", kids: [["DRVFILE0007", "Specimen Paper 2.pdf", "application/pdf"]] },
   };
-  const driveFiles = { DRVFILE0001: pdf("d1"), DRVFILE0002: pdf("d2"), DRVFILE0003: pdf("d3"), DRVFILE0007: pdf("d7") };
+  const driveFiles = { DRVFILE0001: pdf("d1"), DRVFILE0002: pdf("d2"), DRVFILE0003: pdf("d3"), DRVFILE0004: pdf("d4"), DRVFILE0007: pdf("d7") };
   const driveHits = [];
   function driveApi(req, res) {
     const u = new URL(req.url, "http://x");
