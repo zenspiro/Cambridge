@@ -66,3 +66,13 @@ export async function listSubjects(db: Db): Promise<SubjectOption[]> {
 
 /** "IGCSE Physics (0625)" for a code, or the code itself when it is not in the list. */
 export const subjectLabel = (subjects: SubjectOption[], code: string) => subjects.find((s) => s.code === code)?.label ?? code;
+
+/** Subjects as the file namers need them: code, subject name and qualification. */
+export async function knownSubjects(db: Db): Promise<{ code: string; name: string; qualification: string }[]> {
+  const { results } = await db
+    .prepare(`SELECT DISTINCT y.code, s.name, q.short_name AS qualification FROM syllabus y JOIN subject s ON s.id = y.subject_id
+              JOIN qualification q ON q.id = s.qualification_id ORDER BY y.code`)
+    .bind()
+    .all<{ code: string; name: string; qualification: string }>();
+  return results;
+}

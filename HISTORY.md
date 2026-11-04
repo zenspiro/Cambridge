@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-04: Upload a folder
+
+**What:** a new page, Library > Upload > "Upload a folder". Pick the unzipped folder from a Google Drive download; the browser keeps the folder names and works out every PDF the way the agent does: file and folder names, then the first page of every file (the front page reader, run on your computer), then the AI for what is left. A preview shows what will be uploaded, what is already in the library, files renamed by their first page, the same file twice, files outside the library years, and what needs your eye (choose which file it is, or leave it out). Upload then sends one file at a time with a progress bar and a Stop button; picking the folder again skips what is stored. Files of other subjects in the folder are recognised and stored too.
+
+**Why:** owner: Google Drive limits the agent's downloads, so the first subject comes in from a browser download; the same reader keeps working for new years without uploads.
+
+**Tested:** 107 unit tests (new: the folder plan, names then first page then AI then library); 196 browser checks (new: a Drive-like folder with names in folders, an unnamed scan named by its cover, a wrong name corrected by the cover, a repeat, a non-PDF, an unclear file picked by hand, five files stored under the right names, a second pick skips them).
+
 ## 2026-11-04: Front page reader
 
 **What:** the agent now reads the first page of PDFs, the way a person would. Cambridge prints every cover the same way ("PHYSICS 0625/42, Paper 4 Theory (Extended), May/June 2024, MARK SCHEME"), so the rules read the code, paper, variant, session, year and type from it, with the AI when the layout is unusual. Three uses: (1) in a download run, Drive files whose names say nothing are downloaded and named from their first page before anything goes to "Needs your eye"; files the AI judges are not Cambridge originals are skipped on later runs; (2) every download is checked against its first page before it is stored: stored under the right name when the cover says otherwise, or held back for you; (3) a new "Check library" run reads the stored files of a subject and lists any whose first page does not match their name, with Rename and Remove buttons. The reader is our own small PDF text reader (no outside libraries), so the agent and later the upload page share it. Also: a bare "403" from Google Drive is now described as Google limiting automated downloads (not "downloads turned off"), and the agent stops asking after 3 in a row. The AI may make up to 80 calls per run (was 40).

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/guard";
 import { getEnv } from "@/lib/env";
 import { AdminShell, Notice } from "@/components/AdminShell";
@@ -46,6 +47,15 @@ export default async function UploadPage({ searchParams }: { searchParams: Promi
           </ul>
         </section>
       ) : null}
+
+      <section className="card stack">
+        <h2 className="subtitle">A folder from Google Drive?</h2>
+        <p className="muted">
+          Files without Cambridge names, in folders like &quot;2024 / May June&quot;: use{" "}
+          <Link className="link" href="/admin/library/folder">Upload a folder</Link>. It works out each file from its folder
+          names and first page, shows you the result, then uploads.
+        </p>
+      </section>
 
       <form className="card stack" method="post" action="/admin/library/upload/send" encType="multipart/form-data">
         <p className="muted">

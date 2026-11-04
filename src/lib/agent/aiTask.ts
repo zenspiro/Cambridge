@@ -56,7 +56,15 @@ export async function aiTask(db: Db, body: Record<string, unknown> | null, run: 
   const r = await getRun(db, jobId);
   if (!r || r.status !== "running") return { ok: false, status: 409, error: "no_run" };
   if (!(await allow(db, `ai:${jobId}`, AGENT.aiCallsPerRun, 12 * 3_600_000))) return { ok: false, status: 429, error: "limit" };
-  const p = JSON.parse(r.params) as RunParams;
+  return aiJudge(db, JSON.parse(r.params) as RunParams, body, run);
+}
+
+/**
+ * The tasks themselves, for any scope: an agent run's choices, or a folder upload (one subject,
+ * every library year and session). Callers check who is asking and cap the calls.
+ */
+export async function aiJudge(db: Db, p: RunParams, body: Record<string, unknown> | null, run: ModelRun): Promise<AiResult> {
+  const task = body?.task;
   const scope = await scopeFor(db, p);
 
   try {
