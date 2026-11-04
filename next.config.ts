@@ -8,5 +8,7 @@ const nextConfig: NextConfig = {
 
 export default nextConfig;
 
-// Gives `next dev` access to the D1 and R2 bindings (local simulators).
-initOpenNextCloudflareForDev();
+// Gives `next dev` access to the D1 and R2 bindings (local simulators). Remote bindings stay off:
+// Workers AI has no local simulator, and builds (CI, this container) have no Cloudflare login.
+// Locally the AI endpoint answers 503 and the agent uses its rules.
+initOpenNextCloudflareForDev({ remoteBindings: false });

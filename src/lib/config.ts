@@ -72,4 +72,8 @@ export const AGENT = {
   driveDelayMs: 1_000,
   driveMaxFolders: 2_000,
   driveMaxDepth: 8,
+  /** Workers AI: calls one run may make, files or folders per call, and the reply size. */
+  aiCallsPerRun: 40,
+  aiBatch: 40,
+  aiMaxTokens: 2_500,
 } as const;

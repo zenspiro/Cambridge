@@ -51,6 +51,7 @@
   .btn-small { @apply min-h-9 px-3 py-1; }
   .btn-danger { @apply border-red-300 text-red-800 hover:bg-red-50; }
   .notice { @apply mt-4 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800; }
+  .run-summary { @apply rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-blue-900; }
   .filters { @apply mt-6 grid grid-cols-2 gap-3 sm:grid-cols-5 sm:items-end; }
   .field { @apply block; }
   .label-inline { @apply block text-sm font-medium; }

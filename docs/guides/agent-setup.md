@@ -32,3 +32,10 @@ The agent only works once `.github/workflows/agent.yml` is on the `main` branch.
 3. GitHub: the Cambridge repository, Settings, Secrets and variables, **Actions**, New repository secret. Name `GOOGLE_DRIVE_API`, paste the key.
 
 The key only reads folders shared as "anyone with the link". It is sent to Google in a header and never shown or logged.
+
+## 5. Workers AI (nothing to set up)
+- The agent's judgement uses Cloudflare Workers AI through the Worker's `AI` binding (in `wrangler.jsonc`). There is no key or secret.
+- Cloudflare gives a free daily allowance (10,000 Neurons a day, reset at 00:00 UTC). One run uses a small part of it; each run is capped at 40 AI calls.
+- If the deploy fails with a permission error about AI, the Cloudflare API token used by GitHub needs the **Workers AI** permission (Account, Workers AI, Read) added.
+- To try another model, change `AI_MODEL` in `wrangler.jsonc` to a Workers AI model that supports JSON mode.
+- If AI is not available, the run page says so and the agent uses its rules only.

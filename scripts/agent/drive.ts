@@ -88,13 +88,16 @@ export async function walk(
   rootId: string,
   limits: { maxFolders: number; maxDepth: number },
   onFolder?: (path: string[], n: number) => Promise<void>,
-): Promise<{ root: string; pdfs: { item: DriveItem; path: string[] }[]; folders: number; truncated: boolean; others: number }> {
+  /** Which subfolders of one folder to open (true) or skip (false). Default: all. */
+  choose?: (path: string[], names: string[]) => Promise<boolean[]>,
+): Promise<{ root: string; pdfs: { item: DriveItem; path: string[] }[]; folders: number; truncated: boolean; others: number; skipped: number }> {
   const root = await drive.folder(rootId);
   const queue: { id: string; path: string[]; depth: number }[] = [{ id: rootId, path: [root.name], depth: 0 }];
   const seen = new Set<string>([rootId]);
   const pdfs: { item: DriveItem; path: string[] }[] = [];
   let folders = 0;
   let others = 0;
+  let skipped = 0;
   let truncated = false;
   while (queue.length) {
     const f = queue.shift()!;
@@ -104,15 +107,20 @@ export async function walk(
     }
     folders++;
     if (onFolder) await onFolder(f.path, folders);
-    for (const item of await drive.children(f.id)) {
-      if (isFolder(item)) {
-        const id = targetId(item);
-        if (seen.has(id) || f.depth + 1 > limits.maxDepth) continue;
-        seen.add(id);
-        queue.push({ id, path: [...f.path, item.name], depth: f.depth + 1 });
-      } else if (isPdfItem(item)) pdfs.push({ item, path: f.path });
+    const items = await drive.children(f.id);
+    const subs = items.filter((i) => isFolder(i) && !seen.has(targetId(i)) && f.depth + 1 <= limits.maxDepth);
+    const keep = choose && subs.length ? await choose(f.path, subs.map((i) => i.name)) : subs.map(() => true);
+    subs.forEach((item, i) => {
+      const id = targetId(item);
+      seen.add(id);
+      if (keep[i] === false) skipped++;
+      else queue.push({ id, path: [...f.path, item.name], depth: f.depth + 1 });
+    });
+    for (const item of items) {
+      if (isFolder(item)) continue;
+      if (isPdfItem(item)) pdfs.push({ item, path: f.path });
       else others++;
     }
   }
-  return { root: root.name, pdfs, folders, truncated, others };
+  return { root: root.name, pdfs, folders, truncated, others, skipped };
 }
