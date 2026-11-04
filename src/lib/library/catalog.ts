@@ -5,6 +5,7 @@ import type { Db } from "../db.ts";
 import { getLibrarySettings, type LibrarySettings } from "../settings.ts";
 import { buildChecklist, type Checklist, type Status, type StoredDoc, type Version } from "./checklist.ts";
 import * as Q from "./queries.ts";
+import type { Alias } from "./alias.ts";
 
 export type SyllabusNode = { code: string; title: string; subjectId: string; subjectName: string; checklist: Checklist };
 export type SubjectNode = { id: string; name: string; syllabuses: SyllabusNode[] };
@@ -13,12 +14,13 @@ export type QualificationNode = { id: string; name: string; shortName: string; s
 export async function loadSyllabus(db: Db, code: string, lib?: LibrarySettings): Promise<Checklist | null> {
   if (!/^\d{4}$/.test(code)) return null;
   const settings = lib ?? (await getLibrarySettings(db));
-  const [{ results: versions }, { results: stored }] = await Promise.all([
+  const [{ results: versions }, { results: stored }, { results: aliases }] = await Promise.all([
     db.prepare(Q.SYLLABI_BY_CODE).bind(code).all<Version>(),
     db.prepare(Q.STORED_FOR_CODE).bind(code).all<StoredDoc>(),
+    db.prepare(`SELECT code, main_code, label, from_year, to_year, sessions FROM syllabus_alias WHERE main_code = ?1`).bind(code).all<Alias>(),
   ]);
   if (versions.length === 0) return null;
-  return buildChecklist(code, versions, stored, settings);
+  return buildChecklist(code, versions, stored, settings, aliases);
 }
 
 export async function loadHeader(db: Db, code: string) {
@@ -67,12 +69,21 @@ export async function listSubjects(db: Db): Promise<SubjectOption[]> {
 /** "IGCSE Physics (0625)" for a code, or the code itself when it is not in the list. */
 export const subjectLabel = (subjects: SubjectOption[], code: string) => subjects.find((s) => s.code === code)?.label ?? code;
 
-/** Subjects as the file namers need them: code, subject name and qualification. */
-export async function knownSubjects(db: Db): Promise<{ code: string; name: string; qualification: string }[]> {
-  const { results } = await db
-    .prepare(`SELECT DISTINCT y.code, s.name, q.short_name AS qualification FROM syllabus y JOIN subject s ON s.id = y.subject_id
-              JOIN qualification q ON q.id = s.qualification_id ORDER BY y.code`)
-    .bind()
-    .all<{ code: string; name: string; qualification: string }>();
+/**
+ * Subjects as the file namers need them: code, subject name and qualification, plus other codes
+ * for a syllabus (1524, Pakistan series) with `main` set to the syllabus they belong to.
+ */
+export const KNOWN_SUBJECTS = `
+SELECT DISTINCT y.code, s.name, q.short_name AS qualification, NULL AS main FROM syllabus y JOIN subject s ON s.id = y.subject_id
+  JOIN qualification q ON q.id = s.qualification_id
+UNION
+SELECT a.code, s.name, q.short_name, a.main_code FROM syllabus_alias a JOIN syllabus y ON y.code = a.main_code
+  JOIN subject s ON s.id = y.subject_id JOIN qualification q ON q.id = s.qualification_id
+ORDER BY 1`;
+
+export type KnownSubjectRow = { code: string; name: string; qualification: string; main?: string | null };
+
+export async function knownSubjects(db: Db): Promise<KnownSubjectRow[]> {
+  const { results } = await db.prepare(KNOWN_SUBJECTS).bind().all<KnownSubjectRow>();
   return results;
 }

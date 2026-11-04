@@ -5,6 +5,7 @@ import { docTypeLabel, SESSION_LABELS } from "../config.ts";
 import { checkVariants, type LibrarySettings } from "../settings.ts";
 import { EXAM_SESSIONS, parseRules, sessionDue, type ExpectedRules } from "./expected.ts";
 import { examName, parseCambridgeName, type DocType } from "./names.ts";
+import { aliasCovers, aliasLabel, type Alias } from "./alias.ts";
 
 export type StoredDoc = {
   id: string; file_name: string; doc_type: string; session: string; year: number;
@@ -40,12 +41,20 @@ export type Cell = {
   /** Words for search: session, year, type, paper, variant, file name. */
   text: string;
 };
-export type PaperRow = { paper: number; variant: number | null; essential: boolean; cells: Partial<Record<DocType, Cell>> };
+export type PaperRow = {
+  paper: number; variant: number | null; essential: boolean; cells: Partial<Record<DocType, Cell>>;
+  /** Another code's series in this session ("1524"), shown apart from the main papers. */
+  series?: string;
+};
+/** Another code's series inside a session: "Pakistan series (1524)". */
+export type Series = { code: string; label: string };
 export type Status = { essentialHave: number; essentialTotal: number; extraHave: number; extraTotal: number };
 
 export type VersionGroup = { version: Version; label: string; docs: Cell[]; specimens: PaperRow[]; status: Status };
 export type SessionGroup = {
   year: number; session: "m" | "s" | "w"; label: string; versionId: string; rows: PaperRow[]; docs: Cell[]; status: Status;
+  /** Other codes' series in this session (rows and docs carry their file names). */
+  series: Series[];
 };
 export type Checklist = { code: string; versions: VersionGroup[]; sessions: SessionGroup[]; others: Cell[]; status: Status };
 
@@ -94,7 +103,7 @@ export const groupCells = (g: { rows?: PaperRow[]; specimens?: PaperRow[]; docs:
   ...g.docs, ...rowCells(g.rows ?? g.specimens ?? []),
 ];
 
-export function buildChecklist(code: string, versions: Version[], stored: StoredDoc[], lib: LibrarySettings): Checklist {
+export function buildChecklist(code: string, versions: Version[], stored: StoredDoc[], lib: LibrarySettings, aliases: readonly Alias[] = []): Checklist {
   const have = new Map(stored.map((d) => [d.file_name, d]));
   const used = new Set<string>();
   const rulesFor = new Map<string, ExpectedRules>();
@@ -136,26 +145,35 @@ export function buildChecklist(code: string, versions: Version[], stored: Stored
       const variants = r.variants[session] ?? [];
       if (variants.length === 0) continue;
       const essentialSet = new Set(essentialFor(v, lib)[session] ?? []);
+      // The main code's papers, then each other code's series in this session (same papers and rules).
+      const series = aliases.filter((a) => aliasCovers(a, year, session));
       const rows: PaperRow[] = [];
-      for (const p of r.papers) {
-        for (const vnt of variants) {
-          const essential = essentialSet.has(vnt);
-          const cells: PaperRow["cells"] = {};
-          for (const t of r.perPaper) cells[t] = cell(examName(code, session, year, t, p, vnt), essential, have, used);
-          if (r.ciPapers?.includes(p)) cells.ci = cell(examName(code, session, year, "ci", p, vnt), essential, have, used);
-          if (r.inPapers?.includes(p)) cells.in = cell(examName(code, session, year, "in", p, vnt), essential, have, used);
-          if (r.pmPapers?.includes(p)) cells.pm = cell(examName(code, session, year, "pm", p, vnt), essential, have, used);
-          if (r.qrPapers?.includes(p)) cells.qr = cell(examName(code, session, year, "qr", p, vnt), false, have, used);
-          rows.push({ paper: p, variant: vnt, essential, cells });
+      const docs: Cell[] = [];
+      for (const c of [code, ...series.map((a) => a.code)]) {
+        const tag = c === code ? {} : { series: c };
+        const part: PaperRow[] = [];
+        for (const p of r.papers) {
+          for (const vnt of variants) {
+            const essential = essentialSet.has(vnt);
+            const cells: PaperRow["cells"] = {};
+            for (const t of r.perPaper) cells[t] = cell(examName(c, session, year, t, p, vnt), essential, have, used);
+            if (r.ciPapers?.includes(p)) cells.ci = cell(examName(c, session, year, "ci", p, vnt), essential, have, used);
+            if (r.inPapers?.includes(p)) cells.in = cell(examName(c, session, year, "in", p, vnt), essential, have, used);
+            if (r.pmPapers?.includes(p)) cells.pm = cell(examName(c, session, year, "pm", p, vnt), essential, have, used);
+            if (r.qrPapers?.includes(p)) cells.qr = cell(examName(c, session, year, "qr", p, vnt), false, have, used);
+            part.push({ paper: p, variant: vnt, essential, cells, ...tag });
+          }
         }
+        part.sort((a, b) => Number(b.essential) - Number(a.essential) || a.paper - b.paper || (a.variant ?? 0) - (b.variant ?? 0));
+        rows.push(...part);
+        docs.push(
+          ...(r.perSession ?? []).map((t) => cell(examName(c, session, year, t), true, have, used)),
+          ...(r.extraSessionDocs ?? []).map((d) => cell(examName(c, session, year, d.type, d.paper, null), false, have, used)),
+        );
       }
-      rows.sort((a, b) => Number(b.essential) - Number(a.essential) || a.paper - b.paper || (a.variant ?? 0) - (b.variant ?? 0));
-      const docs = [
-        ...(r.perSession ?? []).map((t) => cell(examName(code, session, year, t), true, have, used)),
-        ...(r.extraSessionDocs ?? []).map((d) => cell(examName(code, session, year, d.type, d.paper, null), false, have, used)),
-      ];
       sessionGroups.push({
         year, session, label: `${SESSION_LABELS[session]} ${year}`, versionId: v!.id, rows, docs, status: statusOf([...docs, ...rowCells(rows)]),
+        series: series.map((a) => ({ code: a.code, label: aliasLabel(a) })),
       });
     }
   }

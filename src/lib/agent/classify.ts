@@ -4,7 +4,14 @@
 // anything incomplete is "not recognised", with the reason.
 import { examName, NO_VARIANT_TYPES, parseCambridgeName, type DocType } from "../library/names.ts";
 
-export type KnownSubject = { code: string; name: string; qualification: string };
+export type KnownSubject = {
+  code: string; name: string; qualification: string;
+  /** For another code of a syllabus (1524, Pakistan series): the syllabus it belongs to (0625). */
+  main?: string | null;
+};
+
+/** The syllabus a code belongs to: itself, or the main code of another code (1524 is 0625). */
+export const mainOf = (subjects: readonly KnownSubject[], code: string): string => subjects.find((s) => s.code === code)?.main || code;
 export type Classified = {
   name: string | null;
   code: string | null;
@@ -39,8 +46,8 @@ function sessionOf(w: string): "m" | "s" | "w" | "y" | null {
 
 /** A Cambridge-style "s23" / "w22" / "m24" token gives session and year together. */
 function compactSession(w: string): { session: "m" | "s" | "w"; year: number } | null {
-  const m = / ([msw])(\d{2}) /.exec(w);
-  return m ? { session: m[1] as "m" | "s" | "w", year: 2000 + Number(m[2]) } : null;
+  const m = / ([mswj])(\d{2}) /.exec(w);
+  return m ? { session: (m[1] === "j" ? "s" : m[1]) as "m" | "s" | "w", year: 2000 + Number(m[2]) } : null;
 }
 
 function yearOf(w: string): number | null {
@@ -120,7 +127,8 @@ export function classifyFile(path: string[], fileName: string, subjects: KnownSu
   if (!/\.pdf$/i.test(fileName)) return { name: null, code: null, confidence: "none", why: "not a PDF" };
 
   // 1. Already a Cambridge name (allowing spaces, dashes, capitals and "(1)" copies).
-  const tidy = fileName.toLowerCase().replace(/\s*\(\d+\)(?=\.pdf$)/, "").replace(/[\s-]+/g, "_");
+  // "j21" (June, as some collections write it) is Cambridge's s21.
+  const tidy = fileName.toLowerCase().replace(/\s*\(\d+\)(?=\.pdf$)/, "").replace(/[\s-]+/g, "_").replace(/^(\d{4})_j(\d{2})_/, "$1_s$2_");
   const direct = parseCambridgeName(tidy);
   // Files of subjects not in the library are named too: the agent counts them per subject.
   if (direct) return { name: direct.fileName, code: direct.code, confidence: "high", why: "Cambridge file name" };
@@ -204,12 +212,12 @@ export type FolderDecision = { open: "yes" | "no" | "unsure"; why: string };
 export function folderDecision(name: string, scope: RunScope, subjects: KnownSubject[]): FolderDecision {
   const r = readFolder(name, subjects);
   const w = words(name);
-  if (r.code && r.code !== scope.code) return { open: "no", why: "another subject" };
+  if (r.code && mainOf(subjects, r.code) !== scope.code) return { open: "no", why: "another subject" };
   const specimenish = r.session === "y" || / (syllabus|syllabuses|specimens?|samples?) /.test(w);
   if (specimenish) return scope.sessions.includes("y") ? { open: "yes", why: "specimens or syllabus documents" } : { open: "no", why: "specimens, not in this run" };
   if (r.session && !scope.sessions.includes(r.session)) return { open: "no", why: "a session not in this run" };
   if (r.year !== null) return scope.years.includes(r.year) ? { open: "yes", why: `${r.year}` } : { open: "no", why: `${r.year}, not in this run` };
   if (r.session) return { open: "yes", why: "a session in this run" };
-  if (r.code === scope.code) return { open: "yes", why: "this subject" };
+  if (r.code && mainOf(subjects, r.code) === scope.code) return { open: "yes", why: "this subject" };
   return { open: "unsure", why: "the name does not say" };
 }

@@ -34,8 +34,11 @@ export default async function SessionPage({
   const newer = list.sessions[i - 1];
   const older = list.sessions[i + 1];
   const names = new Map(papers.filter((p) => p.syllabus_id === g.versionId).map((p) => [p.paper, p]));
-  const essential = g.rows.filter((r) => r.essential);
-  const extras = g.rows.filter((r) => !r.essential);
+  const main = g.rows.filter((r) => !r.series);
+  const essential = main.filter((r) => r.essential);
+  const extras = main.filter((r) => !r.essential);
+  const ofSeries = (code: string) => (c: { fileName: string }) => c.fileName.startsWith(`${code}_`);
+  const mainDocs = g.docs.filter((c) => !g.series.some((x) => ofSeries(x.code)(c)));
 
   return (
     <AdminShell current="/admin/library" title={g.label}>
@@ -54,7 +57,7 @@ export default async function SessionPage({
       <section className="card stack">
         <StatusLine status={g.status} />
         <h2 className="label-inline">For the whole session</h2>
-        <DocChips cells={g.docs} />
+        <DocChips cells={mainDocs} />
       </section>
 
       <section className="card stack">
@@ -73,6 +76,14 @@ export default async function SessionPage({
           </div>
         </details>
       ) : null}
+      {g.series.map((x) => (
+        <section className="card stack" key={x.code} id={`series-${x.code}`}>
+          <h2 className="subtitle">{x.label}</h2>
+          <p className="muted">The same papers, set by Cambridge under its own code for this series.</p>
+          <DocChips cells={g.docs.filter(ofSeries(x.code))} />
+          <PaperTable rows={g.rows.filter((r) => r.series === x.code)} types={PAPER_TYPES} papers={names} />
+        </section>
+      ))}
       <Legend />
     </AdminShell>
   );

@@ -1,3 +1,4 @@
+import { KNOWN_SUBJECTS, type KnownSubjectRow } from "@/lib/library/catalog";
 import { agentRequest, json, JOB_ID_RE, parseJson } from "@/lib/agent/api";
 import { claimRun } from "@/lib/agent/runs";
 import { AGENT, LIBRARY } from "@/lib/config";
@@ -37,11 +38,7 @@ export async function POST(request: Request) {
                 WHERE s.enabled = 1 AND s.kind = 'gdrive' ORDER BY f.created_at`)
       .bind()
       .all<{ folder_id: string; label: string; site_id: string }>(),
-    a.db
-      .prepare(`SELECT DISTINCT y.code, s.name, q.short_name AS qualification FROM syllabus y JOIN subject s ON s.id = y.subject_id
-                JOIN qualification q ON q.id = s.qualification_id ORDER BY y.code`)
-      .bind()
-      .all<{ code: string; name: string; qualification: string }>(),
+    a.db.prepare(KNOWN_SUBJECTS).bind().all<KnownSubjectRow>(),
     decisionsForAgent(a.db),
   ]);
   const sources = new Map<string, { siteId: string; name: string; baseUrl: string; pages: string[] }>();

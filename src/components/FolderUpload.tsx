@@ -70,18 +70,20 @@ export function FolderUpload(props: {
   versions: Version[];
 }) {
   const look = paperLookup(props.papers as Paper[]);
+  // Paper names come from the file's syllabus; another code (1524) uses its main syllabus (0625).
   const describe = (name: string) => {
-    const code = name.slice(0, 4);
+    const code = mainCode(name.slice(0, 4));
     return describeFile(name, versionForFile(props.versions.filter((v) => v.code === code), name), look);
   };
-  const versionOf = (name: string) => versionForFile(props.versions.filter((v) => v.code === name.slice(0, 4)), name);
+  const versionOf = (name: string) => versionForFile(props.versions.filter((v) => v.code === mainCode(name.slice(0, 4))), name);
   // Where a file goes in the library, in full: "IGCSE Computer Science (0478) / 2020 / November / 0478_w20_qp_21.pdf".
   const SESSION_FOLDERS = { m: "March", s: "June", w: "November", y: "Syllabus and specimens" } as const;
   const placeOf = (name: string) => {
     const p = parseCambridgeName(name);
     if (!p) return name;
-    const subj = props.subjects.find((x) => x.code === p.code);
-    const label = p.code === props.code ? props.subjectLabel : subj ? `${subj.qualification} ${subj.name} (${p.code})` : p.code;
+    const subj = subjectsRef.current.find((x) => x.code === p.code);
+    const main = mainCode(p.code);
+    const label = main === props.code ? props.subjectLabel : subj ? `${subj.qualification} ${subj.name} (${main})` : p.code;
     return `${label} / ${p.year} / ${SESSION_FOLDERS[p.session]} / ${p.fileName}`;
   };
   const input = useRef<HTMLInputElement>(null);
@@ -109,11 +111,15 @@ export function FolderUpload(props: {
     input.current?.setAttribute("directory", "");
   }, []);
 
-  const codes = props.subjects.map((s) => s.code);
+  // Codes the page knows; grows when a first page links another code to a library subject.
+  const subjectsRef = useRef<KnownSubject[]>(props.subjects);
+  const [learned, setLearned] = useState<string[]>([]);
+  const codesNow = () => subjectsRef.current.map((s) => s.code);
+  const mainCode = (code: string) => subjectsRef.current.find((s) => s.code === code)?.main || code;
   // A suggested name can be picked when it is a library subject's file from a library year.
   const suggestable = (name: string) => {
     const p = parseCambridgeName(name);
-    return !!p && codes.includes(p.code) && p.year >= props.fromYear && p.year <= props.toYear;
+    return !!p && codesNow().includes(p.code) && p.year >= props.fromYear && p.year <= props.toYear;
   };
 
   /** Every file and what happened to it, as a spreadsheet (CSV), to send in one go. */
@@ -154,6 +160,7 @@ export function FolderUpload(props: {
     const plan = pdfs.map((f, i) => planFromNames(i, f.webkitRelativePath || f.name, f.size, props.subjects, props.maxFileBytes, years));
 
     // The first page of every file: names the unclear ones and checks the others.
+    const unknown = new Map<number, { text: string; code: NonNullable<ReturnType<typeof readCover>["unknownCode"]> }>();
     for (let k = 0; k < plan.length; k++) {
       const it = plan[k]!;
       setDone(k);
@@ -162,10 +169,33 @@ export function FolderUpload(props: {
       if (it.status === "too_big" || it.status === "outside") continue;
       try {
         const text = await firstPageText(new Uint8Array(await pdfs[k]!.arrayBuffer()), inflate);
-        applyCover(it, readCover(text, codes), text, years);
+        const cover = readCover(text, codesNow());
+        applyCover(it, cover, text, years);
+        if (!it.name && cover.unknownCode) unknown.set(k, { text, code: cover.unknownCode });
       } catch {
         // unreadable: the names stand
       }
+    }
+
+    // A first page with a code the library does not have next to a library subject's name
+    // ("PHYSICS 1524/12, May/June 2021"): the code is linked to that subject, then read again.
+    const tried = new Set<string>();
+    const notes: string[] = [];
+    for (const { code } of unknown.values()) {
+      if (tried.has(code.code)) continue;
+      tried.add(code.code);
+      setStep(`Linking code ${code.code} to its subject`);
+      const r = await postJson("/admin/library/folder/alias", code);
+      const a = r.data?.alias as { code: string; main_code: string } | undefined;
+      if (r.status !== 200 || !a) continue;
+      const main = subjectsRef.current.find((s) => s.code === a.main_code);
+      if (!main) continue;
+      if (!subjectsRef.current.some((s) => s.code === a.code)) subjectsRef.current = [...subjectsRef.current, { ...main, code: a.code, main: a.main_code }];
+      notes.push(`${a.code} (${main.qualification} ${main.name} ${a.main_code})`);
+    }
+    if (notes.length) {
+      for (const [k, u] of unknown) applyCover(plan[k]!, readCover(u.text, codesNow()), u.text, years);
+      setLearned(notes);
     }
 
     // The AI for what is left: first pages with text one by one, the rest by their names.
@@ -201,7 +231,7 @@ export function FolderUpload(props: {
       batch.forEach((it, j) => applyAi(it, answers.find((a) => a.i === j) as never, "names"));
     }
 
-    finalise(plan, { have: new Set(props.have), codes, fromYear: props.fromYear, toYear: props.toYear });
+    finalise(plan, { have: new Set(props.have), codes: codesNow(), fromYear: props.fromYear, toYear: props.toYear });
     // The AI's best guess is chosen for you: you check it, choose another, or leave it out.
     const preset: Record<number, string> = {};
     for (const it of plan) if (it.status === "review" && it.suggest && suggestable(it.suggest)) preset[it.i] = it.suggest;
@@ -340,6 +370,11 @@ export function FolderUpload(props: {
           </ul>
           {other ? <p className="muted">{other === 1 ? "1 file is not a PDF and was left out." : `${other} files are not PDFs and were left out.`}</p> : null}
           {aiNote ? <p className="muted">{aiNote}</p> : null}
+          {learned.length ? (
+            <p className="notice" id="folder-learned">
+              Read from first pages: code {learned.join(", ")} is now linked to that subject, so its files are stored under their own names with it.
+            </p>
+          ) : null}
           {stopNote ? <p className="alert" role="alert">{stopNote}</p> : null}
           {titleChecks.length ? (
             <div className="stack" id="title-checks">

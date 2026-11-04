@@ -10,7 +10,7 @@ import { reasonText } from "../../src/lib/agent/labels.ts";
 import { pageTitle, summariseFiles } from "../../src/lib/library/summary.ts";
 import { SESSION_LABELS } from "../../src/lib/config.ts";
 import { checkSummary, ruleSummary } from "../../src/lib/agent/runSummary.ts";
-import { classifyFile, folderDecision, readFolder, type KnownSubject, type RunScope } from "../../src/lib/agent/classify.ts";
+import { classifyFile, folderDecision, mainOf, readFolder, type KnownSubject, type RunScope } from "../../src/lib/agent/classify.ts";
 import { DriveError, driveRefusal, makeDrive, targetId, walk, type Drive } from "./drive.ts";
 import { constants as zlibConstants, inflateSync } from "node:zlib";
 import { firstPageText } from "../../src/lib/pdf/firstPage.ts";
@@ -85,6 +85,7 @@ async function apiBytes(path: string, payload: Record<string, unknown>): Promise
 // One polite fetcher per website: waits between requests, identifies itself,
 // follows redirects only within the same website.
 const lastHit = new Map<string, number>();
+let ours: (c: string | null | undefined) => boolean = () => false;
 let delayMs = 5_000;
 let userAgent = "ExamPrepLibraryAgent/1.0";
 
@@ -268,6 +269,8 @@ async function main() {
   const decided = new Map((job.decisions ?? []).map((d) => [`${d.siteId}:${d.id}`, d]));
   const codes = (job.subjects ?? []).map((s) => s.code);
   if (!codes.includes(job.params.code)) codes.push(job.params.code);
+  // This run's subject, under its own code or another code of it (1524 is Physics 0625's Pakistan series).
+  ours = (c: string | null | undefined) => !!c && mainOf(job.subjects ?? [], c) === job.params.code;
   if (job.params.mode === "check") return checkLibrary(job, codes, years, sessions);
   /** Unclear Drive files a download run reads by their first page. */
   const unclear: ReviewEntry[] = [];
@@ -392,7 +395,7 @@ async function main() {
       const runName = runSubject ? `${runSubject.qualification} ${runSubject.name} (${runSubject.code})` : job.params.code;
       const otherSubject = (name: string) => {
         const c = readFolder(name, subjects).code;
-        return c !== null && c !== job.params.code;
+        return c !== null && !ours(c);
       };
       const mine = folders.filter((f) => !f.label || !otherSubject(f.label));
       const skippedLabels = folders.filter((f) => !mine.includes(f)).map((f) => f.label);
@@ -466,13 +469,13 @@ async function main() {
               ? { name: d.name, code: parseCambridgeName(d.name)!.code, why: "you accepted it on a run page" }
               : classifyFile(path, item.name, subjects);
             if (!c.name) {
-              if (c.code && c.code !== job.params.code) summary.otherSubjects[c.code] = (summary.otherSubjects[c.code] ?? 0) + 1;
+              if (c.code && !ours(c.code)) summary.otherSubjects[c.code] = (summary.otherSubjects[c.code] ?? 0) + 1;
               else leftovers.push({ path, item, why: c.why });
               continue;
             }
             summary.recognised++;
             const p = parseCambridgeName(c.name)!;
-            if (p.code !== job.params.code) {
+            if (!ours(p.code)) {
               summary.otherSubjects[p.code] = (summary.otherSubjects[p.code] ?? 0) + 1;
               continue;
             }
@@ -507,7 +510,7 @@ async function main() {
               l.answered = true;
               l.done = true;
               const where = [...l.path, l.item.name].join(" / ");
-              if (v.outcome === "named" && v.name && parseCambridgeName(v.name)?.code === job.params.code) {
+              if (v.outcome === "named" && v.name && ours(parseCambridgeName(v.name)?.code)) {
                 summary.recognised++;
                 summary.forThisSyllabus++;
                 aiNamed++;
@@ -659,8 +662,8 @@ async function main() {
           // A Cambridge code the library has no name for ("sf") keeps its own name.
           const ownKnown = isKnownType(parseCambridgeName(c.name)?.docType ?? "");
           const other = ownKnown && cover.name && cover.name !== c.name ? cover.name : null;
-          const otherCode = !cover.name && cover.code && cover.code !== job.params.code ? cover.code : null;
-          if (other && parseCambridgeName(other)!.code === job.params.code && !have.has(other) && !report.stored.includes(other) && !planned.has(other)) {
+          const otherCode = !cover.name && cover.code && !ours(cover.code) ? cover.code : null;
+          if (other && ours(parseCambridgeName(other)!.code) && !have.has(other) && !report.stored.includes(other) && !planned.has(other)) {
             name = other;
             report.renamed ??= [];
             report.renamed.push({ from: c.name, to: other });
@@ -739,7 +742,7 @@ async function main() {
         }
       }
       const pn = name ? parseCambridgeName(name) : null;
-      if (!pn || pn.code !== job.params.code) {
+      if (!pn || !ours(pn.code)) {
         toReview({ ...u, why: pn ? `the first page says ${name}, another subject` : `${why}`, ...(name ? { suggest: name } : {}), by: byAi ? "ai" : "rules" });
         continue;
       }
@@ -792,7 +795,7 @@ async function checkLibrary(job: Job, codes: string[], years: Set<number>, sessi
     check.read++;
     const { cover } = await coverOf(r.bytes, codes);
     if (cover.name === d.fileName) check.matched++;
-    else if (cover.name || (cover.code && cover.code !== job.params.code)) {
+    else if (cover.name || (cover.code && !ours(cover.code))) {
       if (check.items.length < 300) check.items.push({ id: d.id, fileName: d.fileName, coverName: cover.name, why: cover.why });
       await progress(5 + Math.round((n / Math.max(docs.length, 1)) * 90), step, `${d.fileName}: ${cover.name ? `the first page says it is ${cover.name}` : cover.why}`);
     } else check.unreadable++;

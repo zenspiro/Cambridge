@@ -4,6 +4,12 @@ export const SYLLABUS_FOR_YEAR = `
 SELECT id, code, title, valid_from_year, valid_to_year, expected FROM syllabus
 WHERE code = ?1 AND valid_from_year <= ?2 AND valid_to_year >= ?2`;
 
+/** The version for a file's code and year; another code (1524) uses its main syllabus's version. */
+export const SYLLABUS_FOR_FILE = `
+SELECT y.id FROM syllabus y
+WHERE y.code = COALESCE((SELECT a.main_code FROM syllabus_alias a WHERE a.code = ?1 AND a.from_year <= ?2 AND a.to_year >= ?2 AND instr(a.sessions, ?3) > 0), ?1)
+  AND y.valid_from_year <= ?2 AND y.valid_to_year >= ?2`;
+
 export const SYLLABI_BY_CODE = `
 SELECT id, code, title, valid_from_year, valid_to_year, expected, essential_variants FROM syllabus
 WHERE code = ?1 ORDER BY valid_from_year`;

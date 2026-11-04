@@ -69,7 +69,7 @@ export function SubjectMapVersion({ code, v }: { code: string; v: MapVersion }) 
             <Heads columns={v.columns} tail={tail} />
             <tbody>
               {v.rows.map((r) => (
-                <tr key={`${r.year}${r.session}${r.variant}`} className={[r.first ? "map-row-first" : "", r.essential ? "" : "row-extra"].join(" ").trim() || undefined}>
+                <tr key={`${r.year}${r.session}${r.variant}${r.series ?? ""}`} className={[r.first ? "map-row-first" : "", r.essential ? "" : "row-extra"].join(" ").trim() || undefined}>
                   <th scope="row" className="map-first">
                     <Link className="link" href={sessionHref(code, r.year, r.session)}>{r.label}</Link>
                     {r.first ? <span className="map-count"><GroupPill status={r.sessionStatus} /></span> : null}
@@ -78,7 +78,7 @@ export function SubjectMapVersion({ code, v }: { code: string; v: MapVersion }) 
                     <td key={`${c.paper}-${t}`} className={i === 0 ? "map-start" : undefined}><CellLink cell={r.cells[cellKey(c.paper, t)]} /></td>
                   )))}
                   {tail.map((t, i) => (
-                    <td key={t} className={i === 0 ? "map-start" : undefined}>{r.first ? <CellLink cell={r.docs?.[t]} /> : null}</td>
+                    <td key={t} className={i === 0 ? "map-start" : undefined}>{r.docs ? <CellLink cell={r.docs[t]} /> : null}</td>
                   ))}
                 </tr>
               ))}
