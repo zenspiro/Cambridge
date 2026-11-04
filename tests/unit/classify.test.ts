@@ -94,3 +94,15 @@ test("folders are opened only when they can hold what the run wants", () => {
   assert.equal(open("Topical Past Papers"), "unsure", "names the rules cannot read go to the AI");
   assert.equal(open("Extended"), "unsure");
 });
+
+test("Google Drive refusals get reasons people can act on", async () => {
+  const { DriveError, driveRefusal } = await import("../../scripts/agent/drive.ts");
+  const { reasonText } = await import("../../src/lib/agent/labels.ts");
+  assert.equal(driveRefusal(new DriveError(403, "downloadQuotaExceeded")), "drive_quota");
+  assert.equal(driveRefusal(new DriveError(403, "userRateLimitExceeded")), "drive_rate");
+  assert.equal(driveRefusal(new DriveError(429, "")), "drive_rate");
+  assert.equal(driveRefusal(new DriveError(403, "cannotDownloadFile")), "drive_forbidden");
+  assert.equal(driveRefusal(new DriveError(404, "notFound")), "drive_missing");
+  assert.match(reasonText("drive_quota"), /download limit/);
+  assert.match(reasonText("drive_paused"), /run the download again later/i);
+});

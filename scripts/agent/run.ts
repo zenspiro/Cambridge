@@ -6,12 +6,12 @@ import { signRequest } from "../../src/lib/agent/sign.ts";
 import { extractPdfLinks, toCambridgeName } from "../../src/lib/agent/links.ts";
 import { parseRobots } from "../../src/lib/agent/robots.ts";
 import { parseCambridgeName } from "../../src/lib/library/names.ts";
-import { REASON_LABELS } from "../../src/lib/library/labels.ts";
+import { reasonText } from "../../src/lib/agent/labels.ts";
 import { pageTitle, summariseFiles } from "../../src/lib/library/summary.ts";
 import { SESSION_LABELS } from "../../src/lib/config.ts";
 import { ruleSummary } from "../../src/lib/agent/runSummary.ts";
 import { classifyFile, folderDecision, readFolder, type KnownSubject, type RunScope } from "../../src/lib/agent/classify.ts";
-import { DriveError, makeDrive, targetId, walk, type Drive } from "./drive.ts";
+import { DriveError, driveRefusal, makeDrive, targetId, walk, type Drive } from "./drive.ts";
 
 type Job = {
   params: { code: string; years: number[]; sessions: string[]; mode: "dry" | "download" };
@@ -125,6 +125,8 @@ type Report = {
   summary?: string;
   summaryBy?: "ai" | "rules";
   ai?: { calls: number; note?: string };
+  /** Set when Google Drive kept refusing downloads and the agent stopped asking. */
+  drivePaused?: { reason: string; afterStored: number };
   /** Drive folders not read because they are for other subjects. */
   driveSkipped?: number;
   error?: string;
@@ -516,6 +518,32 @@ async function main() {
 
   if (job.params.mode === "download") {
     const todo = report.candidates.slice(0, job.limits.maxFiles);
+    // Google limits downloads from busy shared files. After a refusal the agent waits and tries
+    // once more; after DRIVE_STOP_AFTER refusals in a row it stops asking Drive for this run, so
+    // it does not hammer Google, and the rest are left for a later run.
+    const DRIVE_STOP_AFTER = 5;
+    let driveRefusals = 0;
+    let drivePaused = "";
+    const fromDrive = async (id: string) => {
+      for (let attempt = 0; ; attempt++) {
+        try {
+          await sleep(TEST_MODE ? 0 : 2_000); // gentler than listing: one download every few seconds
+          const bytes = await drive!.download(id, job.limits.maxFileBytes);
+          driveRefusals = 0;
+          return { status: 200, bytes, type: "application/pdf", reason: "" };
+        } catch (e) {
+          if (!(e instanceof DriveError)) return { status: 0, bytes: new Uint8Array(), type: "", reason: "drive_error" };
+          const why = driveRefusal(e);
+          log(`Google Drive refused a download: ${e.status} ${e.reason || "(no reason given)"}`);
+          if ((why === "drive_quota" || why === "drive_rate") && attempt === 0 && driveRefusals < DRIVE_STOP_AFTER - 1) {
+            await sleep(TEST_MODE ? 0 : 30_000);
+            continue;
+          }
+          if (why === "drive_quota" || why === "drive_rate" || why === "drive_forbidden") driveRefusals++;
+          return { status: e.status, bytes: new Uint8Array(), type: "", reason: why };
+        }
+      }
+    };
     let n = 0;
     for (const c of todo) {
       n++;
@@ -525,13 +553,20 @@ async function main() {
       const failedBefore = report.failed.length;
       let lastBytes = 0;
       try {
-        const r = c.driveId && drive
-          ? await drive.download(c.driveId, job.limits.maxFileBytes)
-              .then((bytes) => ({ status: 200, bytes, type: "application/pdf" }))
-              .catch((e) => ({ status: e instanceof DriveError ? e.status : 0, bytes: new Uint8Array(), type: "" }))
+        if (c.driveId && drivePaused) {
+          report.failed.push({ name: c.name, reason: "drive_paused" });
+          continue;
+        }
+        const r: { status: number; bytes: Uint8Array; type: string; reason?: string } = c.driveId && drive
+          ? await fromDrive(c.driveId)
           : await politeFetch(c.url, job.limits.maxFileBytes);
+        if (driveRefusals >= DRIVE_STOP_AFTER && !drivePaused) {
+          drivePaused = r.reason ?? "drive_forbidden";
+          report.drivePaused = { reason: drivePaused, afterStored: report.stored.length };
+          await progress(pct, step, `Google Drive refused ${DRIVE_STOP_AFTER} downloads in a row (${reasonText(drivePaused)}). The agent stopped asking Drive for this run; run the download again later for the rest.`);
+        }
         if (r.status !== 200) {
-          report.failed.push({ name: c.name, reason: `http_${r.status}` });
+          report.failed.push({ name: c.name, reason: r.reason || `http_${r.status}` });
         } else {
           lastBytes = r.bytes.length;
           const res = await api("/api/agent/file", r.bytes, {
@@ -547,9 +582,7 @@ async function main() {
         report.failed.push({ name: c.name, reason: "download_failed" });
       }
       const failed = report.failed.length > failedBefore ? report.failed[report.failed.length - 1] : null;
-      const why = failed
-        ? (REASON_LABELS as Record<string, string>)[failed.reason] ?? (failed.reason.startsWith("http_") ? `the website answered ${failed.reason.slice(5)}` : failed.reason)
-        : "";
+      const why = failed ? reasonText(failed.reason) : "";
       const bytes = lastBytes;
       await progress(pct, step, failed
         ? { text: `${n} of ${todo.length}: ${c.name} not stored (${why})`, file: c.name, outcome: "failed", reason: failed.reason }
@@ -588,6 +621,9 @@ async function summarise(job: Job) {
     review: report.review?.length ?? 0,
     notNamed: report.unmatched.length,
     maxFiles: job.limits.maxFiles,
+    drivePaused: report.drivePaused
+      ? { afterStored: report.drivePaused.afterStored, notTried: report.failed.filter((x) => x.reason === "drive_paused").length }
+      : null,
   });
   const answer = await ai("summary", { draft });
   if (typeof answer?.summary === "string") {

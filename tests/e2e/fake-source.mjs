@@ -33,6 +33,8 @@ export function startFakeSource(port = 9911) {
       ["DRVFILE0004", "Revision notes.pdf", "application/pdf"],
       ["DRVFILE0005", "0620_s24_qp_12.pdf", "application/pdf"],
       ["DRVFILE0006", "Teacher notes.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+      // Google refuses this one, as it does for busy shared files.
+      ["DRVBUSY0008", "Grade Thresholds.pdf", "application/pdf"],
     ] },
     SPECFOLDER1: { name: "Specimen Papers 2023", kids: [["DRVFILE0007", "Specimen Paper 2.pdf", "application/pdf"]] },
   };
@@ -46,6 +48,7 @@ export function startFakeSource(port = 9911) {
     const m = /^\/drive\/v3\/files(?:\/([A-Za-z0-9_-]+))?$/.exec(u.pathname);
     if (!m) return send(404, { error: { errors: [{ reason: "notFound" }] } });
     if (m[1] === "PRIVATEFOLDR") return send(403, { error: { errors: [{ reason: "forbidden" }] } });
+    if (m[1] === "DRVBUSY0008" && u.searchParams.get("alt") === "media") return send(403, { error: { errors: [{ reason: "downloadQuotaExceeded" }] } });
     if (m[1] && u.searchParams.get("alt") === "media") {
       if (!driveFiles[m[1]]) return send(404, { error: { errors: [{ reason: "notFound" }] } });
       res.setHeader("Content-Type", "application/pdf");
