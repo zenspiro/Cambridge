@@ -50,15 +50,15 @@ function yearOf(w: string): number | null {
 
 /**
  * The syllabus code in a name: a code in brackets, "(0478)", first, then a code of a subject in
- * the library, then any other four-digit number that does not read as a year (1990 to 2039).
- * So "Computer Science (0478)" is read even before 0478 is added to the library.
+ * the library. A bare number outside the library ("1524" in a file name) is never taken for a
+ * code: it is usually part of a document number.
  */
 function codeOf(raw: string, subjects: KnownSubject[]): string | null {
   const isYear = (c: string) => /^(199\d|20[0-3]\d)$/.test(c);
   const bracket = [...raw.matchAll(/\((\d{4})\)/g)].map((m) => m[1]!).find((c) => !isYear(c));
   if (bracket) return bracket;
   const all = [...words(raw).matchAll(/ (\d{4}) /g)].map((m) => m[1]!);
-  return all.find((c) => subjects.some((s) => s.code === c)) ?? all.find((c) => !isYear(c)) ?? null;
+  return all.find((c) => subjects.some((s) => s.code === c)) ?? null;
 }
 
 /** "physics" (and "igcse" if two qualifications share the name) picks a known subject. */
@@ -183,4 +183,25 @@ export function driveFolderId(link: string): string | null {
   const s = link.trim();
   const m = /drive\.google\.com\/(?:drive\/(?:u\/\d+\/)?folders\/|open\?id=)([A-Za-z0-9_-]{10,100})/.exec(s) ?? /^([A-Za-z0-9_-]{25,100})$/.exec(s);
   return m ? m[1]! : null;
+}
+
+export type RunScope = { code: string; years: number[]; sessions: ("m" | "s" | "w" | "y")[] };
+export type FolderDecision = { open: "yes" | "no" | "unsure"; why: string };
+
+/**
+ * Whether a subfolder can hold files this run wants, from its name alone. "no" only when the
+ * name clearly says another subject, a year or a session outside the run; "unsure" when the
+ * name says nothing the rules can read ("Past Papers", "Topical"), for the AI or a safe "open".
+ */
+export function folderDecision(name: string, scope: RunScope, subjects: KnownSubject[]): FolderDecision {
+  const r = readFolder(name, subjects);
+  const w = words(name);
+  if (r.code && r.code !== scope.code) return { open: "no", why: "another subject" };
+  const specimenish = r.session === "y" || / (syllabus|syllabuses|specimens?|samples?) /.test(w);
+  if (specimenish) return scope.sessions.includes("y") ? { open: "yes", why: "specimens or syllabus documents" } : { open: "no", why: "specimens, not in this run" };
+  if (r.session && !scope.sessions.includes(r.session)) return { open: "no", why: "a session not in this run" };
+  if (r.year !== null) return scope.years.includes(r.year) ? { open: "yes", why: `${r.year}` } : { open: "no", why: `${r.year}, not in this run` };
+  if (r.session) return { open: "yes", why: "a session in this run" };
+  if (r.code === scope.code) return { open: "yes", why: "this subject" };
+  return { open: "unsure", why: "the name does not say" };
 }

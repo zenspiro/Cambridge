@@ -40,7 +40,16 @@ export type RunReport = {
   driveFolders?: {
     folderId: string; name: string; looksLike: string; folders: number; pdfs: number; recognised: number;
     forThisSyllabus: number; otherSubjects: Record<string, number>; years: [number, number] | null; truncated: boolean; error?: string;
+    skippedFolders?: number; yearsHeld?: [number, number] | null; aiSkipped?: string[]; aiNamed?: number;
   }[];
+  /** Plain-English summary, and whether the AI or the rules wrote it. */
+  summary?: string;
+  summaryBy?: "ai" | "rules";
+  ai?: { calls: number; note?: string };
+  /** Files the AI could not place: for a person to look at. */
+  review?: string[];
+  /** Files the AI judged not to be original Cambridge files. */
+  notNeeded?: { count: number; examples: string[] };
   /** Drive folders not read because their names are for other subjects. */
   driveSkipped?: number;
   stored?: string[];

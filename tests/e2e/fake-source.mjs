@@ -22,7 +22,9 @@ export function startFakeSource(port = 9911) {
   // A fake Google Drive API (v3): a shared Physics folder tree, and a private folder.
   const FOLDER = "application/vnd.google-apps.folder";
   const drive = {
-    ROOTFOLDER01: { name: "IGCSE Physics (0625)", kids: [["Y2024FOLDER", "2024", FOLDER], ["SPECFOLDER1", "Specimen Papers 2023", FOLDER]] },
+    ROOTFOLDER01: { name: "IGCSE Physics (0625)", kids: [["Y2024FOLDER", "2024", FOLDER], ["Y2019FOLDER", "2019", FOLDER], ["SPECFOLDER1", "Specimen Papers 2023", FOLDER]] },
+    // Outside the test run's years: the agent must not open it.
+    Y2019FOLDER: { name: "2019", kids: [["DRVFILE0009", "Question Paper 42.pdf", "application/pdf"]] },
     Y2024FOLDER: { name: "2024", kids: [["MAYJUNEFLDR", "May June", FOLDER]] },
     MAYJUNEFLDR: { name: "May June", kids: [
       ["DRVFILE0001", "Question Paper 12.pdf", "application/pdf"],

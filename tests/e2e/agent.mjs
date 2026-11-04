@@ -208,6 +208,10 @@ try {
   check(drep.driveFolders.find((f) => f.folderId === "PRIVATEFOLDR")?.error?.includes("refused access"), "drive: a private folder is reported, not fatal");
   check(drep.driveSkipped === 1 && !drep.driveFolders.some((f) => f.folderId === "OTHERSUBJECT01") && !fake.driveHits.some((h) => h.path.includes("OTHERSUBJECT01")),
     "drive: folders for other subjects are skipped without a call to Google");
+  check(root?.skippedFolders === 1 && !fake.driveHits.some((h) => h.path.includes("Y2019FOLDER")) && root.yearsHeld?.join() === "2019,2024",
+    "drive: folders for years outside the run are never opened, and the years held are reported");
+  check(drep.summaryBy === "rules" && /new file/.test(drep.summary ?? "") && /not available/.test(drep.ai?.note ?? ""),
+    "drive: without Workers AI the run still ends with a summary, and says AI was not used");
   check(fake.driveHits.every((h) => h.key === "test-drive-key" && !h.path.includes("test-drive-key")), "drive: API key sent only in a header, never in a URL");
   await page.goto(`${BASE}/admin/agent/runs/${dd}`);
   check((await page.locator("section", { hasText: "Google Drive folders read" }).locator("li", { hasText: "looks like IGCSE Physics 0625" }).count()) === 1, "drive: run page shows the folder reading");

@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-04: The agent gets judgement (Workers AI) and stops reading what it does not need
+
+**What:** Drive folders are opened only when they can hold what the run wants: a 2026 run no longer walks 2002 to 2025, other subjects' and other sessions' folders stay closed, and each folder reports the years it holds. A bare number like "1524" is no longer taken for a subject code. Cloudflare Workers AI (no key) is called through a new signed endpoint for three things: which unclear folders ("Topical", "Extended") to open, what the files the rules could not name are, and a plain-English summary at the top of the run page. The AI gives parts (year, session, type, paper, variant); the name is built and kept only if the checklist asks for it, otherwise it goes to a new "Needs your eye" list. "Not needed" counts notes and topic questions with examples. Without AI the agent works as before, with a rules summary, and says AI was not used.
+
+**Why:** owner feedback on the 2 Nov Physics 2026 run: it read 1,638 files across 17 years to find nothing, called "1524" a subject, and gave no explanation of 103 unnamed files.
+
+**Tested:** 87 unit tests (new: folder choice, the "1524" case, AI answers checked against the checklist, injection-shaped file names stay data, summary cleaning, per-run cap, unavailable and failing AI); 162 browser checks (new: a 2019 folder is never opened, the run ends with a summary and says AI was not available). Workers AI itself only runs on Cloudflare, so the first real run is its first live test.
+
 ## 2026-11-02: Step 2, all 16 IGCSE subjects in the library
 
 **What:** migration 0011 adds the 15 other subjects of the Revisiontown collection (Mathematics, Biology, Chemistry, ICT, Computer Science, Geography, Business Studies, Accounting, Economics, French, Literature in English, English First Language, History, Global Perspectives, Enterprise), each with its syllabus versions for 2022 to 2026, papers, routes, variant 2 as essential and Cambridge's two public pages as start pages. Coursework and speaking components show as "Marked by the school" and are never asked for. Inserts are asked for where the paper comes with one (Geography, Business Paper 2, English, Global Perspectives, Enterprise). The Run page has a subject picker (each subject's library page links to it), the run page names its subject, the Sources page names each start page's subject and lets you pick one when adding, and Home counts files across all subjects. The Physics-only lock is gone.

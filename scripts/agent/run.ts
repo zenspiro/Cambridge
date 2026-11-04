@@ -9,7 +9,7 @@ import { parseCambridgeName } from "../../src/lib/library/names.ts";
 import { REASON_LABELS } from "../../src/lib/library/labels.ts";
 import { pageTitle, summariseFiles } from "../../src/lib/library/summary.ts";
 import { SESSION_LABELS } from "../../src/lib/config.ts";
-import { classifyFile, readFolder, type KnownSubject } from "../../src/lib/agent/classify.ts";
+import { classifyFile, folderDecision, readFolder, type KnownSubject, type RunScope } from "../../src/lib/agent/classify.ts";
 import { DriveError, makeDrive, targetId, walk, type Drive } from "./drive.ts";
 
 type Job = {
@@ -33,6 +33,8 @@ const JOB_ID = process.env.JOB_ID ?? "";
 // Local tests only: allows http sources on this machine and a shorter wait.
 const TEST_MODE = process.env.AGENT_TEST_MODE === "1" && /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(APP_URL);
 const MAX_PAGE_BYTES = 5 * 1024 * 1024;
+/** Folders or files per AI call (the Worker allows up to AGENT.aiBatch). */
+const AI_BATCH = 40;
 
 if (!/^https?:\/\/[^/]+$/.test(APP_URL) || !/^[A-Za-z0-9_-]{10,64}$/.test(JOB_ID) || SECRET.length < 32) {
   console.error("agent: APP_URL, JOB_ID and AGENT_SECRET (32+ characters) are required");
@@ -114,6 +116,14 @@ type Report = {
   robotsBlocked: string[];
   pageErrors: { url: string; status: string }[];
   driveFolders?: DriveSummary[];
+  /** Files the rules could not name and the AI was not sure about: for a person to look at. */
+  review?: string[];
+  /** Files the AI says are not original Cambridge files (notes, topic questions), with a few examples. */
+  notNeeded?: { count: number; examples: string[] };
+  /** Plain-English summary of the run (by the AI, or by rules when AI is not available). */
+  summary?: string;
+  summaryBy?: "ai" | "rules";
+  ai?: { calls: number; note?: string };
   /** Drive folders not read because they are for other subjects. */
   driveSkipped?: number;
   error?: string;
@@ -143,9 +153,40 @@ async function progress(pct: number, step: string, event?: Event) {
   }
 }
 
+// Workers AI through the signed /api/agent/ai endpoint. Any failure means "carry on with the
+// rules": 503 (no AI) or 429 (this run's calls used up) switch it off for the rest of the run.
+let aiOn = true;
+let aiCalls = 0;
+let aiFailures = 0;
+let aiNote = "";
+async function ai(task: "folders" | "names" | "summary", payload: Record<string, unknown>): Promise<Record<string, unknown> | null> {
+  if (!aiOn) return null;
+  try {
+    const r = await api("/api/agent/ai", enc.encode(JSON.stringify({ jobId: JOB_ID, task, ...payload })));
+    if (r.status === 200 && r.data && typeof r.data === "object") {
+      aiCalls++;
+      return r.data as Record<string, unknown>;
+    }
+    if (r.status === 409) throw new Cancelled("the run was cancelled or closed in the admin panel");
+    if (r.status === 502) aiFailures++;
+    if (r.status === 503 || r.status === 429 || aiFailures >= 3) {
+      aiOn = false;
+      aiNote = r.status === 503 ? "AI was not available, so the agent used its rules only"
+        : r.status === 429 ? "the AI call limit for one run was reached; the rest used rules only"
+        : "the AI gave no usable answer three times, so the rest used rules only";
+      log(aiNote);
+    }
+  } catch (e) {
+    if (e instanceof Cancelled) throw e;
+  }
+  return null;
+}
+
 type DriveSummary = {
   folderId: string; name: string; looksLike: string; folders: number; pdfs: number; recognised: number;
   forThisSyllabus: number; otherSubjects: Record<string, number>; years: [number, number] | null; truncated: boolean; error?: string;
+  /** Folders not opened (outside the run, or judged not useful), and the years the folder holds. */
+  skippedFolders?: number; yearsHeld?: [number, number] | null; aiSkipped?: string[]; aiNamed?: number;
 };
 
 const report: Report = {
@@ -323,21 +364,49 @@ async function main() {
               continue;
             }
           }
+          // Open only folders that can hold what this run wants: the rules decide when a name is
+          // clear ("2019", "Feb March", "Chemistry (0620)"); the AI decides the unclear ones.
+          const scope: RunScope = { code: job.params.code, years: job.params.years, sessions: job.params.sessions as RunScope["sessions"] };
+          const heldYears: number[] = [];
+          const aiSkipped: string[] = [];
+          const choose = async (path: string[], names: string[]) => {
+            const ds = names.map((nm) => folderDecision(nm, scope, subjects));
+            names.forEach((nm) => { const y = readFolder(nm, subjects).year; if (y) heldYears.push(y); });
+            // Below a folder already matched (a wanted year or session), unclear names are opened.
+            const inside = path.slice(1).some((nm) => folderDecision(nm, scope, subjects).open === "yes");
+            const ask = inside ? [] : ds.map((d, i) => (d.open === "unsure" ? i : -1)).filter((i) => i >= 0).slice(0, AI_BATCH);
+            const answer = ask.length ? await ai("folders", { path, names: ask.map((i) => names[i]) }) : null;
+            const verdicts = Array.isArray(answer?.folders) ? (answer.folders as { open: boolean; why: string }[]) : [];
+            return ds.map((d, i) => {
+              if (d.open !== "unsure") return d.open === "yes";
+              const v = verdicts[ask.indexOf(i)];
+              if (v && v.open === false) {
+                aiSkipped.push(`${[...path.slice(1), names[i]].join(" / ")}: ${v.why || "not useful for this run"}`);
+                return false;
+              }
+              return true;
+            });
+          };
           const tree = await walk(drive, f.folderId, { maxFolders: job.limits.driveMaxFolders ?? 2000, maxDepth: job.limits.driveMaxDepth ?? 8 },
-            async (path, count) => { if (count % 25 === 0) await progress(findShare, `${step}: ${count} folders so far (${path.join(" / ")})`); });
+            async (path, count) => { if (count % 25 === 0) await progress(findShare, `${step}: ${count} folders opened (${path.join(" / ")})`); },
+            choose);
           const summary: DriveSummary = {
             folderId: f.folderId, name: tree.root, looksLike: "", folders: tree.folders, pdfs: tree.pdfs.length, recognised: 0,
             forThisSyllabus: 0, otherSubjects: {}, years: null, truncated: tree.truncated,
+            skippedFolders: tree.skipped,
+            yearsHeld: heldYears.length ? [Math.min(...heldYears), Math.max(...heldYears)] : null,
+            aiSkipped: aiSkipped.slice(0, 20),
           };
           const reading = readFolder(f.label || tree.root, subjects);
           const fresh: string[] = [];
+          const leftovers: { path: string[]; item: (typeof tree.pdfs)[number]["item"]; why: string; done?: boolean }[] = [];
           let haveHere = 0;
           let outside = 0;
           for (const { item, path } of tree.pdfs) {
             const c = classifyFile(path, item.name, subjects);
             if (!c.name) {
               if (c.code && c.code !== job.params.code) summary.otherSubjects[c.code] = (summary.otherSubjects[c.code] ?? 0) + 1;
-              else if (report.unmatched.length < 300) report.unmatched.push(`${[...path, item.name].join(" / ")}: ${c.why}`);
+              else leftovers.push({ path, item, why: c.why });
               continue;
             }
             summary.recognised++;
@@ -362,6 +431,44 @@ async function main() {
             report.candidates.push({ name: c.name, url: `https://drive.google.com/file/d/${id}/view`, siteId: f.siteId, driveId: id, why: c.why });
             fresh.push(c.name);
           }
+          // Files the rules could not name: the AI reads their folder path and name. Only names the
+          // checklist asks for in this run come back as "named"; anything else goes to review.
+          let aiNamed = 0;
+          const askable = leftovers.slice(0, AI_BATCH * 5);
+          if (askable.length && aiOn) await progress(findShare, `${step}: asking the AI about ${leftovers.length} unclear file${leftovers.length === 1 ? "" : "s"}`);
+          for (let k = 0; k < askable.length && aiOn; k += AI_BATCH) {
+            const batch = askable.slice(k, k + AI_BATCH);
+            const answer = await ai("names", { files: batch.map((l) => ({ path: l.path, name: l.item.name })) });
+            const verdicts = Array.isArray(answer?.files) ? (answer.files as { i: number; outcome: string; name?: string; why: string }[]) : [];
+            for (const v of verdicts) {
+              const l = batch[v.i];
+              if (!l || l.done) continue;
+              l.done = true;
+              const where = [...l.path, l.item.name].join(" / ");
+              if (v.outcome === "named" && v.name && parseCambridgeName(v.name)?.code === job.params.code) {
+                summary.recognised++;
+                summary.forThisSyllabus++;
+                aiNamed++;
+                if (have.has(v.name) || report.candidates.some((x) => x.name === v.name)) {
+                  haveHere++;
+                  report.skippedHave++;
+                  continue;
+                }
+                const id = targetId(l.item);
+                report.candidates.push({ name: v.name, url: `https://drive.google.com/file/d/${id}/view`, siteId: f.siteId, driveId: id, why: `worked out by AI: ${v.why}` });
+                fresh.push(v.name);
+              } else if (v.outcome === "not_needed") {
+                report.notNeeded ??= { count: 0, examples: [] };
+                report.notNeeded.count++;
+                if (report.notNeeded.examples.length < 10) report.notNeeded.examples.push(`${where}: ${v.why}`);
+              } else {
+                report.review ??= [];
+                if (report.review.length < 200) report.review.push(`${where}: ${v.why}`);
+              }
+            }
+          }
+          for (const l of leftovers) if (!l.done && report.unmatched.length < 300) report.unmatched.push(`${[...l.path, l.item.name].join(" / ")}: ${l.why}`);
+          summary.aiNamed = aiNamed;
           const subj = subjects.find((s) => s.code === (reading.code ?? (summary.forThisSyllabus ? job.params.code : "")));
           // A subject the library does not have yet still reads by its folder name ("History (0470)").
           summary.looksLike = subj
@@ -376,8 +483,11 @@ async function main() {
           await progress(findShare, step,
             `Read Google Drive folder "${tree.root}": looks like ${summary.looksLike}. ${tree.pdfs.length} PDFs in ${tree.folders} folders` +
             `${summary.years ? `, ${summary.years[0] === summary.years[1] ? summary.years[0] : `${summary.years[0]} to ${summary.years[1]}`}` : ""}` +
-            `${tree.truncated ? " (stopped at the folder limit)" : ""}. ${summary.forThisSyllabus} recognised as ${job.params.code} papers` +
-            `${others ? `, others for subjects not in this run (${others})` : ""}; ${tree.pdfs.length - summary.recognised - Object.values(summary.otherSubjects).reduce((a, b) => a + b, 0)} not recognised. ` +
+            `${tree.truncated ? " (stopped at the folder limit)" : ""}` +
+            `${summary.yearsHeld ? `; it holds ${summary.yearsHeld[0]} to ${summary.yearsHeld[1]}` : ""}` +
+            `${tree.skipped ? `; ${tree.skipped} folder${tree.skipped === 1 ? "" : "s"} not opened (outside this run${aiSkipped.length ? `, ${aiSkipped.length} judged not useful by the AI` : ""})` : ""}` +
+            `. ${summary.forThisSyllabus} recognised as ${job.params.code} papers${aiNamed ? ` (${aiNamed} by the AI)` : ""}` +
+            `${others ? `, others for subjects not in this run (${others})` : ""}; ${tree.pdfs.length - summary.recognised - Object.values(summary.otherSubjects).reduce((a, b) => a + b, 0)} not named. ` +
             (fresh.length ? `${fresh.length} new: ${summariseFiles(fresh)}` : "Nothing new for this run") +
             `${haveHere ? `; ${haveHere} already in the library` : ""}${outside ? `; ${outside} for years or sessions not in this run` : ""}.`);
         } catch (e) {
@@ -448,6 +558,36 @@ async function main() {
       ? `Done: ${report.stored.length} stored (${summariseFiles(report.stored, 6)})${report.failed.length ? `; ${report.failed.length} not stored, see the list below` : ""}.`
       : `Done: nothing was stored${report.failed.length ? `; ${report.failed.length} not stored, see the list below` : ""}.`);
   }
+  await summarise(job);
+}
+
+/** The run in plain words for the top of the run page: by the AI, or by rules without it. */
+async function summarise(job: Job) {
+  const drive = (report.driveFolders ?? []).map((d) => ({
+    folder: d.name, error: d.error, pdfs: d.pdfs, holdsYears: d.yearsHeld ?? d.years, foldersOpened: d.folders,
+    foldersNotOpened: d.skippedFolders, namedForThisSubject: d.forThisSyllabus,
+  }));
+  const facts = {
+    mode: job.params.mode, years: job.params.years, sessions: job.params.sessions,
+    websitePagesRead: report.pagesVisited - drive.length, websiteLinks: report.linksFound,
+    googleDrive: drive, driveFoldersForOtherSubjects: report.driveSkipped ?? 0,
+    newFilesFound: report.candidates.length, alreadyInLibrary: report.skippedHave, outsideThisRun: report.skippedNotRequested,
+    stored: report.stored.length, notStored: report.failed.length, notNeeded: report.notNeeded?.count ?? 0,
+    needsReview: report.review?.length ?? 0, notNamed: report.unmatched.length, errors: report.pageErrors.map((e) => `${e.url}: ${e.status}`).slice(0, 5),
+  };
+  const answer = report.candidates.length + report.stored.length > 0 || drive.length > 0 ? await ai("summary", { facts }) : null;
+  if (typeof answer?.summary === "string") {
+    report.summary = answer.summary;
+    report.summaryBy = "ai";
+  } else {
+    const held = drive.find((d) => d.holdsYears)?.holdsYears;
+    report.summary = report.candidates.length
+      ? `Found ${report.candidates.length} new file${report.candidates.length === 1 ? "" : "s"} for this run${job.params.mode === "download" ? `; ${report.stored.length} stored` : ""}.`
+      : `Nothing new for ${job.params.years.join(", ")}.${held ? ` The Google Drive copy holds ${held[0]} to ${held[1]}.` : ""} ${report.skippedHave} matching files are already in the library.`;
+    report.summaryBy = "rules";
+  }
+  report.ai = { calls: aiCalls, ...(aiNote ? { note: aiNote } : {}) };
+  await progress(99, "Summary", `${report.summaryBy === "ai" ? "Summary (AI)" : "Summary"}: ${report.summary}`);
 }
 
 try {

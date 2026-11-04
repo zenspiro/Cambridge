@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { classifyFile, driveFolderId, readFolder, type KnownSubject } from "../../src/lib/agent/classify.ts";
+import { classifyFile, driveFolderId, folderDecision, readFolder, type KnownSubject } from "../../src/lib/agent/classify.ts";
 
 const SUBJECTS: KnownSubject[] = [{ code: "0625", name: "Physics", qualification: "IGCSE" }];
 const name = (path: string[], file: string) => classifyFile(path, file, SUBJECTS).name;
@@ -58,7 +58,10 @@ test("a folder name says what it can on its own", () => {
   // Subjects not in the library yet are still read by their code; years are never taken for codes.
   assert.deepEqual(readFolder("History (0470)", SUBJECTS), { code: "0470", subject: null, inLibrary: false, year: null, session: null });
   assert.equal(readFolder("Specimen Papers (2023)", SUBJECTS).code, null);
-  assert.equal(readFolder("O Level Computer Science 2210", SUBJECTS).code, "2210");
+  assert.equal(readFolder("O Level Computer Science (2210)", SUBJECTS).code, "2210");
+  // A bare number outside the library is part of a document number, never a subject code.
+  assert.equal(readFolder("O Level Computer Science 2210", SUBJECTS).code, null);
+  assert.equal(classifyFile(["Physics (0625)", "2019"], "1524 revision guide.pdf", SUBJECTS).code, "0625");
 });
 
 test("files of subjects not in the library are understood from their folders", () => {
@@ -74,4 +77,20 @@ test("Drive folder links give their id; anything else does not", () => {
   for (const bad of ["https://evil.example/drive/folders/1BEumj8GOd4x0UOVkk8Cq5o5guTgBSeo2", "https://docs.google.com/document/d/abc", "short", ""]) {
     assert.equal(driveFolderId(bad), null, bad);
   }
+});
+
+test("folders are opened only when they can hold what the run wants", () => {
+  const run = { code: "0625", years: [2024, 2023], sessions: ["s" as const, "w" as const] };
+  const open = (n: string) => folderDecision(n, run, SUBJECTS).open;
+  assert.equal(open("2019"), "no");
+  assert.equal(open("2024"), "yes");
+  assert.equal(open("2023 May-June"), "yes");
+  assert.equal(open("2023 Feb-March"), "no");
+  assert.equal(open("Feb March"), "no");
+  assert.equal(open("Oct Nov"), "yes");
+  assert.equal(open("Chemistry (0620)"), "no");
+  assert.equal(open("Specimen Papers"), "no", "specimens only when the run asks for them");
+  assert.equal(folderDecision("Specimen Papers", { ...run, sessions: ["y"] }, SUBJECTS).open, "yes");
+  assert.equal(open("Topical Past Papers"), "unsure", "names the rules cannot read go to the AI");
+  assert.equal(open("Extended"), "unsure");
 });

@@ -24,7 +24,7 @@ Update this file whenever the process changes.
 - [ ] `npm run build:worker`
 - [ ] `npm run db:migrate:local`
 - [ ] `.dev.vars` exists (copy `.dev.vars.example`)
-- [ ] `npx wrangler dev --port 8787`, then `npm run test:e2e` (public pages at 375 px and 1400 px; admin pages at 1400 px only, desktop only by owner decision)
+- [ ] `npx wrangler dev --local --port 8787`, then `npm run test:e2e` (public pages at 375 px and 1400 px; admin pages at 1400 px only, desktop only by owner decision)
 - [ ] New test suites listed in `tests/README.md`
 - [ ] `CLAUDE.md`, `HISTORY.md`, `FEATURES.md`, `docs/guides/` updated in the same commit
 - [ ] Commit message carries no AI model names

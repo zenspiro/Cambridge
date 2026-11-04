@@ -132,6 +132,13 @@ export default async function RunPage({
           Started {dateFmt.format(run.created_at)}
           {run.finished_at ? `, finished ${dateFmt.format(run.finished_at)}` : ""}.
         </p>
+        {typeof rep.summary === "string" ? (
+          <p className="run-summary">
+            {rep.summary.slice(0, 900)}
+            <span className="muted"> ({rep.summaryBy === "ai" ? "summary written by the AI from this run's counts" : "summary"})</span>
+          </p>
+        ) : null}
+        {rep.ai?.note ? <p className="muted">{String(rep.ai.note).slice(0, 200)}.</p> : null}
         {run.error_ref && ERRORS[run.error_ref] ? <p className="alert" role="alert">{ERRORS[run.error_ref]}</p> : null}
         {typeof rep.error === "string" && run.error_ref === "agent" ? <p className="mono">{rep.error.slice(0, 300)}</p> : null}
         {!done ? (
@@ -276,6 +283,9 @@ export default async function RunPage({
                     <span className="muted">
                       {f.pdfs} PDFs in {f.folders} folders{f.years ? `, ${f.years[0]} to ${f.years[1]}` : ""}{f.truncated ? " (stopped at the folder limit)" : ""}.
                       {" "}{f.forThisSyllabus} recognised for {subjectName}
+                      {f.yearsHeld ? ` The folder holds ${f.yearsHeld[0]} to ${f.yearsHeld[1]}.` : ""}
+                      {f.skippedFolders ? ` ${f.skippedFolders} folder${f.skippedFolders === 1 ? "" : "s"} not opened (outside this run).` : ""}
+                      {f.aiNamed ? ` ${f.aiNamed} named by the AI.` : ""}
                       {Object.keys(f.otherSubjects ?? {}).length ? `; other subjects: ${Object.entries(f.otherSubjects).map(([c, n]) => `${subjectLabel(subjects, c)}: ${n}`).join(", ")}` : ""}.
                     </span>
                   )}
@@ -290,6 +300,12 @@ export default async function RunPage({
         note={p.mode === "dry" ? "Nothing has been downloaded yet. Press the button above to fetch these." : undefined} />
       <FileList title="Stored" files={arr(rep.stored).map((name) => ({ name }))} describe={describe} />
       <FileList title="Not stored" files={arr(rep.failed).map((f) => ({ name: f.name, note: reasonText(f.reason) }))} describe={describe} />
+      <List title="Needs your eye" items={arr(rep.review, 200)}
+        note="The AI looked at these and could not place them, or placed them outside this run. Nothing was fetched. If one is needed, add it by hand from the library." />
+      <List title={`Not needed: ${Number(rep.notNeeded?.count ?? 0)} files, examples`} items={arr(rep.notNeeded?.examples, 10)}
+        note="The AI judged these are not original Cambridge files, for example notes or topic questions." />
+      <List title="Folders the AI did not open" items={arr(rep.driveFolders).flatMap((f) => arr(f.aiSkipped, 20))}
+        note="Folder names that did not say what they hold; the AI judged they cannot have this run's papers." />
       <List title="Links not recognised" items={arr(rep.unmatched)}
         note="PDFs whose names do not match a Cambridge paper, specimen or syllabus document. Nothing was fetched. If one is needed, add it by hand from the library." />
       <List title="Blocked by robots.txt" items={arr(rep.robotsBlocked)} note="The website asks automated visitors not to fetch these, so the agent skipped them." />

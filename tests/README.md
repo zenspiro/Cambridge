@@ -19,11 +19,12 @@ Node's built-in test runner, TypeScript loaded directly. Files must not import N
 | `agent.test.ts` | Progress updates and event cap, cancel, 15 minute rule, cleaning agent text and links, signed requests and replay guard, robots.txt (incl. Cambridge's real file), Cambridge website names to standard names (real examples), PDF link filtering, settings, run choices, one run at a time, stale runs, start pages |
 | `checklist.test.ts` | Checklist groups and counts, stored and extra files, essential variants (syllabus own, library default, damaged value), filters and search, hierarchy load, the rebuilt document table, papers and routes seed, plain-word file descriptions |
 | `summary.test.ts` | File summaries by session, page titles, agent event checking, reasons in words, version lookup |
-| `classify.test.ts` | Working out Cambridge names from Drive file and folder names (direct names, descriptive names, specimens, syllabus documents, unclear files with reasons), folder readings, Drive link parsing |
+| `classify.test.ts` | Working out Cambridge names from Drive file and folder names (direct names, descriptive names, specimens, syllabus documents, unclear files with reasons), folder readings, which folders a run opens, bare numbers never read as codes, Drive link parsing |
+| `ai.test.ts` | Workers AI answers: folder choices default to open, file names built from parts and kept only if the checklist asks for them, file names sent as data, summary cleaning, lenient JSON, running run only, per-run cap, unavailable and failing AI |
 | `check-inline.test.ts` | The inline code scanner catches each banned pattern and passes normal React code |
 
 ## Browser smoke test (`tests/e2e/smoke.mjs`, `npm run test:e2e`)
-Needs a running Worker (`npx wrangler dev --port 8787`, or set `BASE_URL`). Public pages at 375 px and 1400 px, admin pages (sign-in) at 1400 px only: right status, has an h1, no sideways scroll, no script or console errors (CSP violations show here), every script carries the nonce. Add new pages to `PAGES`.
+Needs a running Worker (`npx wrangler dev --local --port 8787`, or set `BASE_URL`). Public pages at 375 px and 1400 px, admin pages (sign-in) at 1400 px only: right status, has an h1, no sideways scroll, no script or console errors (CSP violations show here), every script carries the nonce. Add new pages to `PAGES`.
 
 ## Admin sign-in test (`tests/e2e/admin.mjs`, part of `npm run test:e2e`)
 Needs a running Worker and `.dev.vars` (copy `.dev.vars.example`). The full sign-in and sign-out flow at desktop width (admin is desktop only), cookie flags, replayed cookie, cross-site and Origin-less POSTs, forged cookie, and the lockout. Each run uses made-up networks (`cf-connecting-ip`), so lockouts do not carry over between runs.

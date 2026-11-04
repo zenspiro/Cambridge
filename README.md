@@ -17,7 +17,7 @@ npm run dev
 
 ```bash
 npm run build:worker
-npx wrangler dev --port 8787
+npx wrangler dev --local --port 8787
 ```
 
 Then open http://localhost:8787, http://localhost:8787/health and http://localhost:8787/admin (local password in `.dev.vars`).
