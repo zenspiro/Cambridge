@@ -138,6 +138,26 @@
   .tile-off { @apply border-dashed border-line text-line; }
   .tiles-row { @apply flex flex-wrap gap-2; }
   .version-tile { @apply inline-flex min-h-11 items-center gap-3 rounded-lg border border-line bg-paper px-3 text-sm font-medium no-underline hover:border-brand; }
+  /* Subject map: one table per syllabus version, papers as column groups (admin, desktop). */
+  .map-actions { @apply flex gap-2; }
+  .map-version-status { @apply flex items-center gap-2 text-sm; }
+  .map-docs { @apply flex flex-wrap items-center gap-2; }
+  .map-docs > .label-inline { @apply w-40 shrink-0; }
+  .map-spec { @apply inline-flex items-center gap-1 rounded-lg border border-line px-1.5 py-1; }
+  .map-spec-no { @apply px-1 text-xs font-semibold text-muted; }
+  .map-scroll { @apply overflow-x-auto; }
+  .map-table { @apply w-full border-collapse text-sm; }
+  .map-table th, .map-table td { @apply border-b border-line px-1 py-1 text-center align-middle; }
+  .map-table .map-first { @apply w-48 pr-2 text-left font-medium; }
+  .map-table thead .map-paper { @apply border-l border-line px-2 pt-2 text-left align-bottom text-xs font-normal text-muted; }
+  .map-paper-no { @apply block font-semibold text-ink; }
+  .map-paper-name { @apply block leading-tight; }
+  .map-paper .tag { @apply ml-0 mt-1 inline-block; }
+  .map-sub { @apply text-xs font-semibold text-muted; }
+  .map-start { @apply border-l border-line; }
+  .map-count { @apply ml-2; }
+  .map-row-first th, .map-row-first td { @apply border-t border-line; }
+  .map-table .cell { @apply min-h-7 min-w-7 px-1 text-xs; }
   .info-table { @apply w-full border-collapse text-sm; }
   .info-table th, .info-table td { @apply border-b border-line px-2 py-1.5 text-left align-top; }
   .info-table thead th { @apply text-xs font-semibold text-muted; }

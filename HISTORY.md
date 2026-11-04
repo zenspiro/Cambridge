@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-04: Subject map
+
+**What:** each subject's library page now opens on a map of the whole subject: per syllabus version its syllabus documents and specimen papers, then every exam session as a row with each paper as a named column group (question paper, insert, mark scheme, confidential instructions, only where the paper has them) and the examiner report and grade thresholds. Ticks download, crosses add. Essential variants by default, "All variants" shows the rest; coursework and speaking are named as marked by the school. "Download map" gives the same hierarchy as JSON with every file described in words, and the AI engine's catalog now serves exactly that structure.
+
+**Why:** owner request: one first view per subject that shows, for each year and session, every paper type plus the syllabus and other documents, for both people and AI.
+
+**Tested:** 93 unit tests (new: map columns, rows, variants, inserts, school-assessed parts, JSON descriptions); 169 browser checks (new: a table per version, a row per session, named paper columns, document and specimen bands, All variants, Download map, unknown subject).
+
 ## 2026-11-04: Run summaries written by rules, reworded by AI
 
 **What:** the summary at the top of a run page is now written by rules from the run's counts: what was found, what was read, real limits (or "Nothing was cut short") and the next step. Workers AI only rewords it; a rewording that adds or changes a number, or claims a limit the draft does not have, is thrown away and the rules' text is shown.
