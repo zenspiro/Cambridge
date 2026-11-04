@@ -86,10 +86,28 @@ check((await notes.locator(".pick-line", { hasText: "Goes to IGCSE Physics (0625
 const box = await notes.locator("select").boundingBox();
 const row = await notes.boundingBox();
 check(box && row && box.width > row.width * 0.6, `folder: the picker is wide enough to read (${Math.round(box?.width ?? 0)} of ${Math.round(row?.width ?? 0)} px)`);
+// Cloudflare hiccups: every file's first try gets an error page (retried by itself), and one file
+// keeps failing until "Try again" is pressed.
+const tried = new Set();
+let holdBack = true;
+await page.route("**/admin/library/folder/file", async (route) => {
+  const name = route.request().headers()["x-file-name"];
+  if (!tried.has(name) || (holdBack && name === "0625_s25_qp_42.pdf")) {
+    tried.add(name);
+    return route.fulfill({ status: 503, contentType: "text/html", body: "<html>Worker exceeded resource limits</html>" });
+  }
+  return route.continue();
+});
 await page.click("button:has-text('Upload 7 files')");
-await page.waitForSelector("#folder-done", { timeout: 30_000 });
+await page.waitForSelector("#folder-done", { timeout: 90_000 });
+const doneText = await page.locator("#folder-done").innerText();
+check(/6 files stored, 1 not stored/.test(doneText) && /error 503, tried 4 times/.test(doneText), `folder: error pages are retried by themselves, and a file that keeps failing says why (${doneText.split("\n")[1]})`);
+holdBack = false;
+await page.click("#folder-retry");
+await page.waitForSelector("#folder-retry", { state: "detached", timeout: 60_000 });
+await page.unroute("**/admin/library/folder/file");
 check(/7 files stored/.test(await page.locator("#folder-done").innerText()) && (await page.locator("#folder-done a", { hasText: "Open IGCSE Physics (0625) in the library" }).count()) === 1,
-  "folder: a clear summary when the upload is finished, with a link to the library");
+  "folder: after Try again, all seven stored and the summary says so, with a link to the library");
 const stored = rows(`SELECT file_name FROM source_document WHERE file_name IN (${NAMES.map((n) => `'${n}'`).join(",")}) ORDER BY file_name`).map((r) => r.file_name);
 check(stored.join(",") === "0625_s25_ci_52.pdf,0625_s25_ms_21.pdf,0625_s25_ms_32.pdf,0625_s25_qp_32.pdf,0625_s25_qp_42.pdf,0625_s25_sf_51.pdf,1525_s25_qp_22.pdf", `folder: seven files stored under their worked out names (${stored.join(",")})`);
 
