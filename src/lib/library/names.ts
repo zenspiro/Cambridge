@@ -61,3 +61,28 @@ export function examName(code: string, session: "m" | "s" | "w", year: number, d
   const tail = paper === undefined ? "" : `_${paper}${variant ?? ""}`;
   return `${code}_${session}${yy}_${docType}${tail}.pdf`;
 }
+
+const DOC_TYPES: DocType[] = ["qp", "ms", "in", "ci", "er", "gt", "sp", "sm", "sy", "su", "gd"];
+
+/**
+ * A Cambridge name from its parts (year, session, type, paper, variant), as the AI or the front
+ * page reader give them; null when the parts do not make a valid name.
+ */
+export function nameFromParts(code: string, d: Record<string, unknown>): string | null {
+  const year = Number(d.year);
+  const session = d.session as "m" | "s" | "w" | "y";
+  const type = d.type as DocType;
+  const paper = d.paper === undefined || d.paper === null ? null : Number(d.paper);
+  const variant = d.variant === undefined || d.variant === null ? null : Number(d.variant);
+  if (!Number.isInteger(year) || year < 2000 || year > 2099 || !["m", "s", "w", "y"].includes(session) || !DOC_TYPES.includes(type)) return null;
+  const yy = String(year % 100).padStart(2, "0");
+  let name: string;
+  if (session === "y") {
+    if (type === "sy" || type === "su" || type === "gd") name = `${code}_y${yy}_${type}.pdf`;
+    else if (paper && Number.isInteger(paper)) name = `${code}_y${yy}_${type === "qp" ? "sp" : type === "ms" ? "sm" : type}_${paper}.pdf`;
+    else return null;
+  } else if (type === "er" || type === "gt") name = examName(code, session, year, type);
+  else if (paper && variant && Number.isInteger(paper) && Number.isInteger(variant)) name = examName(code, session, year, type, paper, variant);
+  else return null;
+  return parseCambridgeName(name) ? name : null;
+}

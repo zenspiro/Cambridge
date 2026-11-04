@@ -102,6 +102,7 @@ test("Google Drive refusals get reasons people can act on", async () => {
   assert.equal(driveRefusal(new DriveError(403, "userRateLimitExceeded")), "drive_rate");
   assert.equal(driveRefusal(new DriveError(429, "")), "drive_rate");
   assert.equal(driveRefusal(new DriveError(403, "cannotDownloadFile")), "drive_forbidden");
+  assert.equal(driveRefusal(new DriveError(403, "")), "drive_throttled", "a bare 403 is Google limiting automated downloads");
   assert.equal(driveRefusal(new DriveError(404, "notFound")), "drive_missing");
   assert.match(reasonText("drive_quota"), /download limit/);
   assert.match(reasonText("drive_paused"), /run the download again later/i);

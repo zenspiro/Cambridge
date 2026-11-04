@@ -9,19 +9,26 @@ import { parseCambridgeName } from "../../src/lib/library/names.ts";
 import { reasonText } from "../../src/lib/agent/labels.ts";
 import { pageTitle, summariseFiles } from "../../src/lib/library/summary.ts";
 import { SESSION_LABELS } from "../../src/lib/config.ts";
-import { ruleSummary } from "../../src/lib/agent/runSummary.ts";
+import { checkSummary, ruleSummary } from "../../src/lib/agent/runSummary.ts";
 import { classifyFile, folderDecision, readFolder, type KnownSubject, type RunScope } from "../../src/lib/agent/classify.ts";
 import { DriveError, driveRefusal, makeDrive, targetId, walk, type Drive } from "./drive.ts";
+import { constants as zlibConstants, inflateSync } from "node:zlib";
+import { firstPageText } from "../../src/lib/pdf/firstPage.ts";
+import { readCover, type CoverReading } from "../../src/lib/library/cover.ts";
 
 type Job = {
-  params: { code: string; years: number[]; sessions: string[]; mode: "dry" | "download" };
+  params: { code: string; years: number[]; sessions: string[]; mode: "dry" | "download" | "check" };
+  /** Library check: the subject's stored files. */
+  storedDocs?: { id: string; fileName: string }[];
   sources: { siteId: string; name: string; baseUrl: string; pages: string[] }[];
   driveFolders?: { siteId: string; folderId: string; label: string }[];
   subjects?: KnownSubject[];
   have: string[];
+  /** The owner's decisions on files that needed an eye (by Drive file id within a source). */
+  decisions?: { siteId: string; id: string; decision: "accept" | "reject"; name: string | null }[];
   limits: {
     maxFiles: number; maxFileBytes: number; delayMs: number; userAgentToken: string;
-    driveDelayMs?: number; driveMaxFolders?: number; driveMaxDepth?: number;
+    driveDelayMs?: number; driveMaxFolders?: number; driveMaxDepth?: number; coverReads?: number;
   };
 };
 
@@ -36,6 +43,13 @@ const TEST_MODE = process.env.AGENT_TEST_MODE === "1" && /^http:\/\/(localhost|1
 const MAX_PAGE_BYTES = 5 * 1024 * 1024;
 /** Folders or files per AI call (the Worker allows up to AGENT.aiBatch). */
 const AI_BATCH = 40;
+
+// The front page reader: text of page 1 (zlib from Node), then Cambridge's cover rules.
+const inflate = async (d: Uint8Array) => new Uint8Array(inflateSync(d, { finishFlush: zlibConstants.Z_SYNC_FLUSH }));
+async function coverOf(bytes: Uint8Array, codes: string[]): Promise<{ text: string; cover: CoverReading }> {
+  const text = await firstPageText(bytes, inflate);
+  return { text, cover: readCover(text, codes) };
+}
 
 if (!/^https?:\/\/[^/]+$/.test(APP_URL) || !/^[A-Za-z0-9_-]{10,64}$/.test(JOB_ID) || SECRET.length < 32) {
   console.error("agent: APP_URL, JOB_ID and AGENT_SECRET (32+ characters) are required");
@@ -58,6 +72,14 @@ async function api(path: string, body: Uint8Array, extra: Record<string, string>
     // keep null
   }
   return { status: res.status, data };
+}
+
+/** A signed request whose answer is a file (library check). */
+async function apiBytes(path: string, payload: Record<string, unknown>): Promise<{ status: number; bytes: Uint8Array }> {
+  const body = enc.encode(JSON.stringify(payload));
+  const headers = { ...(await signRequest(SECRET, "POST", path, body)), "Content-Type": "application/json" };
+  const res = await fetch(APP_URL + path, { method: "POST", headers, body: body as BodyInit });
+  return { status: res.status, bytes: res.ok ? new Uint8Array(await res.arrayBuffer()) : new Uint8Array() };
 }
 
 // One polite fetcher per website: waits between requests, identifies itself,
@@ -105,6 +127,9 @@ async function politeFetch(url: string, maxBytes: number): Promise<{ status: num
   return { status: 310, bytes: new Uint8Array(), type: "" };
 }
 
+type ReviewEntry = { where: string; why: string; driveId: string; siteId: string; suggest?: string; by: "ai" | "rules" };
+const MAX_REVIEW = 200;
+
 type Report = {
   pagesVisited: number;
   linksFound: number;
@@ -117,8 +142,19 @@ type Report = {
   robotsBlocked: string[];
   pageErrors: { url: string; status: string }[];
   driveFolders?: DriveSummary[];
-  /** Files the rules could not name and the AI was not sure about: for a person to look at. */
-  review?: string[];
+  /** Drive files nobody could place: for the owner to accept (as a checklist file) or reject. */
+  review?: ReviewEntry[];
+  /** Files skipped because the owner rejected them on an earlier run page. */
+  rejected?: number;
+  /** Front page reader: unclear files whose first page was read, and how many it named. */
+  cover?: { read: number; named: number; aiNamed: number };
+  /** Library check: stored files read, matching, unreadable, and those whose first page says otherwise. */
+  check?: { read: number; matched: number; unreadable: number; items: { id: string; fileName: string; coverName: string | null; why: string }[] };
+  /** Downloads whose first page gave another name: stored under that name, or held back. */
+  renamed?: { from: string; to: string }[];
+  heldBack?: number;
+  /** Drive files the front page reader judged not original Cambridge files: later runs skip them. */
+  autoRejected?: { siteId: string; driveId: string; where: string }[];
   /** Files the AI says are not original Cambridge files (notes, topic questions), with a few examples. */
   notNeeded?: { count: number; examples: string[] };
   /** Plain-English summary of the run (by the AI, or by rules when AI is not available). */
@@ -162,7 +198,7 @@ let aiOn = true;
 let aiCalls = 0;
 let aiFailures = 0;
 let aiNote = "";
-async function ai(task: "folders" | "names" | "summary", payload: Record<string, unknown>): Promise<Record<string, unknown> | null> {
+async function ai(task: "folders" | "names" | "cover" | "summary", payload: Record<string, unknown>): Promise<Record<string, unknown> | null> {
   if (!aiOn) return null;
   try {
     const r = await api("/api/agent/ai", enc.encode(JSON.stringify({ jobId: JOB_ID, task, ...payload })));
@@ -208,6 +244,9 @@ async function finish(ok: boolean) {
       stored: trim(report.stored, 1000),
       failed: trim(report.failed, 500),
       unmatched: trim(report.unmatched, 300),
+      review: trim(report.review ?? [], MAX_REVIEW),
+      renamed: trim(report.renamed ?? [], 200),
+      autoRejected: trim(report.autoRejected ?? [], 300),
       driveFolders: trim(report.driveFolders ?? [], 100),
       robotsBlocked: trim(report.robotsBlocked, 300),
       pageErrors: trim(report.pageErrors, 100),
@@ -226,6 +265,17 @@ async function main() {
   const years = new Set(job.params.years);
   const sessions = new Set(job.params.sessions);
   const have = new Set(job.have);
+  const decided = new Map((job.decisions ?? []).map((d) => [`${d.siteId}:${d.id}`, d]));
+  const codes = (job.subjects ?? []).map((s) => s.code);
+  if (!codes.includes(job.params.code)) codes.push(job.params.code);
+  if (job.params.mode === "check") return checkLibrary(job, codes, years, sessions);
+  /** Unclear Drive files a download run reads by their first page. */
+  const unclear: ReviewEntry[] = [];
+  const toReview = (e: Omit<ReviewEntry, "driveId" | "siteId"> & { driveId?: string; siteId?: string }) => {
+    report.review ??= [];
+    if (report.review.length < MAX_REVIEW && e.driveId && e.siteId) report.review.push(e as ReviewEntry);
+    else if (report.unmatched.length < 300) report.unmatched.push(`${e.where}: ${e.why}`);
+  };
   const seen = new Set<string>();
   const totalPages = job.sources.reduce((n, s) => n + s.pages.length, 0);
   const findShare = job.params.mode === "dry" ? 95 : 20; // share of the bar for reading pages
@@ -402,11 +452,19 @@ async function main() {
           };
           const reading = readFolder(f.label || tree.root, subjects);
           const fresh: string[] = [];
-          const leftovers: { path: string[]; item: (typeof tree.pdfs)[number]["item"]; why: string; done?: boolean }[] = [];
+          const leftovers: { path: string[]; item: (typeof tree.pdfs)[number]["item"]; why: string; done?: boolean; answered?: boolean; by?: "ai" | "rules"; suggest?: string }[] = [];
           let haveHere = 0;
           let outside = 0;
           for (const { item, path } of tree.pdfs) {
-            const c = classifyFile(path, item.name, subjects);
+            // The owner's word on a file from an earlier run page beats the rules.
+            const d = decided.get(`${f.siteId}:${targetId(item)}`);
+            if (d?.decision === "reject") {
+              report.rejected = (report.rejected ?? 0) + 1;
+              continue;
+            }
+            const c = d?.name && parseCambridgeName(d.name)
+              ? { name: d.name, code: parseCambridgeName(d.name)!.code, why: "you accepted it on a run page" }
+              : classifyFile(path, item.name, subjects);
             if (!c.name) {
               if (c.code && c.code !== job.params.code) summary.otherSubjects[c.code] = (summary.otherSubjects[c.code] ?? 0) + 1;
               else leftovers.push({ path, item, why: c.why });
@@ -445,7 +503,8 @@ async function main() {
             const verdicts = Array.isArray(answer?.files) ? (answer.files as { i: number; outcome: string; name?: string; why: string }[]) : [];
             for (const v of verdicts) {
               const l = batch[v.i];
-              if (!l || l.done) continue;
+              if (!l || l.answered) continue;
+              l.answered = true;
               l.done = true;
               const where = [...l.path, l.item.name].join(" / ");
               if (v.outcome === "named" && v.name && parseCambridgeName(v.name)?.code === job.params.code) {
@@ -465,12 +524,27 @@ async function main() {
                 report.notNeeded.count++;
                 if (report.notNeeded.examples.length < 10) report.notNeeded.examples.push(`${where}: ${v.why}`);
               } else {
-                report.review ??= [];
-                if (report.review.length < 200) report.review.push(`${where}: ${v.why}`);
+                l.done = false; // left for the owner below, with the AI's reason
+                l.why = v.why || l.why;
+                l.by = "ai";
+                l.suggest = v.name;
               }
             }
           }
-          for (const l of leftovers) if (!l.done && report.unmatched.length < 300) report.unmatched.push(`${[...l.path, l.item.name].join(" / ")}: ${l.why}`);
+          // Files nobody could place: a download run reads their first page (below); the rest go to
+          // "Needs your eye", where the owner can accept or reject them.
+          for (const l of leftovers) {
+            if (l.done) continue;
+            const where = [...l.path, l.item.name].join(" / ");
+            if (job.params.mode === "download" && unclear.length < (job.limits.coverReads ?? 60)) {
+              unclear.push({ where, why: l.why, driveId: targetId(l.item), siteId: f.siteId, by: l.by ?? "rules", ...(l.suggest ? { suggest: l.suggest } : {}) });
+              continue;
+            }
+            report.review ??= [];
+            if (report.review.length < MAX_REVIEW) {
+              report.review.push({ where, why: l.why, driveId: targetId(l.item), siteId: f.siteId, by: l.by ?? "rules", ...(l.suggest ? { suggest: l.suggest } : {}) });
+            } else if (report.unmatched.length < 300) report.unmatched.push(`${where}: ${l.why}`);
+          }
           summary.aiNamed = aiNamed;
           const subj = subjects.find((s) => s.code === (reading.code ?? (summary.forThisSyllabus ? job.params.code : "")));
           // A subject the library does not have yet still reads by its folder name ("History (0470)").
@@ -521,7 +595,7 @@ async function main() {
     // Google limits downloads from busy shared files. After a refusal the agent waits and tries
     // once more; after DRIVE_STOP_AFTER refusals in a row it stops asking Drive for this run, so
     // it does not hammer Google, and the rest are left for a later run.
-    const DRIVE_STOP_AFTER = 5;
+    const DRIVE_STOP_AFTER = 3;
     let driveRefusals = 0;
     let drivePaused = "";
     const fromDrive = async (id: string) => {
@@ -535,15 +609,29 @@ async function main() {
           if (!(e instanceof DriveError)) return { status: 0, bytes: new Uint8Array(), type: "", reason: "drive_error" };
           const why = driveRefusal(e);
           log(`Google Drive refused a download: ${e.status} ${e.reason || "(no reason given)"}`);
-          if ((why === "drive_quota" || why === "drive_rate") && attempt === 0 && driveRefusals < DRIVE_STOP_AFTER - 1) {
+          const limited = why === "drive_quota" || why === "drive_rate" || why === "drive_throttled";
+          if (limited && attempt === 0 && driveRefusals < DRIVE_STOP_AFTER - 1) {
             await sleep(TEST_MODE ? 0 : 30_000);
             continue;
           }
-          if (why === "drive_quota" || why === "drive_rate" || why === "drive_forbidden") driveRefusals++;
+          if (limited) driveRefusals++;
           return { status: e.status, bytes: new Uint8Array(), type: "", reason: why };
         }
       }
     };
+    const pauseCheck = async (pct: number, step: string, reason: string | undefined) => {
+      if (driveRefusals >= DRIVE_STOP_AFTER && !drivePaused) {
+        drivePaused = reason || "drive_throttled";
+        report.drivePaused = { reason: drivePaused, afterStored: report.stored.length };
+        await progress(pct, step, `Google Drive refused ${DRIVE_STOP_AFTER} downloads in a row (${reasonText(drivePaused)}). The agent stopped asking Drive for this run; run the download again later for the rest.`);
+      }
+    };
+    const store = async (name: string, bytes: Uint8Array, siteId: string, url: string) => {
+      const res = await api("/api/agent/file", bytes, { "x-agent-job": JOB_ID, "x-agent-file": name, "x-agent-site": siteId, "x-agent-url": url }, "application/pdf");
+      const out = res.data as { ok?: boolean; reason?: string; error?: string } | null;
+      return { ok: res.status === 200 && !!out?.ok, reason: out?.reason ?? out?.error ?? `worker_${res.status}`, stop: res.status === 429 || res.status === 409 };
+    };
+    const planned = new Set(todo.map((c) => c.name));
     let n = 0;
     for (const c of todo) {
       n++;
@@ -560,22 +648,34 @@ async function main() {
         const r: { status: number; bytes: Uint8Array; type: string; reason?: string } = c.driveId && drive
           ? await fromDrive(c.driveId)
           : await politeFetch(c.url, job.limits.maxFileBytes);
-        if (driveRefusals >= DRIVE_STOP_AFTER && !drivePaused) {
-          drivePaused = r.reason ?? "drive_forbidden";
-          report.drivePaused = { reason: drivePaused, afterStored: report.stored.length };
-          await progress(pct, step, `Google Drive refused ${DRIVE_STOP_AFTER} downloads in a row (${reasonText(drivePaused)}). The agent stopped asking Drive for this run; run the download again later for the rest.`);
-        }
+        await pauseCheck(pct, step, r.reason);
         if (r.status !== 200) {
           report.failed.push({ name: c.name, reason: r.reason || `http_${r.status}` });
         } else {
           lastBytes = r.bytes.length;
-          const res = await api("/api/agent/file", r.bytes, {
-            "x-agent-job": JOB_ID, "x-agent-file": c.name, "x-agent-site": c.siteId, "x-agent-url": c.url,
-          }, "application/pdf");
-          const out = res.data as { ok?: boolean; reason?: string; error?: string } | null;
-          if (res.status === 200 && out?.ok) report.stored.push(c.name);
-          else report.failed.push({ name: c.name, reason: out?.reason ?? out?.error ?? `worker_${res.status}` });
-          if (res.status === 429 || res.status === 409) break; // run limit reached or run closed
+          // Every download is checked against its first page before it is stored.
+          const { cover } = await coverOf(r.bytes, codes);
+          let name = c.name;
+          const other = cover.name && cover.name !== c.name ? cover.name : null;
+          const otherCode = !cover.name && cover.code && cover.code !== job.params.code ? cover.code : null;
+          if (other && parseCambridgeName(other)!.code === job.params.code && !have.has(other) && !report.stored.includes(other) && !planned.has(other)) {
+            name = other;
+            report.renamed ??= [];
+            report.renamed.push({ from: c.name, to: other });
+          } else if (other || otherCode) {
+            report.heldBack = (report.heldBack ?? 0) + 1;
+            report.failed.push({ name: c.name, reason: "cover_mismatch" });
+            toReview({
+              where: `${c.name}, from ${c.driveId ? "Google Drive" : c.url}`,
+              why: other ? `held back: the name says ${c.name} but the first page says ${other}` : `held back: the first page is for syllabus ${otherCode}`,
+              ...(c.driveId ? { driveId: c.driveId, siteId: c.siteId } : {}), ...(other ? { suggest: other } : {}), by: "rules",
+            });
+            continue;
+          }
+          const out = await store(name, r.bytes, c.siteId, c.url);
+          if (out.ok) report.stored.push(name);
+          else report.failed.push({ name, reason: out.reason });
+          if (out.stop) break; // run limit reached or run closed
         }
       } catch (e) {
         if (e instanceof Cancelled) throw e;
@@ -584,15 +684,123 @@ async function main() {
       const failed = report.failed.length > failedBefore ? report.failed[report.failed.length - 1] : null;
       const why = failed ? reasonText(failed.reason) : "";
       const bytes = lastBytes;
+      const as = report.renamed?.find((x) => x.from === c.name)?.to ?? c.name;
       await progress(pct, step, failed
         ? { text: `${n} of ${todo.length}: ${c.name} not stored (${why})`, file: c.name, outcome: "failed", reason: failed.reason }
-        : { text: `${n} of ${todo.length}: ${c.name} stored`, file: c.name, outcome: "stored", bytes });
+        : { text: `${n} of ${todo.length}: ${as} stored${as !== c.name ? ` (the first page showed it is not ${c.name})` : ""}`, file: as, outcome: "stored", bytes });
+    }
+
+    // Front page reader: unclear Drive files are downloaded and named from their first page
+    // (rules, then the AI). Named files for this subject are stored; the rest go to "Needs your eye".
+    let k = 0;
+    for (const u of unclear) {
+      k++;
+      if (drivePaused || !drive) {
+        toReview({ ...u, why: `${u.why}; its first page was not read (Google Drive was refusing downloads)` });
+        continue;
+      }
+      const step = `Reading the first page of unclear file ${k} of ${unclear.length}`;
+      await progress(99, step);
+      const r = await fromDrive(u.driveId);
+      await pauseCheck(99, step, r.reason);
+      if (r.status !== 200) {
+        toReview({ ...u, why: `${u.why}; its first page could not be read (${reasonText(r.reason || `http_${r.status}`)})` });
+        continue;
+      }
+      report.cover ??= { read: 0, named: 0, aiNamed: 0 };
+      report.cover.read++;
+      const { text, cover } = await coverOf(r.bytes, codes);
+      let name = cover.name;
+      let why = cover.why;
+      let byAi = false;
+      if (!name && text) {
+        const answer = await ai("cover", { where: u.where, text: text.slice(0, 3000) });
+        const f = answer?.file as { outcome?: string; name?: string; why?: string } | undefined;
+        if (f?.outcome === "named" && f.name) {
+          name = f.name;
+          why = `the AI read the first page: ${f.why ?? ""}`.trim();
+          byAi = true;
+        } else if (f?.outcome === "not_needed") {
+          report.notNeeded ??= { count: 0, examples: [] };
+          report.notNeeded.count++;
+          if (report.notNeeded.examples.length < 10) report.notNeeded.examples.push(`${u.where}: first page read by the AI: ${f.why ?? ""}`);
+          report.autoRejected ??= [];
+          report.autoRejected.push({ siteId: u.siteId, driveId: u.driveId, where: u.where });
+          continue;
+        } else if (f?.name) {
+          toReview({ ...u, why: `first page read by the AI: ${f.why ?? "not a file this run looks for"}`, suggest: f.name, by: "ai" });
+          continue;
+        }
+      }
+      const pn = name ? parseCambridgeName(name) : null;
+      if (!pn || pn.code !== job.params.code) {
+        toReview({ ...u, why: pn ? `the first page says ${name}, another subject` : `${why}`, ...(name ? { suggest: name } : {}), by: byAi ? "ai" : "rules" });
+        continue;
+      }
+      if (have.has(name!) || report.stored.includes(name!)) {
+        report.skippedHave++;
+        continue;
+      }
+      const out = await store(name!, r.bytes, u.siteId, `https://drive.google.com/file/d/${u.driveId}/view`);
+      if (out.ok) {
+        report.stored.push(name!);
+        report.cover.named++;
+        if (byAi) report.cover.aiNamed++;
+        await progress(99, step, { text: `${name} stored, worked out from the first page of ${u.where} (${why})`, file: name!, outcome: "stored", bytes: r.bytes.length });
+      } else {
+        report.failed.push({ name: name!, reason: out.reason });
+        if (out.stop) break;
+      }
     }
     await progress(99, "Finishing", report.stored.length
       ? `Done: ${report.stored.length} stored (${summariseFiles(report.stored, 6)})${report.failed.length ? `; ${report.failed.length} not stored, see the list below` : ""}.`
       : `Done: nothing was stored${report.failed.length ? `; ${report.failed.length} not stored, see the list below` : ""}.`);
   }
   await summarise(job);
+}
+
+/**
+ * Library check: reads the first page of every stored file of the run's years and sessions and
+ * lists the ones whose first page says they are another file. Nothing is changed here; the run
+ * page offers rename or remove for each.
+ */
+async function checkLibrary(job: Job, codes: string[], years: Set<number>, sessions: Set<string>) {
+  const docs = (job.storedDocs ?? []).filter((d) => {
+    const p = parseCambridgeName(d.fileName);
+    return p && years.has(p.year) && sessions.has(p.session);
+  });
+  const check: NonNullable<Report["check"]> = { read: 0, matched: 0, unreadable: 0, items: [] };
+  report.check = check;
+  await progress(5, "Checking the library", `Library check: reading the first page of ${docs.length} stored file${docs.length === 1 ? "" : "s"}.`);
+  let n = 0;
+  for (const d of docs) {
+    n++;
+    const step = `Checking file ${n} of ${docs.length}`;
+    if (n % 10 === 1) await progress(5 + Math.round((n / Math.max(docs.length, 1)) * 90), step);
+    const r = await apiBytes("/api/agent/doc", { jobId: JOB_ID, id: d.id });
+    if (r.status === 409) throw new Cancelled("the run was cancelled or closed in the admin panel");
+    if (r.status !== 200) {
+      check.unreadable++;
+      continue;
+    }
+    check.read++;
+    const { cover } = await coverOf(r.bytes, codes);
+    if (cover.name === d.fileName) check.matched++;
+    else if (cover.name || (cover.code && cover.code !== job.params.code)) {
+      if (check.items.length < 300) check.items.push({ id: d.id, fileName: d.fileName, coverName: cover.name, why: cover.why });
+      await progress(5 + Math.round((n / Math.max(docs.length, 1)) * 90), step, `${d.fileName}: ${cover.name ? `the first page says it is ${cover.name}` : cover.why}`);
+    } else check.unreadable++;
+  }
+  const subj = (job.subjects ?? []).find((s) => s.code === job.params.code);
+  const draft = checkSummary({
+    subject: subj ? `${subj.qualification} ${subj.name} (${subj.code})` : job.params.code,
+    files: docs.length, matched: check.matched, mismatched: check.items.length, unreadable: check.unreadable,
+  });
+  const answer = await ai("summary", { draft });
+  report.summary = typeof answer?.summary === "string" ? answer.summary : draft;
+  report.summaryBy = typeof answer?.summary === "string" ? "ai" : "rules";
+  report.ai = { calls: aiCalls, ...(aiNote ? { note: aiNote } : {}) };
+  await progress(99, "Summary", `Summary: ${report.summary}`);
 }
 
 /**
@@ -619,6 +827,11 @@ async function summarise(job: Job) {
     failed: report.failed.length,
     notNeeded: report.notNeeded?.count ?? 0,
     review: report.review?.length ?? 0,
+    rejected: report.rejected ?? 0,
+    coverRead: report.cover?.read ?? 0,
+    coverNamed: report.cover?.named ?? 0,
+    renamed: report.renamed?.length ?? 0,
+    heldBack: report.heldBack ?? 0,
     notNamed: report.unmatched.length,
     maxFiles: job.limits.maxFiles,
     drivePaused: report.drivePaused

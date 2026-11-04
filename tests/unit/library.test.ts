@@ -170,7 +170,7 @@ test("only admin code can reach the source bucket (brief 3.1)", () => {
   const users = walk(src).filter((f) => /\.SOURCE\b/.test(readFileSync(f, "utf8"))).map((f) => relative(src, f));
   assert.ok(users.length > 0);
   for (const f of users) {
-    const allowed = f.startsWith("app/admin/") || f === "app/health/route.ts" || f === "app/api/agent/file/route.ts";
+    const allowed = f.startsWith("app/admin/") || f === "app/health/route.ts" || f === "app/api/agent/file/route.ts" || f === "app/api/agent/doc/route.ts";
     assert.ok(allowed, `${f} touches env.SOURCE outside the admin area`);
   }
 });

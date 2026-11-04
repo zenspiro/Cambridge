@@ -3,9 +3,11 @@ import { claimRun } from "@/lib/agent/runs";
 import { AGENT, LIBRARY } from "@/lib/config";
 import { STORED_NAMES } from "@/lib/library/queries";
 import { getLibrarySettings } from "@/lib/settings";
+import { decisionsForAgent } from "@/lib/agent/review";
 
 // The agent asks what to do: the run's choices, the enabled sources with their start
-// pages, and the names already stored (so it never fetches them again). Signed only.
+// pages, the names already stored (so it never fetches them again) and the owner's decisions
+// on files that needed an eye (accepted under a name, or rejected). Signed only.
 export async function POST(request: Request) {
   const a = await agentRequest(request);
   if (!a.ok) return a.response;
@@ -14,7 +16,15 @@ export async function POST(request: Request) {
   const params = await claimRun(a.db, jobId);
   if (!params) return json({ error: "no_run" }, 409);
 
-  const [{ results: rows }, { results: names }, lib, { results: folders }, { results: subjects }] = await Promise.all([
+  // A library check reads the run's stored files (ids and names only here; bytes from /api/agent/doc).
+  const storedDocs = params.mode === "check"
+    ? (await a.db
+        .prepare(`SELECT d.id, d.file_name FROM source_document d JOIN syllabus s ON s.id = d.syllabus_id
+                  WHERE d.status = 'stored' AND s.code = ?1 ORDER BY d.year DESC, d.file_name LIMIT 2000`)
+        .bind(params.code)
+        .all<{ id: string; file_name: string }>()).results.map((d) => ({ id: d.id, fileName: d.file_name }))
+    : undefined;
+  const [{ results: rows }, { results: names }, lib, { results: folders }, { results: subjects }, decisions] = await Promise.all([
     a.db
       .prepare(`SELECT s.id, s.name, s.base_url, p.url FROM source_site s JOIN source_page p ON p.site_id = s.id
                 WHERE s.enabled = 1 AND s.kind = 'web' AND p.syllabus_code = ?1 ORDER BY s.created_at, p.created_at`)
@@ -32,6 +42,7 @@ export async function POST(request: Request) {
                 JOIN qualification q ON q.id = s.qualification_id ORDER BY y.code`)
       .bind()
       .all<{ code: string; name: string; qualification: string }>(),
+    decisionsForAgent(a.db),
   ]);
   const sources = new Map<string, { siteId: string; name: string; baseUrl: string; pages: string[] }>();
   for (const r of rows) {
@@ -46,9 +57,11 @@ export async function POST(request: Request) {
     driveFolders: folders.map((f) => ({ siteId: f.site_id, folderId: f.folder_id, label: f.label })),
     subjects,
     have: names.map((n) => n.file_name),
+    decisions,
+    ...(storedDocs ? { storedDocs } : {}),
     limits: {
       maxFiles: AGENT.maxFilesPerRun, maxFileBytes: LIBRARY.maxFileBytes, delayMs: AGENT.delayMs, userAgentToken: AGENT.userAgentToken,
-      driveDelayMs: AGENT.driveDelayMs, driveMaxFolders: AGENT.driveMaxFolders, driveMaxDepth: AGENT.driveMaxDepth,
+      driveDelayMs: AGENT.driveDelayMs, driveMaxFolders: AGENT.driveMaxFolders, driveMaxDepth: AGENT.driveMaxDepth, coverReads: AGENT.coverReadsPerRun,
     },
   });
 }

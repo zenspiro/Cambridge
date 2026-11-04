@@ -6,7 +6,8 @@ import { audit } from "../auth/session.ts";
 import type { LibrarySettings } from "../settings.ts";
 import { parseCambridgeName } from "../library/names.ts";
 
-export type RunMode = "dry" | "download";
+/** dry: list only; download: fetch missing files; check: read the first page of stored files. */
+export type RunMode = "dry" | "download" | "check";
 export type RunSession = "m" | "s" | "w" | "y";
 export type RunParams = { code: string; years: number[]; sessions: RunSession[]; mode: RunMode };
 
@@ -20,7 +21,7 @@ export function checkRunParams(
 ): RunParams | null {
   if (typeof input.code !== "string" || !codes.includes(input.code)) return null;
   const code = input.code;
-  if (input.mode !== "dry" && input.mode !== "download") return null;
+  if (input.mode !== "dry" && input.mode !== "download" && input.mode !== "check") return null;
   const years = [...new Set(input.years.map((y) => Number(y)))].filter((y) => Number.isInteger(y) && y >= lib.fromYear && y <= lib.toYear);
   const sessions = [...new Set(input.sessions)].filter((s): s is RunSession => SESSIONS.includes(s as RunSession));
   if (years.length === 0 || years.length !== input.years.length || sessions.length === 0 || sessions.length !== input.sessions.length) return null;

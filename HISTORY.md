@@ -2,6 +2,22 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-04: Front page reader
+
+**What:** the agent now reads the first page of PDFs, the way a person would. Cambridge prints every cover the same way ("PHYSICS 0625/42, Paper 4 Theory (Extended), May/June 2024, MARK SCHEME"), so the rules read the code, paper, variant, session, year and type from it, with the AI when the layout is unusual. Three uses: (1) in a download run, Drive files whose names say nothing are downloaded and named from their first page before anything goes to "Needs your eye"; files the AI judges are not Cambridge originals are skipped on later runs; (2) every download is checked against its first page before it is stored: stored under the right name when the cover says otherwise, or held back for you; (3) a new "Check library" run reads the stored files of a subject and lists any whose first page does not match their name, with Rename and Remove buttons. The reader is our own small PDF text reader (no outside libraries), so the agent and later the upload page share it. Also: a bare "403" from Google Drive is now described as Google limiting automated downloads (not "downloads turned off"), and the agent stops asking after 3 in a row. The AI may make up to 80 calls per run (was 40).
+
+**Why:** owner: "anything still unclear should run past the AI before it comes to me"; the reader must also work for new years without uploads.
+
+**Tested:** checked against 11 real Cambridge files (question papers, mark schemes, confidential instructions, examiner report, specimens, syllabus, update, grade descriptions): all named correctly; their cover lines are kept as test data. 106 unit tests (new: PDF text from plain, compressed, Type0, object stream, form and letter by letter files; junk and encrypted files; cover rules; AI cover task; rename and remove; check summary); 185 browser checks (new: an unnamed Drive file named from its cover and stored, a misnamed one stored under its cover's name, the library check finds a mismatch and renames it).
+
+## 2026-11-04: Accept or reject on "Needs your eye"
+
+**What:** every Drive file the agent could not place now sits under "Needs your eye" on the run page with the reason (from the rules or the AI) and two buttons. Accept asks which file it is, from this run's missing checklist files described in words (the AI's guess is picked when it has one); Reject drops it. Decisions are saved (`review_decision`, migration 0012), audited and can be undone. Later runs read them: an accepted file is fetched under the chosen name, a rejected one is skipped and counted in the summary. A "Download accepted files" button starts the download. Files the rules could not name now go here too, not only the AI's unsure ones.
+
+**Why:** owner's next pick: decide on unclear files in place instead of adding them by hand.
+
+**Tested:** 99 unit tests (new: report items checked, accept only a missing file this run looks for, one source file per name, runs must be finished, Drive sources only, audit, summary); 178 browser checks (new: reject, undo, accept on the run page, the download fetches the accepted file under its name, a rejected file is skipped by the next run).
+
 ## 2026-11-04: Google Drive download refusals handled
 
 **What:** when Google Drive refuses a download, the run now records Google's reason in words (download limit for a busy shared file, slow down, downloads turned off, file gone) instead of "the website answered 403". Downloads are paced a few seconds apart; a limit refusal waits 30 seconds and tries once more; after five refusals in a row the agent stops asking Drive for that run, marks the rest "not tried" and the summary says so, with "run the download again later". A later run fetches only what is still missing.

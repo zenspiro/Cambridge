@@ -4,7 +4,7 @@
 
 export type SummaryFacts = {
   subject: string;
-  mode: "dry" | "download";
+  mode: "dry" | "download" | "check";
   years: number[];
   sessions: string[];
   allSessions: boolean;
@@ -18,6 +18,14 @@ export type SummaryFacts = {
   failed: number;
   notNeeded: number;
   review: number;
+  /** Files skipped because the owner rejected them on an earlier run page. */
+  rejected?: number;
+  /** Front page reader: unclear files whose first page was read, and how many it named. */
+  coverRead?: number;
+  coverNamed?: number;
+  /** Downloads whose first page gave another name: stored under it, or held back. */
+  renamed?: number;
+  heldBack?: number;
   notNamed: number;
   maxFiles: number;
   /** Google Drive kept refusing downloads and the agent stopped asking (a real limit). */
@@ -55,9 +63,18 @@ export function ruleSummary(f: SummaryFacts): string {
   if (f.found > f.maxFiles) limits.push(`one download stores at most ${f.maxFiles} files, so run it again for the rest`);
   out.push(limits.length ? `Limits: ${limits.join("; ")}.` : "Nothing was cut short.");
 
+  if (f.coverRead) out.push(`Read the first page of ${plural(f.coverRead, "unclear file")} and named ${f.coverNamed ?? 0} of them.`);
+  if (f.renamed || f.heldBack) {
+    out.push([
+      f.renamed ? `${plural(f.renamed, "file")} stored under the name ${f.renamed === 1 ? "its" : "their"} first page gave` : "",
+      f.heldBack ? `${plural(f.heldBack, "file")} held back because the first page did not match the name` : "",
+    ].filter(Boolean).join("; ").replace(/^./, (c) => c.toUpperCase()) + ".");
+  }
+
   const leftovers = [
     f.review ? `${plural(f.review, "file")} need${f.review === 1 ? "s" : ""} your eye` : "",
     f.notNeeded ? `${plural(f.notNeeded, "file")} judged not needed` : "",
+    f.rejected ? `${plural(f.rejected, "file")} you rejected earlier skipped` : "",
     f.notNamed ? `${plural(f.notNamed, "file")} could not be named` : "",
   ].filter(Boolean);
   if (leftovers.length) out.push(`${leftovers.join(", ")}.`.replace(/^./, (c) => c.toUpperCase()));
@@ -98,4 +115,15 @@ export function checkRewrite(draft: string, text: unknown): string | null {
     if (!/nothing (was|got) cut short|no limits?/i.test(t) || /\blimited\b|more pages|read more/i.test(t)) return null;
   }
   return t;
+}
+
+/** The library check in plain words: what was read and what needs a decision. */
+export function checkSummary(f: { subject: string; files: number; matched: number; mismatched: number; unreadable: number }): string {
+  const out = [`Library check for ${f.subject}: read the first page of ${plural(f.files, "stored file")}.`];
+  out.push(`${plural(f.matched, "file")} match${f.matched === 1 ? "es" : ""} ${f.matched === 1 ? "its" : "their"} name.`);
+  if (f.unreadable) out.push(`${plural(f.unreadable, "file")} could not be checked (no readable first page, or an unusual layout).`);
+  out.push(f.mismatched
+    ? `${plural(f.mismatched, "file")} ${f.mismatched === 1 ? "says" : "say"} on the first page that ${f.mismatched === 1 ? "it is" : "they are"} another file; rename or remove ${f.mismatched === 1 ? "it" : "them"} below.`
+    : "Nothing needs your attention.");
+  return out.join(" ");
 }

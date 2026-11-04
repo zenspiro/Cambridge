@@ -1,5 +1,6 @@
 // A fake source website for the agent test: robots.txt, one start page, a few PDFs.
 import { createServer } from "node:http";
+import { makePdf } from "../unit/helpers/pdf.ts";
 
 export function startFakeSource(port = 9911) {
   const pdf = (tag) => `%PDF-1.4\n% fake ${tag} ${Date.now()} ${Math.random()}\n%%EOF`;
@@ -33,12 +34,18 @@ export function startFakeSource(port = 9911) {
       ["DRVFILE0004", "Revision notes.pdf", "application/pdf"],
       ["DRVFILE0005", "0620_s24_qp_12.pdf", "application/pdf"],
       ["DRVFILE0006", "Teacher notes.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+      // No name at all: the front page reader names it from its cover.
+      ["DRVFILE0010", "Scan 7.pdf", "application/pdf"],
+      // Named as a question paper, but its cover says mark scheme 0625/23: stored under the cover's name.
+      ["DRVFILE0011", "Question Paper 13.pdf", "application/pdf"],
       // Google refuses this one, as it does for busy shared files.
       ["DRVBUSY0008", "Grade Thresholds.pdf", "application/pdf"],
     ] },
     SPECFOLDER1: { name: "Specimen Papers 2023", kids: [["DRVFILE0007", "Specimen Paper 2.pdf", "application/pdf"]] },
   };
-  const driveFiles = { DRVFILE0001: pdf("d1"), DRVFILE0002: pdf("d2"), DRVFILE0003: pdf("d3"), DRVFILE0007: pdf("d7") };
+  const driveFiles = { DRVFILE0001: pdf("d1"), DRVFILE0002: pdf("d2"), DRVFILE0003: pdf("d3"), DRVFILE0004: pdf("d4"), DRVFILE0007: pdf("d7"),
+    DRVFILE0010: Buffer.from(makePdf(["Cambridge IGCSE", "PHYSICS 0625/41", "Paper 4 Theory (Extended) May/June 2024", "MARK SCHEME", `e2e ${Date.now()}`], { compress: true, type0: true })),
+    DRVFILE0011: Buffer.from(makePdf(["Cambridge IGCSE", "PHYSICS 0625/23", "Paper 2 Multiple Choice (Extended) May/June 2024", "MARK SCHEME", `e2e ${Date.now()}`], { compress: true })) };
   const driveHits = [];
   function driveApi(req, res) {
     const u = new URL(req.url, "http://x");

@@ -96,3 +96,45 @@ export async function storeDocument(db: Db, bucket: Bucket, input: StoreInput, n
   );
   return { fileName: p.fileName, ok: true, id: reserved.id };
 }
+
+export type FixResult = "ok_renamed" | "ok_removed" | "gone" | "name" | "year" | "no_syllabus" | "same_name" | "storage";
+
+type DocRow = { id: string; file_name: string; r2_key: string; status: string };
+
+/**
+ * Renames a stored file (library check found its first page says it is another file): new
+ * row details, the object moved to its new key. The new name must be free and fit the library.
+ */
+export async function renameDocument(db: Db, bucket: Bucket, id: string, newName: string, actorId: string, now = Date.now()): Promise<FixResult> {
+  const row = await db.prepare(`SELECT id, file_name, r2_key, status FROM source_document WHERE id = ?1`).bind(id).first<DocRow>();
+  if (!row || row.status !== "stored") return "gone";
+  const p = parseCambridgeName(newName);
+  if (!p) return "name";
+  const range = await getLibrarySettings(db);
+  if (p.year < range.fromYear || p.year > range.toYear) return "year";
+  const syl = await db.prepare(Q.SYLLABUS_FOR_YEAR).bind(p.code, p.year).first<{ id: string }>();
+  if (!syl) return "no_syllabus";
+  if (await db.prepare(`SELECT id FROM source_document WHERE file_name = ?1`).bind(p.fileName).first()) return "same_name";
+  const obj = await bucket.get(row.r2_key);
+  if (!obj) return "storage";
+  const bytes = new Uint8Array(await new Response(obj.body).arrayBuffer());
+  const key = storageKey(p);
+  await bucket.put(key, bytes, { httpMetadata: { contentType: "application/pdf" } });
+  await db
+    .prepare(`UPDATE source_document SET syllabus_id = ?2, session = ?3, year = ?4, paper = ?5, variant = ?6, doc_type = ?7, file_name = ?8, r2_key = ?9 WHERE id = ?1`)
+    .bind(id, syl.id, p.session, p.year, p.paper, p.variant, p.docType, p.fileName, key)
+    .run();
+  if (key !== row.r2_key) await bucket.delete(row.r2_key);
+  await audit(db, { actorId, action: "source.rename", entity: "source_document", entityId: id, detail: { from: row.file_name, to: p.fileName } }, now);
+  return "ok_renamed";
+}
+
+/** Takes a stored file out of the library (row and object). Audited; the audit row stays. */
+export async function removeDocument(db: Db, bucket: Bucket, id: string, actorId: string, now = Date.now()): Promise<FixResult> {
+  const row = await db.prepare(`SELECT id, file_name, r2_key, status FROM source_document WHERE id = ?1`).bind(id).first<DocRow>();
+  if (!row || row.status !== "stored") return "gone";
+  await bucket.delete(row.r2_key);
+  await db.prepare(`DELETE FROM source_document WHERE id = ?1`).bind(id).run();
+  await audit(db, { actorId, action: "source.remove", entity: "source_document", entityId: id, detail: { file: row.file_name } }, now);
+  return "ok_removed";
+}
