@@ -9,7 +9,13 @@ export type ExpectedRules = {
   ciPapers?: number[];
   /** Papers that come with an insert (source booklet, case study, map), essential like the paper. */
   inPapers?: number[];
+  /** Papers that come with pre-release material (0478 Paper 2 to 2022), essential like the paper. */
+  pmPapers?: number[];
+  /** Papers with a listening transcript, per variant: extras. */
+  qrPapers?: number[];
   perSession?: DocType[];
+  /** Whole-session extras written per paper without variants: teachers' notes for speaking ("tn_03"). */
+  extraSessionDocs?: { type: DocType; paper: number }[];
   /** Per syllabus version: essential documents (syllabus) and extras (updates, grade descriptions). */
   versionDocs?: DocType[];
   extraVersionDocs?: DocType[];
@@ -44,6 +50,7 @@ export function expectedFiles(code: string, rules: ExpectedRules, year: number, 
       for (const t of rules.perPaper) out.push(examName(code, session, year, t, p, v));
       if (rules.ciPapers?.includes(p)) out.push(examName(code, session, year, "ci", p, v));
       if (rules.inPapers?.includes(p)) out.push(examName(code, session, year, "in", p, v));
+      if (rules.pmPapers?.includes(p)) out.push(examName(code, session, year, "pm", p, v));
     }
   }
   if ((rules.variants[session] ?? []).length > 0) {

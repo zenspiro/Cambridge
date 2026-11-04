@@ -6,6 +6,7 @@ import { getEnv } from "@/lib/env";
 import { AdminShell, Notice } from "@/components/AdminShell";
 import { StatusLine } from "@/components/LibraryBits";
 import { Crumbs, DocChips, Legend, PaperTable } from "@/components/LibraryTables";
+import { PAPER_TYPES } from "@/lib/library/map";
 import { loadHeader, loadSyllabus } from "@/lib/library/catalog";
 import { loadPapers } from "@/lib/library/papers";
 import { sessionFromSlug, sessionHref } from "@/lib/library/slugs";
@@ -58,7 +59,7 @@ export default async function SessionPage({
 
       <section className="card stack">
         <h2 className="subtitle">Essential: variant {[...new Set(essential.map((r) => r.variant))].join(", ")}</h2>
-        <PaperTable rows={essential} types={["qp", "in", "ms", "ci"]} papers={names} />
+        <PaperTable rows={essential} types={PAPER_TYPES} papers={names} />
       </section>
 
       {extras.length > 0 ? (
@@ -68,7 +69,7 @@ export default async function SessionPage({
             <span className="pill">{extras.reduce((n, r) => n + Object.values(r.cells).filter((c) => c?.doc).length, 0)} stored</span>
           </summary>
           <div className="group-body">
-            <PaperTable rows={extras} types={["qp", "in", "ms", "ci"]} papers={names} />
+            <PaperTable rows={extras} types={PAPER_TYPES} papers={names} />
           </div>
         </details>
       ) : null}

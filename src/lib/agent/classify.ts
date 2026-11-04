@@ -2,7 +2,7 @@
 // above it: "Physics (0625) / 2023 / May June / Question Paper 42.pdf" becomes 0625_s23_qp_42.pdf.
 // Pure (no network), used by the agent and by unit tests. Never guesses past what it can read:
 // anything incomplete is "not recognised", with the reason.
-import { examName, parseCambridgeName, type DocType } from "../library/names.ts";
+import { examName, NO_VARIANT_TYPES, parseCambridgeName, unknownCambridgeType, type DocType } from "../library/names.ts";
 
 export type KnownSubject = { code: string; name: string; qualification: string };
 export type Classified = {
@@ -11,6 +11,8 @@ export type Classified = {
   confidence: "high" | "medium" | "none";
   /** Where each part came from, or what is missing: shown in the run report. */
   why: string;
+  /** A Cambridge file name with a type code the library does not keep ("sf"): never read as another type. */
+  notKept?: string;
 };
 export type FolderReading = {
   code: string | null;
@@ -71,6 +73,9 @@ function subjectByName(w: string, subjects: KnownSubject[]): KnownSubject | null
 
 function typeOf(w: string): DocType | null {
   const specimen = / specimens? /.test(w);
+  if (/ (pre ?release( materials?)?|pm) /.test(w)) return "pm";
+  if (/ (teachers?'? notes|tn) /.test(w)) return "tn";
+  if (/ ((listening )?transcripts?|qr) /.test(w)) return "qr";
   if (/ (question papers?|qp) /.test(w)) return specimen ? "sp" : "qp";
   if (/ (mark ?schemes?|markschemes?|ms) /.test(w)) return specimen ? "sm" : "ms";
   if (/ (examiners?'? reports?|er) /.test(w)) return "er";
@@ -88,7 +93,12 @@ function typeOf(w: string): DocType | null {
 function paperOf(w: string): { paper: number; variant: number | null } | null {
   let m = / (?:paper|p) ?([1-9])([1-9]) /.exec(w) ?? / (?:paper|p) ?([1-9])(?: ?(?:variant|var|v) ?([1-9]))? /.exec(w);
   if (m) return { paper: Number(m[1]), variant: m[2] ? Number(m[2]) : null };
-  m = / (?:qp|ms|ci|in|sp|sm) ([1-9])([1-9])? /.exec(w);
+  // "Pre-release Material 22", "Listening Transcript 12", "Teachers Notes 03".
+  m = / (?:materials?|transcripts?|notes) (?:0([1-9])|([1-9])([1-9])?) /.exec(w);
+  if (m) return m[1] ? { paper: Number(m[1]), variant: null } : { paper: Number(m[2]), variant: m[3] ? Number(m[3]) : null };
+  m = / (?:qp|ms|ci|in|sp|sm|pm|qr|tn) 0([1-9]) /.exec(w);
+  if (m) return { paper: Number(m[1]), variant: null };
+  m = / (?:qp|ms|ci|in|sp|sm|pm|qr|tn) ([1-9])([1-9])? /.exec(w);
   if (m) return { paper: Number(m[1]), variant: m[2] ? Number(m[2]) : null };
   return null;
 }
@@ -116,6 +126,10 @@ export function classifyFile(path: string[], fileName: string, subjects: KnownSu
   const direct = parseCambridgeName(tidy);
   // Files of subjects not in the library are named too: the agent counts them per subject.
   if (direct) return { name: direct.fileName, code: direct.code, confidence: "high", why: "Cambridge file name" };
+  // A Cambridge name with a code the library does not keep ("0417_w24_sf_02.pdf"): its type is
+  // known from its name, so nothing (folders, first page, AI) may read it as another type.
+  const unknown = unknownCambridgeType(tidy);
+  if (unknown) return { name: null, code: unknown.code, confidence: "high", why: `its Cambridge name says ${unknown.words}, which the library does not keep`, notKept: unknown.type };
 
   // 2. Read the parts from the file name, then fill gaps from the folders (nearest first).
   const fw = words(fileName);
@@ -170,7 +184,7 @@ export function classifyFile(path: string[], fileName: string, subjects: KnownSu
     name = `${code}_y${yy}_${t}_${pv.paper}.pdf`;
   } else if (perSession) name = examName(code!, session as "m" | "s" | "w", year!, type!);
   else {
-    if (!pv!.variant) return { name: null, code, confidence: "none", why: "could not tell the variant" };
+    if (!pv!.variant && !NO_VARIANT_TYPES.includes(type!)) return { name: null, code, confidence: "none", why: "could not tell the variant" };
     name = examName(code!, session as "m" | "s" | "w", year!, type!, pv!.paper, pv!.variant);
   }
   if (!parseCambridgeName(name)) return { name: null, code, confidence: "none", why: "parts do not form a valid Cambridge name" };

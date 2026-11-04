@@ -41,6 +41,9 @@ const EXAM_TYPES: Record<string, string> = {
   "examiner-report": "er",
   "grade-threshold": "gt",
   "grade-thresholds": "gt",
+  "pre-release-material": "pm",
+  transcript: "qr",
+  "teachers-notes": "tn",
 };
 const SPEC_TYPES: Record<string, string> = { "": "sp", "mark-scheme": "sm", "confidential-instructions": "ci", insert: "in" };
 
@@ -66,14 +69,16 @@ export function toCambridgeName(url: string, code: string): string | null {
 
   // "question-paper-11" and "mark-scheme-paper-11" both occur on Cambridge's site.
   const exam =
-    /^(february-march|march|may-june|june|october-november|november)-(\d{4})-(question-paper|mark-scheme|confidential-instructions|insert|examiner-report|grade-thresholds?)(?:(?:-paper)?-([1-9])([1-9])?)?$/.exec(
+    /^(february-march|march|may-june|june|october-november|november)-(\d{4})-(question-paper|mark-scheme|confidential-instructions|insert|examiner-report|grade-thresholds?|pre-release-material|transcript|teachers-notes)(?:(?:-paper)?-0?([1-9])([1-9])?)?$/.exec(
       slug,
     );
   if (exam) {
     const type = EXAM_TYPES[exam[3]!];
     const perSession = type === "er" || type === "gt";
     if (type && perSession === !exam[4]) {
-      name = `${code}_${SESSIONS[exam[1]!]}${yy(exam[2]!)}_${type}${exam[4] ? `_${exam[4]}${exam[5] ?? ""}` : ""}.pdf`;
+      // "teachers-notes-03": paper 3 with no variant, written "_03".
+      const tail = exam[4] ? (exam[5] ? `_${exam[4]}${exam[5]}` : type === "tn" ? `_0${exam[4]}` : `_${exam[4]}`) : "";
+      name = `${code}_${SESSIONS[exam[1]!]}${yy(exam[2]!)}_${type}${tail}.pdf`;
     }
   }
   const spec = /^(\d{4})-specimen-paper-([1-9])(?:-([a-z-]+))?$/.exec(slug);

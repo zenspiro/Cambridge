@@ -2,7 +2,7 @@
 // and the gap report. Pure, no imports beyond config.
 
 export type Session = "m" | "s" | "w" | "y";
-export type DocType = "qp" | "ms" | "in" | "ci" | "er" | "gt" | "sp" | "sm" | "sy" | "su" | "gd";
+export type DocType = "qp" | "ms" | "in" | "ci" | "pm" | "qr" | "tn" | "er" | "gt" | "sp" | "sm" | "sy" | "su" | "gd";
 
 export type ParsedName = {
   fileName: string;
@@ -14,8 +14,10 @@ export type ParsedName = {
   variant: number | null;
 };
 
-// Exam sessions: per-paper files with an optional variant digit, or per-session files.
-const EXAM = /^(\d{4})_([msw])(\d{2})_(?:(qp|ms|in|ci)_([1-9])([1-9])?|(er|gt))\.pdf$/;
+// Exam sessions: per-paper files with an optional variant digit ("qp_42"; teachers' notes are
+// written "tn_03": paper 3, which has no variants), or per-session files. pm pre-release material, qr listening
+// transcript, tn teachers' notes (speaking tests).
+const EXAM = /^(\d{4})_([msw])(\d{2})_(?:(qp|ms|in|ci|pm|qr)_([1-9])([1-9])?|(tn)_0([1-9])|(er|gt))\.pdf$/;
 // Specimens and version documents: y + first exam year of the syllabus version.
 // sy syllabus, su syllabus update, gd grade descriptions.
 const SPEC = /^(\d{4})_y(\d{2})_(?:(sp|sm|in|ci)_([1-9])|(sy|su|gd))\.pdf$/;
@@ -25,14 +27,15 @@ export function parseCambridgeName(raw: string): ParsedName | null {
   const fileName = raw.trim().toLowerCase();
   let m = EXAM.exec(fileName);
   if (m) {
-    const docType = (m[4] ?? m[7]) as DocType;
+    const docType = (m[4] ?? m[7] ?? m[9]) as DocType;
+    const paper = m[5] ?? m[8];
     return {
       fileName,
       code: m[1]!,
       session: m[2] as Session,
       year: 2000 + Number(m[3]),
       docType,
-      paper: m[5] ? Number(m[5]) : null,
+      paper: paper ? Number(paper) : null,
       variant: m[6] ? Number(m[6]) : null,
     };
   }
@@ -56,13 +59,39 @@ export function storageKey(p: ParsedName): string {
   return `${p.code}/${p.year}/${p.session}/${p.fileName}`;
 }
 
-export function examName(code: string, session: "m" | "s" | "w", year: number, docType: DocType, paper?: number, variant?: number): string {
+export function examName(code: string, session: "m" | "s" | "w", year: number, docType: DocType, paper?: number, variant?: number | null): string {
   const yy = String(year % 100).padStart(2, "0");
-  const tail = paper === undefined ? "" : `_${paper}${variant ?? ""}`;
+  // No variant: Cambridge writes the paper as two digits ("tn_03").
+  const tail = paper === undefined ? "" : variant === undefined || variant === null ? `_0${paper}` : `_${paper}${variant}`;
   return `${code}_${session}${yy}_${docType}${tail}.pdf`;
 }
 
-const DOC_TYPES: DocType[] = ["qp", "ms", "in", "ci", "er", "gt", "sp", "sm", "sy", "su", "gd"];
+export const DOC_TYPES: DocType[] = ["qp", "ms", "in", "ci", "pm", "qr", "tn", "er", "gt", "sp", "sm", "sy", "su", "gd"];
+
+/** Types written once per paper without variants ("tn_03"). */
+export const NO_VARIANT_TYPES: readonly DocType[] = ["tn"];
+
+/**
+ * Cambridge codes the library does not keep, in words. A file named like a Cambridge file with
+ * one of these (or any other unknown code) keeps that type: it is never read as another type.
+ */
+export const NOT_KEPT_TYPES: Readonly<Record<string, string>> = {
+  sf: "source files for a practical paper",
+  ir: "instructions",
+  ab: "answer booklet",
+};
+
+/**
+ * A name shaped like a Cambridge file name ("0478_w20_xx_21.pdf") whose type code the library
+ * does not know. Null for real library names and for anything else.
+ */
+export function unknownCambridgeType(raw: string): { code: string; type: string; words: string } | null {
+  const f = String(raw ?? "").trim().toLowerCase();
+  if (parseCambridgeName(f)) return null;
+  const m = /^(\d{4})_([msjwy])(\d{2})_([a-z]{2})(?:_\d{1,2})?\.pdf$/.exec(f);
+  if (!m || DOC_TYPES.includes(m[4] as DocType)) return null;
+  return { code: m[1]!, type: m[4]!, words: NOT_KEPT_TYPES[m[4]!] ?? `Cambridge code "${m[4]}"` };
+}
 
 /**
  * A Cambridge name from its parts (year, session, type, paper, variant), as the AI or the front
@@ -82,6 +111,7 @@ export function nameFromParts(code: string, d: Record<string, unknown>): string 
     else if (paper && Number.isInteger(paper)) name = `${code}_y${yy}_${type === "qp" ? "sp" : type === "ms" ? "sm" : type}_${paper}.pdf`;
     else return null;
   } else if (type === "er" || type === "gt") name = examName(code, session, year, type);
+  else if (NO_VARIANT_TYPES.includes(type) && paper && Number.isInteger(paper)) name = examName(code, session, year, type, paper, null);
   else if (paper && variant && Number.isInteger(paper) && Number.isInteger(variant)) name = examName(code, session, year, type, paper, variant);
   else return null;
   return parseCambridgeName(name) ? name : null;

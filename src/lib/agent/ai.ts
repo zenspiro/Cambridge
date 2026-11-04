@@ -7,7 +7,7 @@
 //   summary: the run in plain English for the run page.
 // The model never stores or fetches anything. Names it suggests must be files the checklist
 // asks for in this run, or they go to "needs your eye". Pure apart from the `run` function.
-import { nameFromParts, type DocType } from "../library/names.ts";
+import { DOC_TYPES, nameFromParts, type DocType } from "../library/names.ts";
 
 /** Calls the model with chat messages and a JSON schema; returns its parsed JSON or text. */
 export type ModelRun = (messages: { role: "system" | "user"; content: string }[], schema: object, maxTokens: number) => Promise<unknown>;
@@ -16,7 +16,7 @@ export type AiSubject = { label: string; code: string; papers: { paper: number; 
 export type AiScope = { subject: AiSubject; years: number[]; sessions: ("m" | "s" | "w" | "y")[] };
 
 const SESSION_WORDS = { m: "February/March", s: "May/June", w: "October/November", y: "specimen papers and syllabus documents" } as const;
-const TYPES: DocType[] = ["qp", "ms", "in", "ci", "er", "gt", "sp", "sm", "sy", "su", "gd"];
+const TYPES: DocType[] = DOC_TYPES;
 
 const SYSTEM =
   "You help a librarian collect Cambridge International exam files. You are given folder and file names from a " +
@@ -114,9 +114,10 @@ export function namesPrompt(scope: AiScope, files: { path: string[]; name: strin
         `${scopeText(scope)}\nThe rules could not name these PDFs (folder path / file name). For each, decide:\n` +
         '- kind "paper": an original Cambridge file. Give year, session (m = Feb/March, s = May/June, w = Oct/Nov, ' +
         "y = specimen or syllabus document), type (qp question paper, ms mark scheme, in insert, ci confidential " +
-        "instructions, er examiner report, gt grade thresholds, sp specimen paper, sm specimen mark scheme, sy " +
-        "syllabus, su syllabus update, gd grade descriptions), paper number and variant (component 42 is paper 4 " +
-        "variant 2).\n" +
+        "instructions, pm pre-release material, qr listening transcript, tn teachers' notes for a speaking test, er " +
+        "examiner report, gt grade thresholds, sp specimen paper, sm specimen mark scheme, sy syllabus, su syllabus " +
+        "update, gd grade descriptions), paper number and variant (component 42 is paper 4 variant 2; component 03 " +
+        "is paper 3 with no variant).\n" +
         '- kind "not_needed": not an original Cambridge file (notes, topic questions, answers written by others, ' +
         "audio, solutions, another subject).\n" +
         '- kind "unsure": the names do not tell you. Never invent a year, paper or variant.\n' +
@@ -135,8 +136,9 @@ export function coverPrompt(scope: AiScope, where: string, text: string) {
         `${scopeText(scope)}\nThe rules could not fully read the first page of this PDF. Its place: ${clean(where, 300)}.\n` +
         "Using the first page text below, give one item with i = 0 and decide:\n" +
         '- kind "paper": an original Cambridge file. Give year, session (m = Feb/March, s = May/June, w = Oct/Nov, ' +
-        "y = specimen or syllabus document), type (qp, ms, in, ci, er, gt, sp, sm, sy, su, gd), paper number and " +
-        'variant (component 42 is paper 4 variant 2; a specimen "0625/02" is paper 2).\n' +
+        "y = specimen or syllabus document), type (qp, ms, in, ci, pm pre-release material, qr listening transcript, " +
+        "tn teachers' notes, er, gt, sp, sm, sy, su, gd), paper number and variant (component 42 is paper 4 variant 2; " +
+        'component 03 is paper 3 with no variant; a specimen "0625/02" is paper 2).\n' +
         '- kind "not_needed": not an original Cambridge file.\n' +
         '- kind "unsure": the page does not tell you. Never invent a year, paper or variant.\n' +
         "Give a short reason.\nFirst page text:\n" + clean(text.replace(/\n/g, " / "), 1500),

@@ -2,10 +2,10 @@ import Link from "next/link";
 import { CellLink, GroupPill } from "@/components/LibraryBits";
 import { DOC_TYPE_LABELS } from "@/lib/config";
 import { TIER_LABELS } from "@/lib/library/papers";
-import { cellKey, type MapColumn, type MapVersion } from "@/lib/library/map";
+import { cellKey, SESSION_TYPES, type MapColumn, type MapVersion } from "@/lib/library/map";
 import { sessionHref, versionHref } from "@/lib/library/slugs";
 
-const SHORT: Record<string, string> = { qp: "QP", in: "Insert", ms: "MS", ci: "CI", sp: "QP", sm: "MS" };
+const SHORT: Record<string, string> = { qp: "QP", in: "Insert", ms: "MS", ci: "CI", sp: "QP", sm: "MS", pm: "Pre-release", qr: "Transcript" };
 
 function Heads({ columns, tail }: { columns: MapColumn[]; tail: string[] }) {
   return (
@@ -37,7 +37,7 @@ function Heads({ columns, tail }: { columns: MapColumn[]; tail: string[] }) {
 
 /** One syllabus version: its documents and specimens, then every exam session as a row. */
 export function SubjectMapVersion({ code, v }: { code: string; v: MapVersion }) {
-  const tail = v.rows.some((r) => r.er || r.gt) ? ["er", "gt"] : [];
+  const tail: string[] = SESSION_TYPES.filter((t) => v.rows.some((r) => r.docs?.[t]));
   return (
     <section className="card stack map-version" aria-labelledby={`v-${v.id}`}>
       <div className="row-between">
@@ -78,7 +78,7 @@ export function SubjectMapVersion({ code, v }: { code: string; v: MapVersion }) 
                     <td key={`${c.paper}-${t}`} className={i === 0 ? "map-start" : undefined}><CellLink cell={r.cells[cellKey(c.paper, t)]} /></td>
                   )))}
                   {tail.map((t, i) => (
-                    <td key={t} className={i === 0 ? "map-start" : undefined}>{r.first ? <CellLink cell={t === "er" ? r.er : r.gt} /> : null}</td>
+                    <td key={t} className={i === 0 ? "map-start" : undefined}>{r.first ? <CellLink cell={r.docs?.[t]} /> : null}</td>
                   ))}
                 </tr>
               ))}

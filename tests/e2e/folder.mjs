@@ -32,6 +32,8 @@ writeFileSync(join(june, "Question Paper 21.pdf"), makePdf(["Cambridge IGCSE", "
 writeFileSync(join(june, "Revision notes.pdf"), fake()); // nobody can tell: the owner picks
 writeFileSync(join(june, "Teacher notes.docx"), "not a pdf");
 writeFileSync(join(june, "Question Paper 32 copy.pdf"), qp32); // an identical copy in the folder
+// A Cambridge name with a code the library does not keep: its type stands, whatever the cover says.
+writeFileSync(join(june, "0625_s25_sf_51.pdf"), makePdf(["PHYSICS 0625/51", "Paper 5 Practical Test May/June 2025", "INSTRUCTIONS", tag()]));
 // An old year (the Drive copies go back to 2002): left out by its names, never read or sent to the AI.
 mkdirSync(join(root, "IGCSE Physics (0625)", "2002"), { recursive: true });
 writeFileSync(join(root, "IGCSE Physics (0625)", "2002", "0625_w02_ab_5.pdf"), makePdf(["PHYSICS 0625/05", "ANSWER BOOKLET", "OCTOBER/NOVEMBER SESSION 2002", tag()]));
@@ -53,7 +55,7 @@ await page.goto(BASE + "/admin/library/folder?code=0625");
 await page.setInputFiles("#folder", root);
 await page.waitForSelector("#folder-plan", { timeout: 30_000 });
 const text = await page.locator("main").innerText();
-check(/What is in the folder: 7 PDFs/.test(text) && /1 file is not a PDF and was left out/.test(text), "folder: PDFs found, other files left out");
+check(/What is in the folder: 8 PDFs/.test(text) && /1 file is not a PDF and was left out/.test(text), "folder: PDFs found, other files left out");
 const toUpload = page.locator("#plan-new li");
 check((await toUpload.count()) === 4, `folder: four files to upload (${await toUpload.count()})`);
 check((await page.locator("#plan-new li", { hasText: "Scan 7.pdf" }).locator("text=Worked out from its first page").count()) === 1, "folder: an unnamed file is named from its first page");
@@ -65,7 +67,14 @@ check(/AI today: \d+ question/.test(await page.locator(".ai-meter").innerText())
 check(/AI is not available here/.test(text), "folder: says when the AI could not help");
 const notes = page.locator("#plan-review li", { hasText: "Revision notes.pdf" });
 check((await notes.count()) === 1, "folder: an unclear file needs your eye");
+check((await page.locator("#plan-not_needed li", { hasText: "0625_s25_sf_51.pdf" }).locator("text=source files for a practical paper").count()) === 1, "folder: an unknown Cambridge code is not needed, never read as a question paper");
+const pickText = await notes.locator("select option[value='0625_s25_ci_52.pdf']").innerText();
+check(pickText.startsWith("IGCSE Physics (0625) / 2025 / June / 0625_s25_ci_52.pdf"), `folder: the picker shows the full place in the library (${pickText})`);
 await notes.locator("select").selectOption("0625_s25_ci_52.pdf");
+check((await notes.locator(".pick-line", { hasText: "Goes to IGCSE Physics (0625) / 2025 / June / 0625_s25_ci_52.pdf" }).count()) === 1, "folder: the picker sits on its own line and says where the file goes");
+const box = await notes.locator("select").boundingBox();
+const row = await notes.boundingBox();
+check(box && row && box.width > row.width * 0.6, `folder: the picker is wide enough to read (${Math.round(box?.width ?? 0)} of ${Math.round(row?.width ?? 0)} px)`);
 await page.click("button:has-text('Upload 5 files')");
 await page.waitForSelector("#folder-done", { timeout: 30_000 });
 check(/5 files stored/.test(await page.locator("#folder-done").innerText()) && (await page.locator("#folder-done a", { hasText: "Open IGCSE Physics (0625) in the library" }).count()) === 1,

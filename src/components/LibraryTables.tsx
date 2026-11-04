@@ -33,7 +33,7 @@ export function DocChips({ cells }: { cells: Cell[] }) {
 /** Papers with their names and tiers, one row per paper (and variant), cells per document type. */
 export function PaperTable({ rows, types, papers, caption }: { rows: PaperRow[]; types: string[]; papers: Map<number, Paper>; caption?: string }) {
   if (rows.length === 0) return null;
-  const heads: Record<string, string> = { qp: "QP", in: "Insert", ms: "MS", ci: "CI", sp: "QP", sm: "MS" };
+  const heads: Record<string, string> = { qp: "QP", in: "Insert", ms: "MS", ci: "CI", sp: "QP", sm: "MS", pm: "Pre-release", qr: "Transcript" };
   // Only the columns this syllabus uses (no CI column for a subject without practicals).
   types = types.filter((t) => rows.some((r) => r.cells[t as keyof PaperRow["cells"]]));
   return (

@@ -100,7 +100,7 @@ test("hierarchy: qualifications hold subjects, subjects hold syllabuses", async 
   assert.equal(await loadSyllabus(db, "' OR 1=1"), null);
 });
 
-test("the rebuilt table keeps old rows and accepts the new types", () => {
+test("the rebuilt table keeps old rows and accepts the new types (0006, 0014)", () => {
   const db = testDb();
   const cols = (db.raw.prepare("PRAGMA table_info(source_document)").all() as { name: string }[]).map((c) => c.name);
   assert.equal(cols.length, 18);
@@ -109,7 +109,10 @@ test("the rebuilt table keeps old rows and accepts the new types", () => {
       VALUES (?, '0625-2023', 'y', 2023, ?, ?, ?, ?, 1, ?, 1)`).run(type + origin, type, `f-${type}${origin}`, `k-${type}${origin}`, `h-${type}${origin}`, origin);
   ins("su");
   ins("gd", "link");
-  assert.throws(() => ins("zz"));
+  ins("pm");
+  // Any two lowercase letters pass the table (names.ts decides which types exist); nothing else does.
+  assert.throws(() => ins("QP"));
+  assert.throws(() => ins("qpx"));
   assert.throws(() => ins("sy", "elsewhere"));
 });
 

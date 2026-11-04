@@ -8,14 +8,18 @@ import type { DocType } from "./names.ts";
 import { describeFile, paperLookup, type Paper } from "./papers.ts";
 
 /** Paper files in the order a teacher reads them. */
-export const PAPER_TYPES: DocType[] = ["qp", "in", "ms", "ci"];
+export const PAPER_TYPES: DocType[] = ["pm", "qp", "in", "ms", "ci", "qr"];
+/** Whole-session files, in this order. */
+export const SESSION_TYPES: DocType[] = ["er", "gt", "tn"];
 export const SPECIMEN_TYPES: DocType[] = ["sp", "in", "sm", "ci"];
 
 export type MapColumn = { paper: number; name: string; tier: Paper["tier"] | null; types: DocType[] };
 export type MapRow = {
   year: number; session: "m" | "s" | "w"; label: string; variant: number | null; essential: boolean;
   /** First row of its session: carries the session's status and whole-session files. */
-  first: boolean; sessionStatus: Status; cells: Partial<Record<string, Cell>>; er?: Cell; gt?: Cell;
+  first: boolean; sessionStatus: Status; cells: Partial<Record<string, Cell>>;
+  /** Whole-session files (examiner report, grade thresholds, teachers' notes), on the first row only. */
+  docs?: Partial<Record<string, Cell>>;
 };
 export type MapVersion = {
   id: string; label: string; from: number; to: number; status: Status;
@@ -54,8 +58,8 @@ export function buildSubjectMap(list: Checklist, allPapers: Paper[], opts: { all
         const eb = chosen.some((r) => r.variant === b && r.essential);
         return Number(eb) - Number(ea) || (a ?? 0) - (b ?? 0);
       });
-      const er = s.docs.find((c) => c.docType === "er");
-      const gt = s.docs.find((c) => c.docType === "gt");
+      const docs: Partial<Record<string, Cell>> = {};
+      for (const c of s.docs) docs[c.docType] = c;
       const many = variants.length > 1;
       variants.forEach((v, i) => {
         const cells: Partial<Record<string, Cell>> = {};
@@ -66,11 +70,11 @@ export function buildSubjectMap(list: Checklist, allPapers: Paper[], opts: { all
         }
         rows.push({
           year: s.year, session: s.session, label: many || opts.allVariants ? `${s.label}, variant ${v}` : s.label,
-          variant: v, essential, first: i === 0, sessionStatus: s.status, cells, ...(i === 0 ? { er, gt } : {}),
+          variant: v, essential, first: i === 0, sessionStatus: s.status, cells, ...(i === 0 ? { docs } : {}),
         });
       });
-      if (variants.length === 0 && (er || gt)) {
-        rows.push({ year: s.year, session: s.session, label: s.label, variant: null, essential: true, first: true, sessionStatus: s.status, cells: {}, er, gt });
+      if (variants.length === 0 && s.docs.length) {
+        rows.push({ year: s.year, session: s.session, label: s.label, variant: null, essential: true, first: true, sessionStatus: s.status, cells: {}, docs });
       }
     }
     const specCells: Partial<Record<string, Cell>> = {};

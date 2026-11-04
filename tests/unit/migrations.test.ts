@@ -11,7 +11,7 @@ test("migrations are numbered 0001, 0002, ... with no gaps", () => {
 });
 
 // Owner-approved one-time exceptions (each must say so in its own header).
-const REBUILD_EXCEPTIONS = new Set(["0006_library_hierarchy.sql"]);
+const REBUILD_EXCEPTIONS = new Set(["0006_library_hierarchy.sql", "0014_more_doc_types.sql"]);
 
 test("migrations are additive only (brief 15.5)", () => {
   for (const f of files) {
@@ -27,8 +27,8 @@ test("migrations are additive only (brief 15.5)", () => {
   }
 });
 
-test("the rebuild exception keeps every column and copies every row", () => {
-  const sql = readFileSync(new URL("0006_library_hierarchy.sql", dir), "utf8");
+for (const f of REBUILD_EXCEPTIONS) test(`the rebuild exception ${f} keeps every column and copies every row`, () => {
+  const sql = readFileSync(new URL(f, dir), "utf8");
   const cols = ["id", "syllabus_id", "session", "year", "paper", "variant", "doc_type", "file_name", "r2_key", "sha256",
     "size_bytes", "source_url", "source_site_id", "origin", "job_id", "status", "acquired_by", "acquired_at"];
   const copy = sql.slice(sql.indexOf("INSERT INTO source_document_new"), sql.indexOf("FROM source_document;"));

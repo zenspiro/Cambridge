@@ -5,7 +5,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { KnownSubject } from "@/lib/agent/classify";
 import { readCover } from "@/lib/library/cover";
-import { applyAi, applyCover, finalise, isPdf, planFromNames, STATUS_WORDS, type PlanItem, type PlanStatus } from "@/lib/library/folderPlan";
+import { applyAi, applyCover, finalise, isPdf, paperTitleChecks, planFromNames, STATUS_WORDS, type PlanItem, type PlanStatus } from "@/lib/library/folderPlan";
+import { parseCambridgeName } from "@/lib/library/names";
 import { REASON_LABELS } from "@/lib/library/labels";
 import { describeFile, paperLookup, versionForFile, type Paper } from "@/lib/library/papers";
 import { firstPageText } from "@/lib/pdf/firstPage";
@@ -72,6 +73,13 @@ export function FolderUpload(props: {
   const describe = (name: string) => {
     const code = name.slice(0, 4);
     return describeFile(name, versionForFile(props.versions.filter((v) => v.code === code), name), look);
+  };
+  const versionOf = (name: string) => versionForFile(props.versions.filter((v) => v.code === name.slice(0, 4)), name);
+  // Where a file goes in the library, in full: "IGCSE Computer Science (0478) / 2020 / November / 0478_w20_qp_21.pdf".
+  const SESSION_FOLDERS = { m: "March", s: "June", w: "November", y: "Syllabus and specimens" } as const;
+  const placeOf = (name: string) => {
+    const p = parseCambridgeName(name);
+    return p ? `${props.subjectLabel} / ${p.year} / ${SESSION_FOLDERS[p.session]} / ${p.fileName}` : name;
   };
   const input = useRef<HTMLInputElement>(null);
   const files = useRef<File[]>([]);
@@ -212,6 +220,11 @@ export function FolderUpload(props: {
     setPhase("done");
   }
 
+  const titleChecks = phase === "preview" ? paperTitleChecks(items, props.papers, versionOf) : [];
+  const versionLabel = (id: string) => {
+    const v = props.versions.find((x) => x.id === id);
+    return v ? `${v.valid_from_year} to ${v.valid_to_year} syllabus` : id;
+  };
   const counts = ORDER.map((s) => [s, items.filter((it) => it.status === s).length] as const).filter(([, n]) => n > 0);
   const toSend = items.filter((it) => it.status === "new").length + Object.values(picks).filter(Boolean).length;
 
@@ -294,6 +307,21 @@ export function FolderUpload(props: {
           {other ? <p className="muted">{other === 1 ? "1 file is not a PDF and was left out." : `${other} files are not PDFs and were left out.`}</p> : null}
           {aiNote ? <p className="muted">{aiNote}</p> : null}
           {stopNote ? <p className="alert" role="alert">{stopNote}</p> : null}
+          {titleChecks.length ? (
+            <div className="stack" id="title-checks">
+              <p className="alert">The first pages name some papers differently from the library. The library&apos;s names for older syllabuses were copied from the next syllabus, so the cover is probably right:</p>
+              <ul className="list">
+                {titleChecks.map((t) => (
+                  <li className="list-row" key={`${t.versionId}-${t.paper}`}>
+                    <span className="doc-main">
+                      <span>{versionLabel(t.versionId)}, Paper {t.paper}: the cover says &ldquo;{t.cover}&rdquo;, the library says &ldquo;{t.library}&rdquo;</span>
+                      <span className="mono muted">for example {t.example}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           {phase === "preview" ? (
             toSend ? (
               <div className="actions">
@@ -338,18 +366,21 @@ export function FolderUpload(props: {
                             </span>
                           </>
                         )}
+                        {!res && s === "review" && phase === "preview" && props.choices.length ? (
+                          // Its own line, the full width of the row, so the whole place in the library shows.
+                          <span className="pick-line">
+                            <label className="label-inline" htmlFor={`pick-${it.i}`}>Which file is it?</label>
+                            <select className="input pick-select" id={`pick-${it.i}`} value={picks[it.i] ?? ""}
+                              onChange={(e) => setPicks((p) => ({ ...p, [it.i]: e.target.value }))}>
+                              <option value="">Leave it out</option>
+                              {props.choices.map((c) => <option key={c.name} value={c.name}>{`${placeOf(c.name)}: ${c.text}`}</option>)}
+                            </select>
+                            {picks[it.i] ? <span className="muted">Goes to <span className="mono">{placeOf(picks[it.i]!)}</span></span> : null}
+                          </span>
+                        ) : null}
                       </span>
                       {res ? (
                         <span className={res.ok ? "event-good" : "event-bad"}>{res.text}</span>
-                      ) : s === "review" && phase === "preview" && props.choices.length ? (
-                        <span className="review-act">
-                          <label className="sr-only" htmlFor={`pick-${it.i}`}>Which file is it?</label>
-                          <select className="input review-select" id={`pick-${it.i}`} value={picks[it.i] ?? ""}
-                            onChange={(e) => setPicks((p) => ({ ...p, [it.i]: e.target.value }))}>
-                            <option value="">Leave it out</option>
-                            {props.choices.map((c) => <option key={c.name} value={c.name}>{c.text}</option>)}
-                          </select>
-                        </span>
                       ) : null}
                     </li>
                   );
