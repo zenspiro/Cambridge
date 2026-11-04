@@ -1,7 +1,7 @@
 // Plain-word summaries of a set of Cambridge files, grouped by session or syllabus version:
 // "June 2024: 6 question papers, 6 mark schemes, 1 confidential instructions, examiner report".
 // Pure; used by the agent (Node) for its activity lines and by the run page.
-import { SESSION_LABELS } from "../config.ts";
+import { docTypeLabel, SESSION_LABELS } from "../config.ts";
 import { parseCambridgeName, type ParsedName } from "./names.ts";
 
 const PLURALS: Record<string, [string, string]> = {
@@ -49,10 +49,13 @@ export function groupFiles(names: string[]): FileGroup[] {
 export function countTypes(files: ParsedName[]): string {
   const counts = new Map<string, number>();
   for (const f of files) counts.set(f.docType, (counts.get(f.docType) ?? 0) + 1);
-  return ORDER.filter((t) => counts.has(t))
+  // Known types in reading order, then any other Cambridge code ("2 source files").
+  const order = [...ORDER.filter((t) => counts.has(t)), ...[...counts.keys()].filter((t) => !ORDER.includes(t)).sort()];
+  return order
     .map((t) => {
       const n = counts.get(t)!;
-      const [one, many] = PLURALS[t] ?? [t, t];
+      const label = docTypeLabel(t).toLowerCase();
+      const [one, many] = PLURALS[t] ?? [label, label];
       return n === 1 && (t === "er" || t === "gt" || t === "sy" || t === "su" || t === "gd") ? one : `${n} ${n === 1 ? one : many}`;
     })
     .join(", ");

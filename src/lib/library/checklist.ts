@@ -1,7 +1,7 @@
 // The library checklist: every file a syllabus should have, ticked or missing, grouped
 // as syllabus documents, specimens and exam sessions. One pure function used by the
 // admin library, its search and filters, and the AI engine's catalog. No database here.
-import { DOC_TYPE_LABELS, SESSION_LABELS } from "../config.ts";
+import { docTypeLabel, SESSION_LABELS } from "../config.ts";
 import { checkVariants, type LibrarySettings } from "../settings.ts";
 import { EXAM_SESSIONS, parseRules, sessionDue, type ExpectedRules } from "./expected.ts";
 import { examName, parseCambridgeName, type DocType } from "./names.ts";
@@ -55,7 +55,7 @@ function describe(fileName: string): string {
   const p = parseCambridgeName(fileName);
   if (!p) return fileName;
   const when = p.session === "y" ? `specimen syllabus ${p.year}` : `${SESSION_LABELS[p.session]} ${p.year}`;
-  const parts = [when, DOC_TYPE_LABELS[p.docType] ?? p.docType];
+  const parts = [when, docTypeLabel(p.docType)];
   if (p.paper) parts.push(`paper ${p.paper}`);
   if (p.variant) parts.push(`variant ${p.variant}`, `paper ${p.paper}${p.variant}`);
   parts.push(fileName);

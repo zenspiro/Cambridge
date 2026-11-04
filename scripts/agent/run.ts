@@ -5,7 +5,7 @@
 import { signRequest } from "../../src/lib/agent/sign.ts";
 import { extractPdfLinks, toCambridgeName } from "../../src/lib/agent/links.ts";
 import { parseRobots } from "../../src/lib/agent/robots.ts";
-import { parseCambridgeName } from "../../src/lib/library/names.ts";
+import { isKnownType, parseCambridgeName } from "../../src/lib/library/names.ts";
 import { reasonText } from "../../src/lib/agent/labels.ts";
 import { pageTitle, summariseFiles } from "../../src/lib/library/summary.ts";
 import { SESSION_LABELS } from "../../src/lib/config.ts";
@@ -467,12 +467,6 @@ async function main() {
               : classifyFile(path, item.name, subjects);
             if (!c.name) {
               if (c.code && c.code !== job.params.code) summary.otherSubjects[c.code] = (summary.otherSubjects[c.code] ?? 0) + 1;
-              else if ("notKept" in c && c.notKept) {
-                // Its own Cambridge name says a type the library does not keep: not needed, no AI.
-                report.notNeeded ??= { count: 0, examples: [] };
-                report.notNeeded.count++;
-                if (report.notNeeded.examples.length < 10) report.notNeeded.examples.push(`${[...path, item.name].join(" / ")}: ${c.why}`);
-              }
               else leftovers.push({ path, item, why: c.why });
               continue;
             }
@@ -498,8 +492,8 @@ async function main() {
             report.candidates.push({ name: c.name, url: `https://drive.google.com/file/d/${id}/view`, siteId: f.siteId, driveId: id, why: c.why });
             fresh.push(c.name);
           }
-          // Files the rules could not name: the AI reads their folder path and name. Only names the
-          // checklist asks for in this run come back as "named"; anything else goes to review.
+          // Files the rules could not name: the AI reads their folder path and name. Any file of this
+          // subject in the run's years and sessions comes back "named" and is fetched.
           let aiNamed = 0;
           const askable = leftovers.slice(0, AI_BATCH * 5);
           if (askable.length && aiOn) await progress(findShare, `${step}: asking the AI about ${leftovers.length} unclear file${leftovers.length === 1 ? "" : "s"}`);
@@ -662,7 +656,9 @@ async function main() {
           // Every download is checked against its first page before it is stored.
           const { cover } = await coverOf(r.bytes, codes);
           let name = c.name;
-          const other = cover.name && cover.name !== c.name ? cover.name : null;
+          // A Cambridge code the library has no name for ("sf") keeps its own name.
+          const ownKnown = isKnownType(parseCambridgeName(c.name)?.docType ?? "");
+          const other = ownKnown && cover.name && cover.name !== c.name ? cover.name : null;
           const otherCode = !cover.name && cover.code && cover.code !== job.params.code ? cover.code : null;
           if (other && parseCambridgeName(other)!.code === job.params.code && !have.has(other) && !report.stored.includes(other) && !planned.has(other)) {
             name = other;
@@ -730,8 +726,12 @@ async function main() {
           report.notNeeded ??= { count: 0, examples: [] };
           report.notNeeded.count++;
           if (report.notNeeded.examples.length < 10) report.notNeeded.examples.push(`${u.where}: first page read by the AI: ${f.why ?? ""}`);
-          report.autoRejected ??= [];
-          report.autoRejected.push({ siteId: u.siteId, driveId: u.driveId, where: u.where });
+          // Rejected for good only when it is not a Cambridge file at all; a real file from
+          // another year (the AI gave its name) stays for a later run that asks for that year.
+          if (!f.name) {
+            report.autoRejected ??= [];
+            report.autoRejected.push({ siteId: u.siteId, driveId: u.driveId, where: u.where });
+          }
           continue;
         } else if (f?.name) {
           toReview({ ...u, why: `first page read by the AI: ${f.why ?? "not a file this run looks for"}`, suggest: f.name, by: "ai" });

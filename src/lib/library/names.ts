@@ -19,8 +19,11 @@ export type ParsedName = {
 // transcript, tn teachers' notes (speaking tests).
 const EXAM = /^(\d{4})_([msw])(\d{2})_(?:(qp|ms|in|ci|pm|qr)_([1-9])([1-9])?|(tn)_0([1-9])|(er|gt))\.pdf$/;
 // Specimens and version documents: y + first exam year of the syllabus version.
-// sy syllabus, su syllabus update, gd grade descriptions.
-const SPEC = /^(\d{4})_y(\d{2})_(?:(sp|sm|in|ci)_([1-9])|(sy|su|gd))\.pdf$/;
+// sy syllabus, su syllabus update, gd grade descriptions; pm specimen pre-release material.
+const SPEC = /^(\d{4})_y(\d{2})_(?:(sp|sm|in|ci|pm)_([1-9])|(sy|su|gd))\.pdf$/;
+
+const GEN_EXAM = /^(\d{4})_([msw])(\d{2})_([a-z]{2})(?:_(?:0([1-9])|([1-9])([1-9])?))?\.pdf$/;
+const GEN_SPEC = /^(\d{4})_y(\d{2})_([a-z]{2})(?:_([1-9]))?\.pdf$/;
 
 export function parseCambridgeName(raw: string): ParsedName | null {
   if (typeof raw !== "string" || raw.length > 40) return null;
@@ -38,6 +41,20 @@ export function parseCambridgeName(raw: string): ParsedName | null {
       paper: paper ? Number(paper) : null,
       variant: m[6] ? Number(m[6]) : null,
     };
+  }
+  // Any other Cambridge code ("0417_w24_sf_02.pdf", source files): a real file of a kind the
+  // library has no name for yet. Stored as it is, so a new code never needs a code change.
+  m = GEN_EXAM.exec(fileName);
+  if (m && !isKnownType(m[4]!)) {
+    const paper = m[5] ?? m[6];
+    return {
+      fileName, code: m[1]!, session: m[2] as Session, year: 2000 + Number(m[3]), docType: m[4] as DocType,
+      paper: paper ? Number(paper) : null, variant: m[7] ? Number(m[7]) : null,
+    };
+  }
+  m = GEN_SPEC.exec(fileName);
+  if (m && !isKnownType(m[3]!)) {
+    return { fileName, code: m[1]!, session: "y", year: 2000 + Number(m[2]), docType: m[3] as DocType, paper: m[4] ? Number(m[4]) : null, variant: null };
   }
   m = SPEC.exec(fileName);
   if (m) {
@@ -71,27 +88,8 @@ export const DOC_TYPES: DocType[] = ["qp", "ms", "in", "ci", "pm", "qr", "tn", "
 /** Types written once per paper without variants ("tn_03"). */
 export const NO_VARIANT_TYPES: readonly DocType[] = ["tn"];
 
-/**
- * Cambridge codes the library does not keep, in words. A file named like a Cambridge file with
- * one of these (or any other unknown code) keeps that type: it is never read as another type.
- */
-export const NOT_KEPT_TYPES: Readonly<Record<string, string>> = {
-  sf: "source files for a practical paper",
-  ir: "instructions",
-  ab: "answer booklet",
-};
-
-/**
- * A name shaped like a Cambridge file name ("0478_w20_xx_21.pdf") whose type code the library
- * does not know. Null for real library names and for anything else.
- */
-export function unknownCambridgeType(raw: string): { code: string; type: string; words: string } | null {
-  const f = String(raw ?? "").trim().toLowerCase();
-  if (parseCambridgeName(f)) return null;
-  const m = /^(\d{4})_([msjwy])(\d{2})_([a-z]{2})(?:_\d{1,2})?\.pdf$/.exec(f);
-  if (!m || DOC_TYPES.includes(m[4] as DocType)) return null;
-  return { code: m[1]!, type: m[4]!, words: NOT_KEPT_TYPES[m[4]!] ?? `Cambridge code "${m[4]}"` };
-}
+/** True for the types the library knows by name; other Cambridge codes are stored as they are. */
+export const isKnownType = (t: string): t is DocType => (DOC_TYPES as string[]).includes(t);
 
 /**
  * A Cambridge name from its parts (year, session, type, paper, variant), as the AI or the front

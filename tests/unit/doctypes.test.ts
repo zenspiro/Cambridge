@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { testDb } from "./helpers/d1.ts";
-import { examName, nameFromParts, parseCambridgeName, unknownCambridgeType } from "../../src/lib/library/names.ts";
+import { examName, isKnownType, nameFromParts, parseCambridgeName } from "../../src/lib/library/names.ts";
 import { classifyFile } from "../../src/lib/agent/classify.ts";
 import { coverPaperTitle, readCover } from "../../src/lib/library/cover.ts";
 import { applyCover, finalise, paperTitleChecks, planFromNames } from "../../src/lib/library/folderPlan.ts";
@@ -35,22 +35,22 @@ test("pm, qr and tn names parse; tn is written per paper without variants", () =
   assert.equal(nameFromParts("0478", { year: 2020, session: "w", type: "pm", paper: 2, variant: 1 }), "0478_w20_pm_21.pdf");
 });
 
-test("a Cambridge name with a code the library does not keep is never read as another type", () => {
-  assert.deepEqual(unknownCambridgeType("0417_w24_sf_02.pdf"), { code: "0417", type: "sf", words: "source files for a practical paper" });
-  assert.equal(unknownCambridgeType("0478_w20_pm_21.pdf"), null);
-  assert.equal(unknownCambridgeType("Scan 4.pdf"), null);
-  assert.match(unknownCambridgeType("0478_w20_zz_21.pdf")!.words, /zz/);
-
-  const c = classifyFile(["Computer Science 0478", "2020"], "0478_w20_zz_21.pdf", SUBJECTS);
-  assert.equal(c.name, null);
-  assert.equal(c.notKept, "zz");
+test("any other Cambridge code is stored as it is, and never read as another type", () => {
+  const sf = parseCambridgeName("0417_w24_sf_02.pdf")!;
+  assert.deepEqual([sf.docType, sf.paper, sf.variant, isKnownType(sf.docType)], ["sf", 2, null, false]);
+  assert.equal(parseCambridgeName("0478_w20_zz_21.pdf")?.docType, "zz");
+  assert.equal(parseCambridgeName("0478_y20_zz_2.pdf")?.docType, "zz");
+  assert.equal(parseCambridgeName("0625_s23_qp.pdf"), null, "a known type in the wrong shape is still not a name");
+  assert.equal(parseCambridgeName("Scan 4.pdf"), null);
+  assert.equal(describeFile("0417_w24_sf_02.pdf", null, () => null), "November 2024, Paper 2, source files");
+  assert.equal(describeFile("0478_w20_zz_21.pdf", null, () => null), "November 2020, Paper 2, variant 1, cambridge file (zz)");
 
   const it = planFromNames(0, "ICT 0417/2024/0417_w24_sf_02.pdf", 1000, SUBJECTS, 1e8, YEARS);
-  assert.equal(it.status, "not_needed");
-  assert.match(it.why, /source files/);
+  assert.deepEqual([it.name, it.evidence], ["0417_w24_sf_02.pdf", 0]);
   applyCover(it, readCover("ICT 0417/02\nPaper 2\nOctober/November 2024\nINSTRUCTIONS", CODES), "x", YEARS);
-  assert.equal(it.status, "not_needed", "the first page cannot turn it into a question paper");
-  assert.equal(it.name, null);
+  assert.equal(it.name, "0417_w24_sf_02.pdf", "the first page cannot turn it into a question paper");
+  finalise([it], { have: new Set(), codes: CODES, fromYear: 2020, toYear: 2026 });
+  assert.equal(it.status, "new");
 });
 
 test("folder and file words name pre-release material, transcripts and teachers' notes", () => {
@@ -64,6 +64,20 @@ test("folder and file words name pre-release material, transcripts and teachers'
 
 const PM_COVER = "This document has 4 pages.\n© UCLES 2020 [Turn over\nCambridge IGCSE\nCOMPUTER SCIENCE 0478/21\nPaper 2 Problem-solving and Programming October/November 2020\nPRE-RELEASE MATERIAL\nINSTRUCTIONS\n● This material should be given to candidates on receipt.";
 const QP_COVER = "This document has 16 pages.\n© UCLES 2020 [Turn over\nCambridge IGCSE\nCOMPUTER SCIENCE 0478/21\nPaper 2 Problem-solving and Programming October/November 2020\n1 hour 45 minutes\nYou must answer on the question paper.\nINSTRUCTIONS\n● Answer all questions.";
+
+// The owner's file: Cambridge's 2020 specimen pre-release material for 0478 Paper 2 (first page lines).
+const SPEC_PM_COVER = "This document consists of 2 printed pages.\n© UCLES 2019 [Turn over\nCambridge IGCSE\n\nCOMPUTER SCIENCE 0478/02\nPaper 2 Problem-solving and Programming For examination from 2020\nSPECIMEN PRE-RELEASE MATERIAL\nNo additional materials are required.";
+
+test("specimen pre-release material is a library file: 0478_y20_pm_2.pdf", () => {
+  assert.equal(parseCambridgeName("0478_y20_pm_2.pdf")?.docType, "pm");
+  assert.equal(readCover(SPEC_PM_COVER, CODES).name, "0478_y20_pm_2.pdf");
+  assert.equal(toCambridgeName("https://x.org/a/414824-2020-specimen-paper-2-pre-release-material.pdf", "0478"), "0478_y20_pm_2.pdf");
+  assert.equal(classifyFile(["computers science 0478", "2020", "2020 Specimen Papers"], "414824-2020-specimen-paper-2-pre-release-material.pdf", SUBJECTS).name, "0478_y20_pm_2.pdf");
+  const it = planFromNames(0, "computers science 0478/2020/2020 Specimen Papers/414824-2020-specimen-paper-2-pre-release-material.pdf", 199_000, SUBJECTS, 1e8, YEARS);
+  applyCover(it, readCover(SPEC_PM_COVER, CODES), SPEC_PM_COVER, YEARS);
+  finalise([it], { have: new Set(), codes: CODES, fromYear: 2020, toYear: 2026 });
+  assert.deepEqual([it.status, it.name], ["new", "0478_y20_pm_2.pdf"]);
+});
 
 test("the front page reader knows pre-release material, transcripts and teachers' notes", () => {
   const pm = readCover(PM_COVER, CODES);

@@ -2,6 +2,22 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-04: The checklist no longer decides what may come in
+
+**What:** (1) any real Cambridge file of a library subject in the library (or run) years is accepted, whether or not the checklist asks for it; the checklist only says what is missing. The AI's answers are kept on that basis (before, a name the checklist did not list went to Needs your eye). A real file from another year is "not needed" with its name and never rejected for good, so a later run for that year takes it. (2) Any other two-letter Cambridge code (source files "sf", or one nobody has seen) is stored as it is and described in words ("Source files", or "Cambridge file (xx)"); a new code needs no code change, and the first page cannot turn it into another type. (3) Needs your eye: the AI's guess is already chosen, so you only check it. (4) "Download report" on the folder page saves a spreadsheet of every file and what happened to it, to send in one go instead of one case at a time.
+
+**Why:** owner: every run led to another tweak (pre-release, specimen pre-release, codes); "less manual work, more AI power".
+
+**Tested:** 120 unit tests (changed: AI names outside the checklist kept, other codes stored as they are); 205 browser checks (new: the report download; a source files PDF uploaded under its own name).
+
+## 2026-11-04: Specimen pre-release material
+
+**What:** specimen pre-release material is a library file, `0478_y20_pm_2.pdf`: its Cambridge site name ("2020-specimen-paper-2-pre-release-material"), its folder words and its first page ("SPECIMEN PRE-RELEASE MATERIAL") all give that name. The checklist does not ask for 2020 specimens, so it shows under "Other stored files".
+
+**Why:** owner report: Cambridge's 0478 2020 specimen pre-release material went to Needs your eye; the reader had every part, but the name was not allowed.
+
+**Tested:** 120 unit tests (new: the owner's file, by its cover, site name and folder); 204 browser checks.
+
 ## 2026-11-04: Pre-release material, transcripts, teachers' notes; unknown codes; picker on its own line
 
 **What:** (1) three Cambridge file types the library did not know: pm pre-release material (0478 Paper 2 up to 2022, asked for with the paper), qr listening transcript and tn teachers' notes for the speaking test (French 0520, extras). The file names, the folder words ("Pre-release Material 22"), Cambridge's site names, the front page reader (the "PRE-RELEASE MATERIAL", "TRANSCRIPT" and "TEACHERS' NOTES" headings win) and the AI all know them; the library map shows them. (2) A file named like a Cambridge file with a code the library does not keep (sf source files, or any unknown code) keeps that type: it is "Not needed" with the type named, and neither the first page nor the AI may turn it into another type. (3) 0478 papers for 2020 to 2022 renamed from their covers: Paper 1 Theory, Paper 2 Problem-solving and Programming. The front page reader now reads the paper title, and the folder upload lists any paper whose cover title differs from the library's name. (4) The "Which file is it?" picker sits on its own line, full width, each choice showing the full place in the library ("IGCSE Computer Science (0478) / 2020 / November / 0478_w20_qp_21.pdf"), and says where the picked file goes. (5) Migration 0014 rebuilds `source_document` once more (second owner-approved exception): the type check now accepts any two lowercase letters, so later types need no rebuild.

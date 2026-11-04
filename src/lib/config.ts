@@ -55,6 +55,16 @@ export const DOC_TYPE_LABELS: Readonly<Record<string, string>> = {
   gd: "Grade descriptions",
 };
 
+/** Other Cambridge codes seen in collections, stored as they are (no checklist asks for them). */
+export const OTHER_TYPE_LABELS: Readonly<Record<string, string>> = {
+  sf: "Source files",
+  ir: "Instructions",
+  ab: "Answer booklet",
+};
+
+/** A type in words; a code nobody has named yet reads "Cambridge file (xx)". */
+export const docTypeLabel = (t: string): string => DOC_TYPE_LABELS[t] ?? OTHER_TYPE_LABELS[t] ?? `Cambridge file (${t})`;
+
 export const AGENT = {
   /** Most files one download run may store. */
   maxFilesPerRun: 400,

@@ -24,7 +24,7 @@ test("Cambridge names parse, and junk does not", () => {
   assert.equal(parseCambridgeName("0625_y26_sp_2.pdf")?.session, "y");
   assert.equal(parseCambridgeName("0625_y26_sy.pdf")?.docType, "sy");
   for (const bad of ["", "0625_s23_qp_42.exe", "../0625_s23_qp_42.pdf", "0625_s23_qp_42.pdf.exe", "0625_x23_qp_42.pdf",
-    "0625_s23_zz_42.pdf", "0625_s23_qp_04.pdf", "0625_s23_er_1.pdf", "0625/s23_qp_42.pdf", "a".repeat(41)]) {
+    "0625_s23_qp_04.pdf", "0625_s23_er_1.pdf", "0625/s23_qp_42.pdf", "a".repeat(41)]) {
     assert.equal(parseCambridgeName(bad), null, bad);
   }
   const p = parseCambridgeName("0625_s23_qp_42.pdf")!;

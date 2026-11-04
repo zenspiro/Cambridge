@@ -45,7 +45,7 @@ const EXAM_TYPES: Record<string, string> = {
   transcript: "qr",
   "teachers-notes": "tn",
 };
-const SPEC_TYPES: Record<string, string> = { "": "sp", "mark-scheme": "sm", "confidential-instructions": "ci", insert: "in" };
+const SPEC_TYPES: Record<string, string> = { "": "sp", "mark-scheme": "sm", "confidential-instructions": "ci", insert: "in", "pre-release-material": "pm" };
 
 const yy = (year: string) => year.slice(2);
 

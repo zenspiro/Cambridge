@@ -1,12 +1,12 @@
 import Link from "next/link";
 import type { Cell, Status } from "@/lib/library/checklist";
 import { tone } from "@/lib/library/catalog";
-import { DOC_TYPE_LABELS } from "@/lib/config";
+import { docTypeLabel } from "@/lib/config";
 
 /** One file in the checklist: a tick that downloads it, or Add when it is missing. */
 export function CellLink({ cell, label }: { cell: Cell | undefined; label?: string }) {
   if (!cell) return <span className="cell cell-na" aria-label="Not part of this paper">·</span>;
-  const name = label ?? DOC_TYPE_LABELS[cell.docType] ?? cell.docType;
+  const name = label ?? docTypeLabel(cell.docType);
   if (cell.doc) {
     return (
       <a className="cell cell-have" href={`/admin/library/file/${encodeURIComponent(cell.doc.id)}`} title={`${cell.fileName}: download`}>

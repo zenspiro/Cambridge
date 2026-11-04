@@ -4,7 +4,7 @@
 // browser runs it and unit tests check it.
 import { classifyFile, type KnownSubject } from "../agent/classify.ts";
 import type { CoverReading } from "./cover.ts";
-import { parseCambridgeName } from "./names.ts";
+import { isKnownType, parseCambridgeName } from "./names.ts";
 
 export type PlanStatus = "new" | "have" | "outside" | "unknown_subject" | "review" | "not_needed" | "duplicate" | "too_big";
 
@@ -71,14 +71,6 @@ export function planFromNames(i: number, relPath: string, size: number, subjects
     item.why = `from ${year}, outside the library years (${years.fromYear} to ${years.toYear})`;
     return item;
   }
-  if (c.notKept) {
-    // Its own Cambridge name gives a type the library does not keep: never read as another type.
-    item.status = "not_needed";
-    item.why = c.why;
-    item.how = "Its Cambridge name";
-    item.evidence = 0;
-    return item;
-  }
   item.name = c.name;
   if (c.name && c.why === "Cambridge file name") {
     item.how = "Already has its Cambridge name";
@@ -106,7 +98,8 @@ export function applyCover(item: PlanItem, cover: CoverReading, text: string, ye
       item.how = "Worked out from its first page";
       item.why = cover.why;
       item.evidence = 2;
-    } else if (cover.name !== item.name) {
+    } else if (cover.name !== item.name && !(item.evidence === 0 && !isKnownType(parseCambridgeName(item.name)!.docType))) {
+      // (A Cambridge name with a code the library has no name for, like "sf", keeps its type.)
       item.renamedFrom = item.name;
       item.name = cover.name;
       item.how = "Worked out from its first page";
@@ -128,7 +121,7 @@ export function applyCover(item: PlanItem, cover: CoverReading, text: string, ye
   }
 }
 
-/** Step 3: the AI's answer (its name is already checked against the subject's checklist). */
+/** Step 3: the AI's answer (its name is already checked: this subject, a library year and session). */
 export function applyAi(item: PlanItem, v: { outcome?: string; name?: string; why?: string } | undefined, from: "first page" | "names"): void {
   if (!v || item.name || item.status === "outside") return;
   const why = String(v.why ?? "").slice(0, 160);
@@ -137,6 +130,10 @@ export function applyAi(item: PlanItem, v: { outcome?: string; name?: string; wh
     item.how = `Worked out by the AI from its ${from}`;
     item.why = why;
     item.evidence = 3;
+  } else if (v.outcome === "not_needed" && v.name && parseCambridgeName(v.name)) {
+    // A real Cambridge file, from a year or session the library does not keep.
+    item.status = "outside";
+    item.why = why;
   } else if (v.outcome === "not_needed") {
     item.status = "not_needed";
     item.why = `the AI read its ${from}: ${why}`;

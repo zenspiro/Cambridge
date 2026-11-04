@@ -75,7 +75,7 @@ test("folder plan: files from years outside the library are left out by their na
   // The cover reader and the AI leave such files alone.
   applyCover(old, readCover("PHYSICS 0625/05\nOctober/November 2002\nANSWER BOOKLET", CODES), "x", years);
   applyAi(old, { outcome: "named", name: "0625_s24_qp_11.pdf" }, "names");
-  assert.equal(old.name, null);
+  assert.equal(old.name, "0625_w02_ab_5.pdf", "its own name stands; the AI answer is ignored");
   // A cover that gives only an old year; and the AI recognising an old file.
   const scan = planFromNames(2, "Physics/Scan.pdf", 1000, SUBJECTS, MAX, years);
   applyCover(scan, readCover("PHYSICS\nANSWER BOOKLET\nOCTOBER/NOVEMBER SESSION 2002", CODES), "x", years);
