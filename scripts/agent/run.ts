@@ -9,6 +9,7 @@ import { parseCambridgeName } from "../../src/lib/library/names.ts";
 import { REASON_LABELS } from "../../src/lib/library/labels.ts";
 import { pageTitle, summariseFiles } from "../../src/lib/library/summary.ts";
 import { SESSION_LABELS } from "../../src/lib/config.ts";
+import { ruleSummary } from "../../src/lib/agent/runSummary.ts";
 import { classifyFile, folderDecision, readFolder, type KnownSubject, type RunScope } from "../../src/lib/agent/classify.ts";
 import { DriveError, makeDrive, targetId, walk, type Drive } from "./drive.ts";
 
@@ -561,33 +562,43 @@ async function main() {
   await summarise(job);
 }
 
-/** The run in plain words for the top of the run page: by the AI, or by rules without it. */
+/**
+ * The run in plain words for the top of the run page. Rules write the facts (ruleSummary); the
+ * AI may only reword them, and the Worker drops any rewording that changes a number or invents a
+ * limit. Without AI the rules' text is shown as it is.
+ */
 async function summarise(job: Job) {
-  const drive = (report.driveFolders ?? []).map((d) => ({
-    folder: d.name, error: d.error, pdfs: d.pdfs, holdsYears: d.yearsHeld ?? d.years, foldersOpened: d.folders,
-    foldersNotOpened: d.skippedFolders, namedForThisSubject: d.forThisSyllabus,
-  }));
-  const facts = {
-    mode: job.params.mode, years: job.params.years, sessions: job.params.sessions,
-    websitePagesRead: report.pagesVisited - drive.length, websiteLinks: report.linksFound,
-    googleDrive: drive, driveFoldersForOtherSubjects: report.driveSkipped ?? 0,
-    newFilesFound: report.candidates.length, alreadyInLibrary: report.skippedHave, outsideThisRun: report.skippedNotRequested,
-    stored: report.stored.length, notStored: report.failed.length, notNeeded: report.notNeeded?.count ?? 0,
-    needsReview: report.review?.length ?? 0, notNamed: report.unmatched.length, errors: report.pageErrors.map((e) => `${e.url}: ${e.status}`).slice(0, 5),
-  };
-  const answer = report.candidates.length + report.stored.length > 0 || drive.length > 0 ? await ai("summary", { facts }) : null;
+  const drives = report.driveFolders ?? [];
+  const subj = (job.subjects ?? []).find((s) => s.code === job.params.code);
+  const draft = ruleSummary({
+    subject: subj ? `${subj.qualification} ${subj.name} (${subj.code})` : job.params.code,
+    mode: job.params.mode,
+    years: job.params.years,
+    sessions: job.params.sessions.map((s) => SESSION_LABELS[s] ?? s),
+    allSessions: ["m", "s", "w", "y"].every((s) => job.params.sessions.includes(s)),
+    websitePages: Math.max(0, report.pagesVisited - drives.filter((d) => !d.error).length),
+    driveFolders: drives.map((d) => ({ name: d.name, error: d.error, yearsHeld: d.yearsHeld ?? d.years, notOpened: d.skippedFolders, truncated: d.truncated })),
+    driveOtherSubjects: report.driveSkipped ?? 0,
+    found: report.candidates.length,
+    have: report.skippedHave,
+    outside: report.skippedNotRequested,
+    stored: report.stored.length,
+    failed: report.failed.length,
+    notNeeded: report.notNeeded?.count ?? 0,
+    review: report.review?.length ?? 0,
+    notNamed: report.unmatched.length,
+    maxFiles: job.limits.maxFiles,
+  });
+  const answer = await ai("summary", { draft });
   if (typeof answer?.summary === "string") {
     report.summary = answer.summary;
     report.summaryBy = "ai";
   } else {
-    const held = drive.find((d) => d.holdsYears)?.holdsYears;
-    report.summary = report.candidates.length
-      ? `Found ${report.candidates.length} new file${report.candidates.length === 1 ? "" : "s"} for this run${job.params.mode === "download" ? `; ${report.stored.length} stored` : ""}.`
-      : `Nothing new for ${job.params.years.join(", ")}.${held ? ` The Google Drive copy holds ${held[0]} to ${held[1]}.` : ""} ${report.skippedHave} matching files are already in the library.`;
+    report.summary = draft;
     report.summaryBy = "rules";
   }
   report.ai = { calls: aiCalls, ...(aiNote ? { note: aiNote } : {}) };
-  await progress(99, "Summary", `${report.summaryBy === "ai" ? "Summary (AI)" : "Summary"}: ${report.summary}`);
+  await progress(99, "Summary", `Summary: ${report.summary}`);
 }
 
 try {

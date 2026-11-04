@@ -21,6 +21,7 @@ Node's built-in test runner, TypeScript loaded directly. Files must not import N
 | `summary.test.ts` | File summaries by session, page titles, agent event checking, reasons in words, version lookup |
 | `classify.test.ts` | Working out Cambridge names from Drive file and folder names (direct names, descriptive names, specimens, syllabus documents, unclear files with reasons), folder readings, which folders a run opens, bare numbers never read as codes, Drive link parsing |
 | `ai.test.ts` | Workers AI answers: folder choices default to open, file names built from parts and kept only if the checklist asks for them, file names sent as data, summary cleaning, lenient JSON, running run only, per-run cap, unavailable and failing AI |
+| `run-summary.test.ts` | Run summary facts by rules, real limits only, the AI rewording kept only when every number matches and no limit is invented |
 | `check-inline.test.ts` | The inline code scanner catches each banned pattern and passes normal React code |
 
 ## Browser smoke test (`tests/e2e/smoke.mjs`, `npm run test:e2e`)

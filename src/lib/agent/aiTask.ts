@@ -9,6 +9,7 @@ import { listSubjects, loadSyllabus } from "../library/catalog.ts";
 import { groupCells } from "../library/checklist.ts";
 import { parseCambridgeName } from "../library/names.ts";
 import { loadPapers } from "../library/papers.ts";
+import { checkRewrite } from "./runSummary.ts";
 import {
   FOLDERS_SCHEMA, foldersPrompt, NAMES_SCHEMA, namesPrompt, readFolders, readNames, readSummary, SUMMARY_SCHEMA, summaryPrompt,
   type AiScope, type ModelRun,
@@ -77,9 +78,10 @@ export async function aiTask(db: Db, body: Record<string, unknown> | null, run: 
       const reply = await run(namesPrompt(scope, files), NAMES_SCHEMA, AGENT.aiMaxTokens);
       return { ok: true, data: { files: readNames(reply, files.length, p.code, await wantedNames(db, p)) } };
     }
-    const facts = body?.facts && typeof body.facts === "object" ? (body.facts as Record<string, unknown>) : {};
-    const reply = await run(summaryPrompt(scope, facts), SUMMARY_SCHEMA, 600);
-    const summary = readSummary(reply);
+    const draft = typeof body?.draft === "string" && body.draft.length >= 20 && body.draft.length <= 1500 ? body.draft : null;
+    if (!draft) return { ok: false, status: 400, error: "bad_request" };
+    const reply = await run(summaryPrompt(draft), SUMMARY_SCHEMA, 600);
+    const summary = checkRewrite(draft, readSummary(reply));
     return summary ? { ok: true, data: { summary } } : { ok: false, status: 502, error: "ai_failed" };
   } catch (err) {
     // A ModelRun marks "no AI here" (local dev, binding missing) so the agent stops asking.
