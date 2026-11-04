@@ -27,7 +27,7 @@ export async function POST(request: Request) {
   const env = await getEnv();
   const code = body.code;
   if (typeof code !== "string" || !(await listSubjects(env.DB)).some((s) => s.code === code)) return json({ error: "bad_request" }, 400);
-  const run = makeModelRun(env.AI as never, env.AI_MODEL, "library.folder.ai");
+  const run = makeModelRun(env.AI as never, env.AI_MODEL, "library.folder.ai", env.DB);
   if (!run) return json({ error: "ai_unavailable" }, 503);
   if (!(await allow(env.DB, await limitKey("folder-ai", session.actorId), LIBRARY.folderAiPerHour, 3_600_000))) return json({ error: "limit" }, 429);
   const lib = await getLibrarySettings(env.DB);

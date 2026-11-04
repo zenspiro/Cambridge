@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-04: Folder upload fixes, AI meter, wider admin pages
+
+**What:** (1) files from years outside the library are left out by their names alone (a session code like "w02" or "j21" in the file name, or a year in the folder names, or the year on the first page), never read and never sent to the AI; (2) when the AI recognises a Cambridge file the library does not keep, the page says so plainly instead of "not sure"; (3) the front page reader works in Chrome on PDFs with a line break before "endstream" (it had dropped the end of the page text there; the owner's 1524 June 2021 paper showed it); (4) an AI meter at the top of every admin page: questions today and about how much of Cloudflare's free 10,000 daily units they used (an estimate from tokens; Cloudflare's dashboard is exact); (5) admin pages use 80% of the screen; (6) the folder upload ends with a clear summary (stored, not stored with reasons, already in the library, left out) and a link to the subject.
+
+**Why:** owner report: 2002 files were read and sent to the AI with confusing answers, two 2021 files said "no text" though they have text, no feedback when an upload finished; owner asked for the AI meter and wider pages.
+
+**Tested:** 110 unit tests (new: a Chrome-like strict reader on PDFs built like the owner's file, which fails on the old reader; years from names; old files never read or sent to the AI; the meter); 199 browser checks (new: a 2002 file left out by its name, the meter on the page, the finish summary).
+
 ## 2026-11-04: Upload a folder
 
 **What:** a new page, Library > Upload > "Upload a folder". Pick the unzipped folder from a Google Drive download; the browser keeps the folder names and works out every PDF the way the agent does: file and folder names, then the first page of every file (the front page reader, run on your computer), then the AI for what is left. A preview shows what will be uploaded, what is already in the library, files renamed by their first page, the same file twice, files outside the library years, and what needs your eye (choose which file it is, or leave it out). Upload then sends one file at a time with a progress bar and a Stop button; picking the folder again skips what is stored. Files of other subjects in the folder are recognised and stored too.

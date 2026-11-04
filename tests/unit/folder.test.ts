@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { applyAi, applyCover, finalise, isPdf, planFromNames } from "../../src/lib/library/folderPlan.ts";
+import { applyAi, applyCover, finalise, isPdf, planFromNames, yearHint } from "../../src/lib/library/folderPlan.ts";
 import { readCover } from "../../src/lib/library/cover.ts";
 
 const SUBJECTS = [
@@ -47,7 +47,7 @@ test("folder plan: names, then first page, then AI, then the library", () => {
 
   // A name the first page says is another subject goes to review.
   const g = plan(6, "IGCSE Physics (0625)/2024/May June/Mark Scheme Paper 3 Variant 2.pdf");
-  applyCover(g, { name: null, code: "0620", why: "", cambridge: true, empty: false }, "x");
+  applyCover(g, { name: null, code: "0620", year: null, why: "", cambridge: true, empty: false }, "x");
   assert.equal(g.status, "review");
 
   const h = plan(7, "IGCSE Physics (0625)/2024/May June/Question Paper 42.pdf"); // same file twice
@@ -56,6 +56,33 @@ test("folder plan: names, then first page, then AI, then the library", () => {
   const big = planFromNames(10, "x/0625_s24_qp_12.pdf", MAX + 1, SUBJECTS, MAX);
   const items = [a, b, c, d, e, f, g, h, old, have, big];
   finalise(items, { have: new Set(["0625_s24_qp_11.pdf"]), codes: CODES, fromYear: 2022, toYear: 2026 });
-  assert.deepEqual(items.map((x) => x.status), ["new", "new", "new", "new", "not_needed", "review", "review", "duplicate", "outside", "have", "too_big"]);
+  assert.deepEqual(items.map((x) => x.status), ["new", "new", "new", "new", "not_needed", "outside", "review", "duplicate", "outside", "have", "too_big"]);
   assert.ok(isPdf("a.PDF", "") && isPdf("a", "application/pdf") && !isPdf("notes.docx", ""));
+});
+
+test("folder plan: files from years outside the library are left out by their names, never read or sent to the AI", () => {
+  const years = { fromYear: 2020, toYear: 2026 };
+  assert.equal(yearHint(["Physics (0625)", "2002"], "0625_w02_ab_5.pdf"), 2002);
+  assert.equal(yearHint(["Physics (0625)", "2003", "2003 May_June"], "0625_s03_ms_1+2+3+5+6 (1).pdf"), 2003);
+  assert.equal(yearHint(["Physics (0625)", "2021", "2021 July (Pakistan only)"], "1524_j21_qp_12.pdf"), 2021);
+  assert.equal(yearHint(["Physics (0625)", "2018", "2018 Feb March"], "0625_m18_1_2_qp.pdf"), 2018);
+  assert.equal(yearHint(["Physics"], "Scan 3.pdf"), null);
+  const old = planFromNames(0, "Physics (0625)/2002/0625_w02_ab_5.pdf", 1000, SUBJECTS, MAX, years);
+  assert.equal(old.status, "outside");
+  assert.match(old.why, /from 2002, outside the library years \(2020 to 2026\)/);
+  const named = planFromNames(1, "IGCSE Physics (0625)/2019/May June/Question Paper 42.pdf", 1000, SUBJECTS, MAX, years);
+  assert.equal(named.status, "outside");
+  // The cover reader and the AI leave such files alone.
+  applyCover(old, readCover("PHYSICS 0625/05\nOctober/November 2002\nANSWER BOOKLET", CODES), "x", years);
+  applyAi(old, { outcome: "named", name: "0625_s24_qp_11.pdf" }, "names");
+  assert.equal(old.name, null);
+  // A cover that gives only an old year; and the AI recognising an old file.
+  const scan = planFromNames(2, "Physics/Scan.pdf", 1000, SUBJECTS, MAX, years);
+  applyCover(scan, readCover("PHYSICS\nANSWER BOOKLET\nOCTOBER/NOVEMBER SESSION 2002", CODES), "x", years);
+  assert.equal(scan.status, "outside");
+  const odd = planFromNames(3, "Physics/thing.pdf", 1000, SUBJECTS, MAX, years);
+  applyAi(odd, { outcome: "review", name: "0625_w19_ms_31.pdf", why: "old mark scheme" }, "first page");
+  finalise([odd], { have: new Set(), codes: CODES, fromYear: 2020, toYear: 2026 });
+  assert.equal(odd.status, "outside");
+  assert.match(odd.why, /the AI read it as 0625_w19_ms_31.pdf, from 2019, outside the library years/);
 });

@@ -24,3 +24,4 @@ A plain list of what the platform does today, for non-developers.
 ## Coming next
 - Student sign-in with an email code or Google.
 - Upload a folder (Library > Upload): pick an unzipped Google Drive folder. Every PDF is worked out from its folder names, its first page and the AI, you check the preview, then the files are uploaded one at a time. Files already stored are skipped, so you can pick the same folder again later.
+- AI meter: the top of every admin page shows how many AI questions were asked today and about how much of the free daily allowance they used.

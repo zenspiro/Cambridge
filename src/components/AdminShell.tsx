@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { getEnv } from "@/lib/env";
+import { aiUsageToday } from "@/lib/agent/usage";
+import { AI_USAGE } from "@/lib/config";
 
 const NAV = [
   { href: "/admin", label: "Home" },
@@ -10,7 +13,8 @@ const NAV = [
 ] as const;
 
 /** Frame for every signed-in admin page. Pages still call requireAdmin() themselves. */
-export function AdminShell({ current, title, children }: { current: string; title: string; children: React.ReactNode }) {
+export async function AdminShell({ current, title, children }: { current: string; title: string; children: React.ReactNode }) {
+  const ai = await aiUsageToday((await getEnv()).DB);
   return (
     <div className="shell shell-wide">
       <header className="topbar">
@@ -21,6 +25,10 @@ export function AdminShell({ current, title, children }: { current: string; titl
             </Link>
           ))}
         </nav>
+        <span className={ai.share >= 90 ? "ai-meter ai-meter-high" : "ai-meter"} title="Workers AI questions today (UTC) and an estimate of the free daily allowance used. Cloudflare's dashboard has the exact figure.">
+          AI today: {ai.calls} question{ai.calls === 1 ? "" : "s"}, about {ai.share}% of the free {AI_USAGE.freeNeuronsPerDay.toLocaleString("en-GB")} units
+          <progress className="ai-meter-bar" max={100} value={Math.min(ai.share, 100)}>{ai.share}%</progress>
+        </span>
         <form method="post" action="/admin/session/end">
           <button className="btn btn-small" type="submit">
             Sign out

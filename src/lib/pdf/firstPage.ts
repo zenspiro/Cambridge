@@ -226,13 +226,25 @@ class Doc {
         const len = isDict(value) ? value.dict.Length : undefined;
         let end = typeof len === "number" && start + len <= this.b.length && text.startsWith("endstream", skipWs(text, start + len)) ? start + len : -1;
         if (end < 0) {
+          // Length missing or given as a reference (resolved below). The line break before
+          // "endstream" is not part of the data: browsers refuse compressed data with it attached.
           const e = text.indexOf("endstream", start);
           end = e < 0 ? this.b.length : e;
+          if (this.b[end - 1] === 10) end--;
+          if (this.b[end - 1] === 13) end--;
         }
         obj.stream = { start, end };
         re.lastIndex = end;
       }
       this.objs.set(Number(m[1]), obj);
+    }
+  }
+  /** Streams whose /Length is a reference ("201 0 R"): use the exact length once all objects are known. */
+  exactLengths() {
+    for (const [, o] of this.objs) {
+      if (!o.stream || !isDict(o.value) || !isRef(o.value.dict.Length)) continue;
+      const len = this.get(o.value.dict.Length);
+      if (typeof len === "number" && len >= 0 && o.stream.start + len <= o.stream.end + 2) o.stream = { start: o.stream.start, end: o.stream.start + len };
     }
   }
   get(v: Val | undefined, depth = 0): Val | undefined {
@@ -475,6 +487,7 @@ export async function firstPageText(bytes: Uint8Array, inflate: Inflate): Promis
     if (!head.includes("%PDF-")) return "";
     const doc = new Doc(bytes, inflate);
     doc.scan();
+    doc.exactLengths();
     if (latin1(bytes, Math.max(0, bytes.length - 4096)).includes("/Encrypt")) return "";
     await doc.objectStreams();
     const page = doc.firstPage();

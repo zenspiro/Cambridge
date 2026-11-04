@@ -43,7 +43,11 @@
   .list-row { @apply flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2 text-sm; }
 
   /* Admin panel */
-  .shell-wide { @apply max-w-5xl; }
+  /* Admin pages: 80% of the screen (owner request 4 Nov 2026; admin is desktop only). */
+  .shell-wide { @apply w-[80%] max-w-none; }
+  .ai-meter { @apply ml-auto mr-3 flex items-center gap-2 text-xs text-slate-600; }
+  .ai-meter-high { @apply font-semibold text-red-700; }
+  .ai-meter-bar { @apply h-1.5 w-24; }
   .page-title { @apply mt-6; }
   .nav { @apply flex flex-wrap gap-1; }
   .nav-link { @apply rounded-lg px-3 py-2 text-sm font-medium text-muted hover:bg-paper hover:text-ink; }

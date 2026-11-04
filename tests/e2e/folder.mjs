@@ -31,6 +31,9 @@ writeFileSync(join(june, "Question Paper 21.pdf"), makePdf(["Cambridge IGCSE", "
 writeFileSync(join(june, "Revision notes.pdf"), fake()); // nobody can tell: the owner picks
 writeFileSync(join(june, "Teacher notes.docx"), "not a pdf");
 writeFileSync(join(june, "Question Paper 32 copy.pdf"), fake()); // same file name twice in the folder
+// An old year (the Drive copies go back to 2002): left out by its names, never read or sent to the AI.
+mkdirSync(join(root, "IGCSE Physics (0625)", "2002"), { recursive: true });
+writeFileSync(join(root, "IGCSE Physics (0625)", "2002", "0625_w02_ab_5.pdf"), makePdf(["PHYSICS 0625/05", "ANSWER BOOKLET", "OCTOBER/NOVEMBER SESSION 2002", tag()]));
 
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 }, extraHTTPHeaders: { "cf-connecting-ip": `203.0.113.${1 + Math.floor(Math.random() * 250)}` } });
@@ -49,18 +52,22 @@ await page.goto(BASE + "/admin/library/folder?code=0625");
 await page.setInputFiles("#folder", root);
 await page.waitForSelector("#folder-plan", { timeout: 30_000 });
 const text = await page.locator("main").innerText();
-check(/What is in the folder: 6 PDFs/.test(text) && /1 file is not a PDF and was left out/.test(text), "folder: PDFs found, other files left out");
+check(/What is in the folder: 7 PDFs/.test(text) && /1 file is not a PDF and was left out/.test(text), "folder: PDFs found, other files left out");
 const toUpload = page.locator("#plan-new li");
 check((await toUpload.count()) === 4, `folder: four files to upload (${await toUpload.count()})`);
 check((await page.locator("#plan-new li", { hasText: "Scan 7.pdf" }).locator("text=Named from its first page").count()) === 1, "folder: an unnamed file is named from its first page");
 check((await page.locator("#plan-new li", { hasText: "0625_s25_ms_21.pdf" }).locator("text=not 0625_s25_qp_21.pdf").count()) === 1, "folder: the first page wins over a wrong name");
 check((await page.locator("#plan-duplicate li").count()) === 1, "folder: the same file twice is uploaded once");
+check((await page.locator("#plan-outside li", { hasText: "0625_w02_ab_5.pdf" }).locator("text=from 2002, outside the library years").count()) === 1, "folder: an old year is left out by its name, not read");
+check(/AI today: \d+ question/.test(await page.locator(".ai-meter").innerText()), "AI meter: shown at the top of the page");
 check(/AI is not available here/.test(text), "folder: says when the AI could not help");
 const notes = page.locator("#plan-review li", { hasText: "Revision notes.pdf" });
 check((await notes.count()) === 1, "folder: an unclear file needs your eye");
 await notes.locator("select").selectOption("0625_s25_ci_52.pdf");
 await page.click("button:has-text('Upload 5 files')");
-await page.waitForSelector("text=Stored 5 files", { timeout: 30_000 });
+await page.waitForSelector("#folder-done", { timeout: 30_000 });
+check(/5 files stored/.test(await page.locator("#folder-done").innerText()) && (await page.locator("#folder-done a", { hasText: "Open IGCSE Physics (0625) in the library" }).count()) === 1,
+  "folder: a clear summary when the upload is finished, with a link to the library");
 const stored = rows(`SELECT file_name FROM source_document WHERE file_name IN (${NAMES.map((n) => `'${n}'`).join(",")}) ORDER BY file_name`).map((r) => r.file_name);
 check(stored.join(",") === "0625_s25_ci_52.pdf,0625_s25_ms_21.pdf,0625_s25_ms_32.pdf,0625_s25_qp_32.pdf,0625_s25_qp_42.pdf", `folder: five files stored under their worked out names (${stored.join(",")})`);
 
@@ -68,7 +75,7 @@ check(stored.join(",") === "0625_s25_ci_52.pdf,0625_s25_ms_21.pdf,0625_s25_ms_32
 await page.goto(BASE + "/admin/library/folder?code=0625");
 await page.setInputFiles("#folder", root);
 await page.waitForSelector("#folder-plan", { timeout: 30_000 });
-check((await page.locator("#plan-have li").count()) === 5 && (await page.locator("text=Nothing new to upload").count()) === 1, "folder: a second pick skips files already stored");
+check((await page.locator("#plan-have li").count()) === 5 && (await page.locator("#plan-outside li").count()) === 1 && (await page.locator("text=Nothing new to upload").count()) === 1, "folder: a second pick skips files already stored");
 check(errors.length === 0, `folder: no script or CSP errors${errors.length ? ": " + errors.join(" | ") : ""}`);
 
 clean();

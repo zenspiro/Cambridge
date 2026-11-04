@@ -7,7 +7,6 @@ import type { KnownSubject } from "@/lib/agent/classify";
 import { readCover } from "@/lib/library/cover";
 import { applyAi, applyCover, finalise, isPdf, planFromNames, STATUS_WORDS, type PlanItem, type PlanStatus } from "@/lib/library/folderPlan";
 import { REASON_LABELS } from "@/lib/library/labels";
-import { parseCambridgeName } from "@/lib/library/names";
 import { describeFile } from "@/lib/library/papers";
 import { firstPageText } from "@/lib/pdf/firstPage";
 
@@ -80,6 +79,11 @@ export function FolderUpload(props: {
   const [stopNote, setStopNote] = useState("");
 
   // Folder picking is not a standard attribute yet, so it is set here rather than in markup.
+  // When the upload ends, bring the summary into view.
+  useEffect(() => {
+    if (phase === "done") document.getElementById("folder-done")?.scrollIntoView({ block: "start" });
+  }, [phase]);
+
   useEffect(() => {
     input.current?.setAttribute("webkitdirectory", "");
     input.current?.setAttribute("directory", "");
@@ -97,20 +101,19 @@ export function FolderUpload(props: {
     setOther(list.length - pdfs.length);
     setTotal(pdfs.length);
     setStep("Reading names");
-    const plan = pdfs.map((f, i) => planFromNames(i, f.webkitRelativePath || f.name, f.size, props.subjects, props.maxFileBytes));
+    const years = { fromYear: props.fromYear, toYear: props.toYear };
+    const plan = pdfs.map((f, i) => planFromNames(i, f.webkitRelativePath || f.name, f.size, props.subjects, props.maxFileBytes, years));
 
     // The first page of every file: names the unclear ones and checks the others.
     for (let k = 0; k < plan.length; k++) {
       const it = plan[k]!;
       setDone(k);
       setStep(`Reading first pages: ${k + 1} of ${plan.length}`);
-      if (it.status === "too_big") continue;
-      // Older years (the Drive copies go back to 2002) are left out by their names alone.
-      const named = it.name ? parseCambridgeName(it.name) : null;
-      if (named && (named.year < props.fromYear || named.year > props.toYear)) continue;
+      // Empty, too large, or from a year outside the library (the Drive copies go back to 2002): not read.
+      if (it.status === "too_big" || it.status === "outside") continue;
       try {
         const text = await firstPageText(new Uint8Array(await pdfs[k]!.arrayBuffer()), inflate);
-        applyCover(it, readCover(text, codes), text);
+        applyCover(it, readCover(text, codes), text, years);
       } catch {
         // unreadable: the names stand
       }
@@ -202,8 +205,6 @@ export function FolderUpload(props: {
 
   const counts = ORDER.map((s) => [s, items.filter((it) => it.status === s).length] as const).filter(([, n]) => n > 0);
   const toSend = items.filter((it) => it.status === "new").length + Object.values(picks).filter(Boolean).length;
-  const stored = Object.values(results).filter((r) => r.ok).length;
-  const failed = Object.values(results).filter((r) => !r.ok).length;
 
   return (
     <>
@@ -229,9 +230,55 @@ export function FolderUpload(props: {
         </section>
       ) : null}
 
-      {phase === "preview" || phase === "uploading" || phase === "done" ? (
+      {phase === "done" ? (() => {
+        const sent = items.filter((it) => results[it.i]);
+        const good = sent.filter((it) => results[it.i]!.ok);
+        const bad = sent.filter((it) => !results[it.i]!.ok);
+        const have = items.filter((it) => it.status === "have").length;
+        const left = items.length - sent.length - have;
+        return (
+          <section className="card stack" id="folder-done">
+            <h2 className="subtitle">Upload finished</h2>
+            <p className={bad.length ? "alert" : "notice"} role="status">
+              {good.length} file{good.length === 1 ? "" : "s"} stored{bad.length ? `, ${bad.length} not stored (reasons below)` : ""}.
+              {have ? ` ${have} were already in the library.` : ""}{left > 0 ? ` ${left} were left out (outside the years, not needed, or not picked).` : ""}
+            </p>
+            <div className="actions">
+              <a className="btn btn-small btn-primary" href={`/admin/library/${encodeURIComponent(props.code)}`}>Open {props.subjectLabel} in the library</a>
+            </div>
+            {good.length ? (
+              <details>
+                <summary className="subtitle summary">Stored ({good.length})</summary>
+                <ul className="list">
+                  {good.map((it) => (
+                    <li className="list-row" key={it.i}>
+                      <span className="doc-main"><span>{describe(results[it.i]!.text.replace(/^Stored as /, ""))}</span><span className="mono muted">{[...it.path, it.fileName].join(" / ")}</span></span>
+                      <span className="event-good">{results[it.i]!.text}</span>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            ) : null}
+            {bad.length ? (
+              <details open>
+                <summary className="subtitle summary">Not stored ({bad.length})</summary>
+                <ul className="list">
+                  {bad.map((it) => (
+                    <li className="list-row" key={it.i}>
+                      <span className="doc-main"><span>{it.name ? describe(it.name) : it.fileName}</span><span className="mono muted">{[...it.path, it.fileName].join(" / ")}</span></span>
+                      <span className="event-bad">{results[it.i]!.text}</span>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            ) : null}
+          </section>
+        );
+      })() : null}
+
+      {phase === "preview" || phase === "uploading" ? (
         <section className="card stack" id="folder-plan">
-          <h2 className="subtitle">{phase === "done" ? `Stored ${stored} file${stored === 1 ? "" : "s"}${failed ? `, ${failed} not stored` : ""}` : `What is in the folder: ${items.length} PDFs`}</h2>
+          <h2 className="subtitle">What is in the folder: {items.length} PDFs</h2>
           <ul className="stats">
             {counts.map(([s, n]) => <li key={s}><strong>{n}</strong> {STATUS_WORDS[s].toLowerCase()}</li>)}
           </ul>
@@ -249,6 +296,7 @@ export function FolderUpload(props: {
       ) : null}
 
       {(phase === "preview" || phase === "uploading" || phase === "done") ? ORDER.map((s) => {
+        if (phase === "done" && s === "new") return null; // shown in the summary above
         const list = items.filter((it) => it.status === s);
         if (!list.length) return null;
         return (

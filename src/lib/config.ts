@@ -82,3 +82,14 @@ export const AGENT = {
   aiBatch: 40,
   aiMaxTokens: 2_500,
 } as const;
+
+/**
+ * Workers AI usage estimate for the meter. Cloudflare bills in neurons; rates per million tokens
+ * for the 70B Llama 3.1 model as listed in Cloudflare's pricing table (checked 4 Nov 2026), and the
+ * free allowance per day (resets at 00:00 UTC). An estimate: Cloudflare's dashboard is exact.
+ */
+export const AI_USAGE = {
+  freeNeuronsPerDay: 10_000,
+  neuronsPerMillionInput: 26_668,
+  neuronsPerMillionOutput: 204_805,
+} as const;
