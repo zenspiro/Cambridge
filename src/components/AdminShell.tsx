@@ -25,8 +25,8 @@ export async function AdminShell({ current, title, children }: { current: string
             </Link>
           ))}
         </nav>
-        <span className={ai.share >= 90 ? "ai-meter ai-meter-high" : "ai-meter"} title="Workers AI questions today (UTC) and an estimate of the free daily allowance used. Cloudflare's dashboard has the exact figure.">
-          AI today: {ai.calls} question{ai.calls === 1 ? "" : "s"}, about {ai.share}% of the free {AI_USAGE.freeNeuronsPerDay.toLocaleString("en-GB")} units
+        <span className={ai.share >= 90 ? "ai-meter ai-meter-high" : "ai-meter"} title={`Workers AI questions today (UTC) and an estimate of Cloudflare's free ${AI_USAGE.freeNeuronsPerDay.toLocaleString("en-GB")} daily units used. Cloudflare's dashboard has the exact figure.`}>
+          AI today: {ai.calls} question{ai.calls === 1 ? "" : "s"}, {ai.share}% of free allowance
           <progress className="ai-meter-bar" max={100} value={Math.min(ai.share, 100)}>{ai.share}%</progress>
         </span>
         <form method="post" action="/admin/session/end">

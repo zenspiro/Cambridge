@@ -16,11 +16,13 @@ export default async function FolderPage({ searchParams }: { searchParams: Promi
   await requireAdmin();
   const q = await searchParams;
   const env = await getEnv();
-  const [subjects, known, lib, { results: stored }] = await Promise.all([
+  const [subjects, known, lib, { results: stored }, { results: allPapers }, { results: allVersions }] = await Promise.all([
     listSubjects(env.DB),
     knownSubjects(env.DB),
     getLibrarySettings(env.DB),
     env.DB.prepare(`SELECT file_name FROM source_document WHERE status = 'stored'`).bind().all<{ file_name: string }>(),
+    env.DB.prepare(`SELECT syllabus_id, paper, name FROM syllabus_paper`).bind().all<{ syllabus_id: string; paper: number; name: string }>(),
+    env.DB.prepare(`SELECT id, code, valid_from_year, valid_to_year FROM syllabus`).bind().all<{ id: string; code: string; valid_from_year: number; valid_to_year: number }>(),
   ]);
   const code = subjects.some((s) => s.code === q.code) ? q.code! : (subjects.find((s) => s.code === "0625") ?? subjects[0])?.code ?? "";
   const years: number[] = [];
@@ -60,6 +62,8 @@ export default async function FolderPage({ searchParams }: { searchParams: Promi
         fromYear={lib.fromYear}
         toYear={lib.toYear}
         maxFileBytes={LIBRARY.maxFileBytes}
+        papers={allPapers}
+        versions={allVersions}
         choices={choices.map((n) => ({ name: n, text: describeFile(n, versionForFile(versions, n), look) }))}
       />
     </AdminShell>
