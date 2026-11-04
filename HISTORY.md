@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-04: Folder upload repeats, clearer rows, readable text
+
+**What:** when two files in a folder come out as the same Cambridge name, the one with the best evidence is uploaded (its own Cambridge name beats folder names, which beat the first page, which beats the AI; then the first one met). An identical copy is listed as a repeat with "Same file as ..., which is uploaded instead"; a different file read as the same name goes to Needs your eye instead of being dropped. Rows now describe files with their paper names for every subject ("Paper 2 Algorithms, Programming and Logic"), say "Will be stored as ..." only when the name changes, and give one plain line on how the file was worked out. All small text in the admin is one size larger (12 px is now 14 px, 14 px is now 16 px); the top bar stays on one line.
+
+**Why:** owner: a 0478 November 2020 question paper showed as a repeat without saying of what; "all text needs to be cleanly readable".
+
+**Tested:** 111 unit tests (new: copies, better evidence wins, a different file is never dropped quietly); 200 browser checks (new: the repeat says which file is kept, paper names in rows).
+
 ## 2026-11-04: Folder upload fixes, AI meter, wider admin pages
 
 **What:** (1) files from years outside the library are left out by their names alone (a session code like "w02" or "j21" in the file name, or a year in the folder names, or the year on the first page), never read and never sent to the AI; (2) when the AI recognises a Cambridge file the library does not keep, the page says so plainly instead of "not sure"; (3) the front page reader works in Chrome on PDFs with a line break before "endstream" (it had dropped the end of the page text there; the owner's 1524 June 2021 paper showed it); (4) an AI meter at the top of every admin page: questions today and about how much of Cloudflare's free 10,000 daily units they used (an estimate from tokens; Cloudflare's dashboard is exact); (5) admin pages use 80% of the screen; (6) the folder upload ends with a clear summary (stored, not stored with reasons, already in the library, left out) and a link to the subject.

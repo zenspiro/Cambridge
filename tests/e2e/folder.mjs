@@ -24,13 +24,14 @@ const june = join(root, "IGCSE Physics (0625)", "2025", "May June");
 mkdirSync(june, { recursive: true });
 const tag = () => `e2e ${Date.now()} ${Math.random()}`;
 const fake = () => `%PDF-1.4\n% ${tag()}\n%%EOF`;
-writeFileSync(join(june, "Question Paper 32.pdf"), fake()); // folder names
+const qp32 = fake();
+writeFileSync(join(june, "Question Paper 32.pdf"), qp32); // folder names
 writeFileSync(join(june, "Mark Scheme Paper 3 Variant 2.pdf"), fake()); // folder names
 writeFileSync(join(june, "Scan 7.pdf"), makePdf(["Cambridge IGCSE", "PHYSICS 0625/42", "Paper 4 Theory (Extended) May/June 2025", "You must answer on the question paper.", tag()], { compress: true })); // first page
 writeFileSync(join(june, "Question Paper 21.pdf"), makePdf(["Cambridge IGCSE", "PHYSICS 0625/21", "Paper 2 May/June 2025", "MARK SCHEME", tag()], { compress: true, type0: true })); // first page wins
 writeFileSync(join(june, "Revision notes.pdf"), fake()); // nobody can tell: the owner picks
 writeFileSync(join(june, "Teacher notes.docx"), "not a pdf");
-writeFileSync(join(june, "Question Paper 32 copy.pdf"), fake()); // same file name twice in the folder
+writeFileSync(join(june, "Question Paper 32 copy.pdf"), qp32); // an identical copy in the folder
 // An old year (the Drive copies go back to 2002): left out by its names, never read or sent to the AI.
 mkdirSync(join(root, "IGCSE Physics (0625)", "2002"), { recursive: true });
 writeFileSync(join(root, "IGCSE Physics (0625)", "2002", "0625_w02_ab_5.pdf"), makePdf(["PHYSICS 0625/05", "ANSWER BOOKLET", "OCTOBER/NOVEMBER SESSION 2002", tag()]));
@@ -55,9 +56,10 @@ const text = await page.locator("main").innerText();
 check(/What is in the folder: 7 PDFs/.test(text) && /1 file is not a PDF and was left out/.test(text), "folder: PDFs found, other files left out");
 const toUpload = page.locator("#plan-new li");
 check((await toUpload.count()) === 4, `folder: four files to upload (${await toUpload.count()})`);
-check((await page.locator("#plan-new li", { hasText: "Scan 7.pdf" }).locator("text=Named from its first page").count()) === 1, "folder: an unnamed file is named from its first page");
-check((await page.locator("#plan-new li", { hasText: "0625_s25_ms_21.pdf" }).locator("text=not 0625_s25_qp_21.pdf").count()) === 1, "folder: the first page wins over a wrong name");
-check((await page.locator("#plan-duplicate li").count()) === 1, "folder: the same file twice is uploaded once");
+check((await page.locator("#plan-new li", { hasText: "Scan 7.pdf" }).locator("text=Worked out from its first page").count()) === 1, "folder: an unnamed file is named from its first page");
+check((await page.locator("#plan-new li", { hasText: "0625_s25_ms_21.pdf" }).locator("text=its names said 0625_s25_qp_21.pdf").count()) === 1, "folder: the first page wins over a wrong name");
+check((await page.locator("#plan-duplicate li").count()) === 1 && (await page.locator("#plan-duplicate li", { hasText: "Same file as" }).count()) === 1, "folder: the same file twice is uploaded once, and the page says which file is kept");
+check((await page.locator("#plan-new li", { hasText: "Paper 4 Theory (Extended)" }).count()) === 1, "folder: files are described with their paper names");
 check((await page.locator("#plan-outside li", { hasText: "0625_w02_ab_5.pdf" }).locator("text=from 2002, outside the library years").count()) === 1, "folder: an old year is left out by its name, not read");
 check(/AI today: \d+ question/.test(await page.locator(".ai-meter").innerText()), "AI meter: shown at the top of the page");
 check(/AI is not available here/.test(text), "folder: says when the AI could not help");

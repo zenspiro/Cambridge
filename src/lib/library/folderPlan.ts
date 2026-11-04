@@ -17,6 +17,10 @@ export type PlanItem = {
   name: string | null;
   /** How the name was found, in words. */
   how: string;
+  /** How strong that is: 0 its own Cambridge name, 1 folder names, 2 first page, 3 the AI, 9 nothing. */
+  evidence: number;
+  /** For a repeat: the folder path of the file that is uploaded instead. */
+  dupOf?: string;
   why: string;
   status: PlanStatus;
   /** The name the file and folder names gave, when the first page said otherwise. */
@@ -50,7 +54,7 @@ const outsideYears = (y: number | null | undefined, r: Years) => typeof y === "n
 export function planFromNames(i: number, relPath: string, size: number, subjects: KnownSubject[], maxBytes: number, years?: Years): PlanItem {
   const parts = relPath.split("/").filter(Boolean);
   const fileName = parts.pop() ?? relPath;
-  const item: PlanItem = { i, path: parts, fileName, size, name: null, how: "", why: "", status: "review" };
+  const item: PlanItem = { i, path: parts, fileName, size, name: null, how: "", why: "", status: "review", evidence: 9 };
   if (size > maxBytes || size === 0) {
     item.status = "too_big";
     item.why = size === 0 ? "the file is empty" : "the file is larger than the library allows";
@@ -66,8 +70,14 @@ export function planFromNames(i: number, relPath: string, size: number, subjects
     return item;
   }
   item.name = c.name;
-  item.why = c.why;
-  item.how = c.name ? (c.why === "Cambridge file name" ? "its file name" : "its file and folder names") : "";
+  if (c.name && c.why === "Cambridge file name") {
+    item.how = "Already has its Cambridge name";
+    item.evidence = 0;
+  } else if (c.name) {
+    item.how = "Worked out from its folder names";
+    item.why = c.why;
+    item.evidence = 1;
+  } else item.why = c.why;
   return item;
 }
 
@@ -82,13 +92,15 @@ export function applyCover(item: PlanItem, cover: CoverReading, text: string, ye
   if (cover.name) {
     if (!item.name) {
       item.name = cover.name;
-      item.how = "its first page";
+      item.how = "Worked out from its first page";
       item.why = cover.why;
+      item.evidence = 2;
     } else if (cover.name !== item.name) {
       item.renamedFrom = item.name;
       item.name = cover.name;
-      item.how = "its first page (the names said otherwise)";
+      item.how = "Worked out from its first page";
       item.why = cover.why;
+      item.evidence = 2;
     }
     return;
   }
@@ -111,8 +123,9 @@ export function applyAi(item: PlanItem, v: { outcome?: string; name?: string; wh
   const why = String(v.why ?? "").slice(0, 160);
   if (v.outcome === "named" && v.name && parseCambridgeName(v.name)) {
     item.name = v.name;
-    item.how = `the AI, from its ${from}`;
+    item.how = `Worked out by the AI from its ${from}`;
     item.why = why;
+    item.evidence = 3;
   } else if (v.outcome === "not_needed") {
     item.status = "not_needed";
     item.why = `the AI read its ${from}: ${why}`;
@@ -125,7 +138,6 @@ export function applyAi(item: PlanItem, v: { outcome?: string; name?: string; wh
 
 /** Step 4: each name against the library: new, already stored, outside the years, or a repeat. */
 export function finalise(items: PlanItem[], o: { have: ReadonlySet<string>; codes: readonly string[]; fromYear: number; toYear: number }): void {
-  const seen = new Set<string>();
   for (const it of items) {
     delete it.text;
     if (it.status === "too_big" || it.status === "not_needed" || (it.status === "outside" && !it.name)) continue;
@@ -145,9 +157,38 @@ export function finalise(items: PlanItem[], o: { have: ReadonlySet<string>; code
     if (!o.codes.includes(p.code)) it.status = "unknown_subject";
     else if (p.year < o.fromYear || p.year > o.toYear) it.status = "outside";
     else if (o.have.has(p.fileName)) it.status = "have";
-    else if (seen.has(p.fileName)) it.status = "duplicate";
     else it.status = "new";
-    seen.add(p.fileName);
+  }
+  // The same name more than once: the best evidenced file is uploaded (its own name beats folder
+  // names, the first page and the AI; then the first one met). An identical copy is a repeat;
+  // a different file read as the same name goes to the owner instead of being dropped.
+  const groups = new Map<string, PlanItem[]>();
+  for (const it of items) if (it.status === "new") groups.set(it.name!, [...(groups.get(it.name!) ?? []), it]);
+  for (const [name, list] of groups) {
+    if (list.length < 2) continue;
+    list.sort((a, b) => a.evidence - b.evidence || a.i - b.i);
+    const keep = list[0]!;
+    const where = (x: PlanItem) => [...x.path, x.fileName].join(" / ");
+    for (const other of list.slice(1)) {
+      if (other.size === keep.size) {
+        other.status = "duplicate";
+        other.dupOf = where(keep);
+      } else if (other.evidence > keep.evidence) {
+        other.status = "review";
+        other.why = `read as ${name}, but ${where(keep)} is that file by ${keep.evidence === 0 ? "its own name" : "stronger evidence"}, and the two files differ`;
+        other.name = null;
+        other.suggest = name;
+      } else {
+        // Two different files with equally good reasons: the owner decides for both.
+        for (const x of [keep, other]) {
+          x.status = "review";
+          x.why = `two different files are both read as ${name}: ${where(keep)} and ${where(other)}`;
+          x.suggest = name;
+        }
+        keep.name = null;
+        other.name = null;
+      }
+    }
   }
 }
 

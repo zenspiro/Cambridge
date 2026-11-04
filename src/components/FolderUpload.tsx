@@ -7,7 +7,7 @@ import type { KnownSubject } from "@/lib/agent/classify";
 import { readCover } from "@/lib/library/cover";
 import { applyAi, applyCover, finalise, isPdf, planFromNames, STATUS_WORDS, type PlanItem, type PlanStatus } from "@/lib/library/folderPlan";
 import { REASON_LABELS } from "@/lib/library/labels";
-import { describeFile } from "@/lib/library/papers";
+import { describeFile, paperLookup, versionForFile, type Paper } from "@/lib/library/papers";
 import { firstPageText } from "@/lib/pdf/firstPage";
 
 type Phase = "idle" | "reading" | "preview" | "uploading" | "done";
@@ -43,7 +43,8 @@ async function inflate(data: Uint8Array): Promise<Uint8Array> {
   return out;
 }
 
-const describe = (name: string) => describeFile(name, null, () => null);
+type PaperName = { syllabus_id: string; paper: number; name: string };
+type Version = { id: string; code: string; valid_from_year: number; valid_to_year: number };
 
 async function postJson(url: string, body: unknown): Promise<{ status: number; data: Record<string, unknown> | null }> {
   try {
@@ -63,7 +64,15 @@ export function FolderUpload(props: {
   toYear: number;
   maxFileBytes: number;
   choices: { name: string; text: string }[];
+  /** Paper names and syllabus versions of every subject, so files read "Paper 2 Theory", not "Paper 2". */
+  papers: PaperName[];
+  versions: Version[];
 }) {
+  const look = paperLookup(props.papers as Paper[]);
+  const describe = (name: string) => {
+    const code = name.slice(0, 4);
+    return describeFile(name, versionForFile(props.versions.filter((v) => v.code === code), name), look);
+  };
   const input = useRef<HTMLInputElement>(null);
   const files = useRef<File[]>([]);
   const stop = useRef(false);
@@ -316,10 +325,19 @@ export function FolderUpload(props: {
                     <li className="list-row review-row" key={it.i}>
                       <span className="doc-main">
                         <span>{it.name ? describe(it.name) : it.fileName}</span>
-                        <span className="mono muted">{[...it.path, it.fileName].join(" / ")}{it.name ? ` · ${it.name}` : ""}</span>
-                        <span className="muted">
-                          {it.how ? `Named from ${it.how}` : ""}{it.renamedFrom ? `, not ${it.renamedFrom}` : ""}{it.how && it.why ? ". " : ""}{it.why}
-                        </span>
+                        <span className="mono muted">{[...it.path, it.fileName].join(" / ")}</span>
+                        {it.dupOf ? (
+                          <span className="muted">Same file as {it.dupOf}, which is uploaded instead.</span>
+                        ) : (
+                          <>
+                            {it.name && it.name !== it.fileName.toLowerCase() && (it.status === "new" || it.status === "have") ? (
+                              <span>{it.status === "have" ? "In the library as" : "Will be stored as"} <span className="mono">{it.name}</span></span>
+                            ) : null}
+                            <span className="muted">
+                              {it.how}{it.renamedFrom ? ` (its names said ${it.renamedFrom})` : ""}{it.how && it.why ? ": " : ""}{it.why}
+                            </span>
+                          </>
+                        )}
                       </span>
                       {res ? (
                         <span className={res.ok ? "event-good" : "event-bad"}>{res.text}</span>

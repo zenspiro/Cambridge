@@ -14,7 +14,7 @@ const plan = (i: number, path: string) => planFromNames(i, path, 1000, SUBJECTS,
 test("folder plan: names, then first page, then AI, then the library", () => {
   const a = plan(0, "IGCSE Physics (0625)/2024/May June/Question Paper 42.pdf");
   assert.equal(a.name, "0625_s24_qp_42.pdf");
-  assert.equal(a.how, "its file and folder names");
+  assert.equal(a.how, "Worked out from its folder names");
   assert.deepEqual(a.path, ["IGCSE Physics (0625)", "2024", "May June"]);
 
   // The first page wins over names that disagree with it.
@@ -28,7 +28,7 @@ test("folder plan: names, then first page, then AI, then the library", () => {
   assert.equal(c.name, null);
   applyCover(c, readCover("PHYSICS 0625/43\nOctober/November 2024\nYou must answer on the question paper.", CODES), "x");
   assert.equal(c.name, "0625_w24_qp_43.pdf");
-  assert.equal(c.how, "its first page");
+  assert.equal(c.how, "Worked out from its first page");
 
   // First page with text but unsure: kept for the AI, which names it.
   const d = plan(3, "Physics/odd.pdf");
@@ -85,4 +85,32 @@ test("folder plan: files from years outside the library are left out by their na
   finalise([odd], { have: new Set(), codes: CODES, fromYear: 2020, toYear: 2026 });
   assert.equal(odd.status, "outside");
   assert.match(odd.why, /the AI read it as 0625_w19_ms_31.pdf, from 2019, outside the library years/);
+});
+
+test("folder plan: the same name twice keeps the best evidenced file and never drops a different file quietly", () => {
+  const years = { fromYear: 2020, toYear: 2026 };
+  const mk = (i: number, path: string, size: number) => planFromNames(i, path, size, SUBJECTS, MAX, years);
+  const lib = { have: new Set<string>(), codes: CODES, fromYear: 2020, toYear: 2026 };
+  // A copy: same size, the file with its own Cambridge name wins even when it comes second.
+  const byFolder = mk(0, "IGCSE Physics (0625)/2024/May June/Question Paper 21.pdf", 500);
+  const own = mk(1, "elsewhere/0625_s24_qp_21.pdf", 500);
+  finalise([byFolder, own], lib);
+  assert.equal(own.status, "new");
+  assert.equal(own.how, "Already has its Cambridge name");
+  assert.equal(byFolder.status, "duplicate");
+  assert.equal(byFolder.dupOf, "elsewhere / 0625_s24_qp_21.pdf");
+  // A different file read as the same name from its first page: to the owner, not dropped.
+  const real = mk(2, "x/0625_s24_qp_22.pdf", 500);
+  const misread = mk(3, "x/Scan 4.pdf", 900);
+  applyCover(misread, readCover("PHYSICS 0625/22\nMay/June 2024\nYou must answer on the question paper.", CODES), "t", years);
+  finalise([misread, real], lib);
+  assert.equal(real.status, "new");
+  assert.equal(misread.status, "review");
+  assert.match(misread.why, /read as 0625_s24_qp_22.pdf, but x \/ 0625_s24_qp_22.pdf is that file by its own name, and the two files differ/);
+  // Two different files with equally good names: both to the owner.
+  const p = mk(4, "a/0625_s24_ms_22.pdf", 100);
+  const q = mk(5, "b/0625_s24_ms_22.pdf", 200);
+  finalise([p, q], lib);
+  assert.deepEqual([p.status, q.status], ["review", "review"]);
+  assert.equal(p.suggest, "0625_s24_ms_22.pdf");
 });
