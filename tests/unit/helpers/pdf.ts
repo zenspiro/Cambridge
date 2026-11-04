@@ -3,7 +3,7 @@
 // the page inside an object stream or a form XObject, the way Cambridge's own PDFs are built.
 import { deflateSync } from "node:zlib";
 
-type Opts = { compress?: boolean; type0?: boolean; objectStream?: boolean; form?: boolean; letterByLetter?: boolean };
+type Opts = { compress?: boolean; type0?: boolean; objectStream?: boolean; form?: boolean; letterByLetter?: boolean; lengthRef?: boolean; crlf?: boolean };
 
 const enc = (s: string) => new TextEncoder().encode(s);
 const esc = (s: string) => s.replace(/[\\()]/g, (c) => `\\${c}`);
@@ -28,8 +28,15 @@ export function makePdf(lines: string[], o: Opts = {}): Uint8Array {
 
   const objs: { body: string; stream?: Uint8Array }[] = [];
   const add = (body: string, stream?: Uint8Array) => (objs.push({ body, stream }), objs.length);
+  // lengthRef: lengths written as references ("/Length 9 0 R"), objects at the end of the file;
+  // crlf: a line break before "endstream", as some of Cambridge's PDFs have.
+  const lengths: number[] = [];
   const streamObj = (extra: string, data: Uint8Array) => {
     const d = o.compress ? new Uint8Array(deflateSync(data)) : data;
+    if (o.lengthRef) {
+      lengths.push(d.length);
+      return add(`<< ${extra} /Length LEN${lengths.length - 1} 0 R${o.compress ? " /Filter /FlateDecode" : ""} >>`, d);
+    }
     return add(`<< ${extra} /Length ${d.length}${o.compress ? " /Filter /FlateDecode" : ""} >>`, d);
   };
   const cmapId = streamObj("", cmap);
@@ -67,11 +74,17 @@ export function makePdf(lines: string[], o: Opts = {}): Uint8Array {
     add(catalogBody);
   }
 
-  const parts: Uint8Array[] = [enc("%PDF-1.7\n%âã\n")];
+  if (o.lengthRef) {
+    // Length objects go last; their numbers replace the LENn markers.
+    const first = objs.length + 1;
+    for (const ob of objs) ob.body = ob.body.replace(/LEN(\d+)/g, (_, k) => String(first + Number(k)));
+    for (const n of lengths) objs.push({ body: String(n) });
+  }
+  const parts: Uint8Array[] = [enc("%PDF-1.7\n%\u00e2\u00e3\n")];
   objs.forEach((ob, i) => {
     if (!ob.body) return; // lives in the object stream
     parts.push(enc(`${i + 1} 0 obj\n${ob.body}\n`));
-    if (ob.stream) parts.push(enc("stream\n"), ob.stream, enc("\nendstream\n"));
+    if (ob.stream) parts.push(enc(o.crlf ? "stream\r\n" : "stream\n"), ob.stream, enc(o.crlf ? "\r\nendstream\r" : "\nendstream\n"));
     parts.push(enc("endobj\n"));
   });
   parts.push(enc("trailer\n<< >>\n%%EOF\n"));

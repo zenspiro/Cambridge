@@ -11,6 +11,8 @@ export type CoverReading = {
   /** The Cambridge name, when the cover gives every part. */
   name: string | null;
   code: string | null;
+  /** The year the cover gives, even when the rest is missing (old layouts, old types). */
+  year: number | null;
   /** What was read, in words, or what is missing. */
   why: string;
   /** False when the text has no sign of Cambridge (UCLES, Cambridge): likely not an original file. */
@@ -63,7 +65,7 @@ const TYPE_WORDS: Record<DocType, string> = {
  */
 export function readCover(text: string, codes: readonly string[]): CoverReading {
   const t = (text ?? "").slice(0, 6000);
-  if (!t.trim()) return { name: null, code: null, why: "the first page has no text (perhaps a scan)", cambridge: false, empty: true };
+  if (!t.trim()) return { name: null, code: null, year: null, why: "the first page has no text (perhaps a scan)", cambridge: false, empty: true };
   const head = t.split("\n").slice(0, 40).join("\n");
   const cambridge = /Cambridge|UCLES/i.test(t);
   const found: string[] = [];
@@ -131,5 +133,6 @@ export function readCover(text: string, codes: readonly string[]): CoverReading 
   const why = missing.length
     ? `first page: ${found.length ? `read ${found.join(", ")}; ` : ""}no ${missing.join(", ")}`
     : `first page says ${found.join(", ")}`;
-  return { name, code, why, cambridge, empty: false };
+  if (!year) year = Number(/\b(?:February\s*\/\s*March|May\s*\/\s*June|October\s*\/\s*November|March|June|November)\s+(?:SESSION\s+)?(20\d\d|19\d\d)\b/i.exec(head)?.[1] ?? 0) || null;
+  return { name, code, year, why, cambridge, empty: false };
 }

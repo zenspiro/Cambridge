@@ -168,8 +168,8 @@ export function readNames(reply: unknown, count: number, code: string, wanted: R
       continue;
     }
     const name = nameFromParts(code, d);
-    if (!name) out[i] = { i, outcome: "review", why: `parts do not make a Cambridge name (${why})` };
-    else if (!wanted.has(name)) out[i] = { i, outcome: "review", name, why: `${name} is not a file this run looks for (${why})` };
+    if (!name) out[i] = { i, outcome: "review", why: `the AI sees a Cambridge file, but of a kind or layout the library does not keep (${why})` };
+    else if (!wanted.has(name)) out[i] = { i, outcome: "review", name, why: `the AI read it as ${name}, which the library does not ask for here (${why})` };
     else out[i] = { i, outcome: "named", name, why };
   }
   return out;

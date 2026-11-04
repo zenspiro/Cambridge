@@ -93,3 +93,21 @@ test("AI cover task: first page text in, a checked name out", async () => {
   assert.match(seen, /PHYSICS 0625\/42 \/ May\/June 2024 \/ MARK SCHEME/);
   assert.deepEqual(await aiTask(db, { jobId: id, task: "cover", text: "" }, stub as never), { ok: false, status: 400, error: "bad_request" });
 });
+
+test("AI meter: each question is counted per day with its tokens and estimated neurons", async () => {
+  const { makeModelRun } = await import("../../src/lib/agent/model.ts");
+  const { aiUsageToday, estimateNeurons, recordAiUse } = await import("../../src/lib/agent/usage.ts");
+  const db = testDb();
+  const fake = { run: async () => ({ response: { files: [] }, usage: { prompt_tokens: 1000, completion_tokens: 200 } }) };
+  const run = makeModelRun(fake as never, undefined, "test", db)!;
+  await run([{ role: "user", content: "x" }], {}, 100);
+  await run([{ role: "user", content: "x" }], {}, 100);
+  const now = Date.now();
+  const today = await aiUsageToday(db, now);
+  assert.equal(today.calls, 2);
+  assert.equal(today.neurons, Math.round(2 * estimateNeurons(1000, 200)));
+  assert.equal(today.share, Math.round((today.neurons / 10_000) * 100));
+  await recordAiUse(db, 10, 10, now + 86_400_000);
+  assert.equal((await aiUsageToday(db, now + 86_400_000)).calls, 1, "a new day starts from zero");
+  assert.equal(makeModelRun(undefined, undefined, "test", db), null);
+});

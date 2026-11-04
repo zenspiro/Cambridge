@@ -29,8 +29,25 @@ export type PlanItem = {
 
 export const isPdf = (fileName: string, type: string) => /\.pdf$/i.test(fileName) || type === "application/pdf";
 
-/** Step 1: names from the file and folder names. */
-export function planFromNames(i: number, relPath: string, size: number, subjects: KnownSubject[], maxBytes: number): PlanItem {
+/**
+ * The year a file is from, as far as its names tell: a session code in the file name ("w02",
+ * "j21", "m18") or a year in the folder names ("2003 May_June"), deepest first. Null if none.
+ */
+export function yearHint(path: string[], fileName: string): number | null {
+  const code = /(?:^|[_\s-])[msjwy](\d{2})(?=[_\s.-])/i.exec(fileName);
+  if (code) return 2000 + Number(code[1]);
+  for (const part of [...path].reverse()) {
+    const m = /(?<!\d)(19\d\d|20\d\d)(?!\d)/.exec(part);
+    if (m) return Number(m[1]);
+  }
+  return null;
+}
+
+export type Years = { fromYear: number; toYear: number };
+const outsideYears = (y: number | null | undefined, r: Years) => typeof y === "number" && (y < r.fromYear || y > r.toYear);
+
+/** Step 1: names from the file and folder names; files from years outside the library stop here. */
+export function planFromNames(i: number, relPath: string, size: number, subjects: KnownSubject[], maxBytes: number, years?: Years): PlanItem {
   const parts = relPath.split("/").filter(Boolean);
   const fileName = parts.pop() ?? relPath;
   const item: PlanItem = { i, path: parts, fileName, size, name: null, how: "", why: "", status: "review" };
@@ -40,6 +57,14 @@ export function planFromNames(i: number, relPath: string, size: number, subjects
     return item;
   }
   const c = classifyFile(parts, fileName, subjects);
+  const year = c.name ? parseCambridgeName(c.name)!.year : yearHint(parts, fileName);
+  if (years && outsideYears(year, years)) {
+    // Not read and not sent to the AI: the library does not keep this year.
+    item.status = "outside";
+    item.name = c.name;
+    item.why = `from ${year}, outside the library years (${years.fromYear} to ${years.toYear})`;
+    return item;
+  }
   item.name = c.name;
   item.why = c.why;
   item.how = c.name ? (c.why === "Cambridge file name" ? "its file name" : "its file and folder names") : "";
@@ -47,8 +72,13 @@ export function planFromNames(i: number, relPath: string, size: number, subjects
 }
 
 /** Step 2: the first page. It names unclear files and wins over names that disagree with it. */
-export function applyCover(item: PlanItem, cover: CoverReading, text: string): void {
-  if (item.status === "too_big") return;
+export function applyCover(item: PlanItem, cover: CoverReading, text: string, years?: Years): void {
+  if (item.status === "too_big" || item.status === "outside") return;
+  if (!cover.name && years && outsideYears(cover.year, years)) {
+    item.status = "outside";
+    item.why = `its first page says ${cover.year}, outside the library years (${years.fromYear} to ${years.toYear})`;
+    return;
+  }
   if (cover.name) {
     if (!item.name) {
       item.name = cover.name;
@@ -77,7 +107,7 @@ export function applyCover(item: PlanItem, cover: CoverReading, text: string): v
 
 /** Step 3: the AI's answer (its name is already checked against the subject's checklist). */
 export function applyAi(item: PlanItem, v: { outcome?: string; name?: string; why?: string } | undefined, from: "first page" | "names"): void {
-  if (!v || item.name) return;
+  if (!v || item.name || item.status === "outside") return;
   const why = String(v.why ?? "").slice(0, 160);
   if (v.outcome === "named" && v.name && parseCambridgeName(v.name)) {
     item.name = v.name;
@@ -98,8 +128,15 @@ export function finalise(items: PlanItem[], o: { have: ReadonlySet<string>; code
   const seen = new Set<string>();
   for (const it of items) {
     delete it.text;
-    if (it.status === "too_big" || it.status === "not_needed") continue;
+    if (it.status === "too_big" || it.status === "not_needed" || (it.status === "outside" && !it.name)) continue;
     const p = it.name ? parseCambridgeName(it.name) : null;
+    // The AI recognised a Cambridge file the library does not keep: say what it is, plainly.
+    const s = !p && it.suggest ? parseCambridgeName(it.suggest) : null;
+    if (s && (s.year < o.fromYear || s.year > o.toYear)) {
+      it.status = "outside";
+      it.why = `the AI read it as ${it.suggest}, from ${s.year}, outside the library years (${o.fromYear} to ${o.toYear})`;
+      continue;
+    }
     if (!p) {
       it.status = "review";
       if (!it.why) it.why = "nothing in its names or first page says what it is";

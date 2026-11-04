@@ -17,6 +17,23 @@ test("first page text: plain, compressed, Type0 with ToUnicode, object streams, 
   }
 });
 
+/** Like Chrome's DecompressionStream: refuses stray bytes after the compressed data; nothing then. */
+const strict = async (d: Uint8Array) => {
+  try {
+    return new Uint8Array(await new Response(new Blob([d as BlobPart]).stream().pipeThrough(new DecompressionStream("deflate"))).arrayBuffer());
+  } catch {
+    return new Uint8Array();
+  }
+};
+
+test("first page text: a line break before endstream, lengths as references (owner's 1524 file)", async () => {
+  const junk = new Uint8Array([...(await import("node:zlib")).deflateSync(Buffer.from("x")), 13, 10]);
+  assert.equal((await strict(junk)).length, 0, "the strict reader refuses stray bytes, like Chrome");
+  for (const o of [{ compress: true, crlf: true }, { compress: true, crlf: true, lengthRef: true }, { compress: true, lengthRef: true, type0: true }]) {
+    assert.equal(await firstPageText(makePdf(COVER, o), strict), COVER.join("\n"), JSON.stringify(o));
+  }
+});
+
 test("first page text: junk, encrypted or empty files give no text, never an error", async () => {
   assert.equal(await firstPageText(new TextEncoder().encode("not a pdf"), inflate), "");
   assert.equal(await firstPageText(new Uint8Array(), inflate), "");
@@ -54,7 +71,7 @@ test("covers: other sessions, inserts, grade thresholds; unsure covers say what 
   assert.equal(readCover("Physics 2024 notes\nTopic 3: forces 1524/12", CODES).code, null, "years and unknown numbers are never codes");
   const notes = readCover("Topic questions on forces", CODES);
   assert.equal(notes.cambridge, false);
-  assert.deepEqual(readCover("", CODES), { name: null, code: null, why: "the first page has no text (perhaps a scan)", cambridge: false, empty: true });
+  assert.deepEqual(readCover("", CODES), { name: null, code: null, year: null, why: "the first page has no text (perhaps a scan)", cambridge: false, empty: true });
 });
 
 test("library check fixes: rename moves the file and its row, remove takes it out, both audited", async () => {
