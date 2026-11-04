@@ -5,9 +5,10 @@
 //   names:   what files the rules could not name are (parts only; the name is built here).
 //   cover:   what a file is from the text of its first page, when the rules are unsure.
 //   summary: the run in plain English for the run page.
-// The model never stores or fetches anything. Names it suggests must be files the checklist
-// asks for in this run, or they go to "needs your eye". Pure apart from the `run` function.
-import { DOC_TYPES, nameFromParts, type DocType } from "../library/names.ts";
+// The model never stores or fetches anything. A name it gives is built here from its parts and
+// kept when it is this subject's file in the run's years and sessions, whether or not the
+// checklist asks for it (the checklist only says what is missing, not what may come in). Pure apart from the `run` function.
+import { DOC_TYPES, nameFromParts, parseCambridgeName, type DocType } from "../library/names.ts";
 
 /** Calls the model with chat messages and a JSON schema; returns its parsed JSON or text. */
 export type ModelRun = (messages: { role: "system" | "user"; content: string }[], schema: object, maxTokens: number) => Promise<unknown>;
@@ -148,11 +149,14 @@ export function coverPrompt(scope: AiScope, where: string, text: string) {
 
 export type NamedFile = { i: number; outcome: "named" | "not_needed" | "review"; name?: string; why: string };
 
+export type NameScope = { years: readonly number[]; sessions: readonly string[] };
+
 /**
- * Builds each Cambridge name from the parts the model gave, then keeps it only when it is a
- * file this run's checklist asks for (`wanted`). Everything else becomes "review" with the reason.
+ * Builds each Cambridge name from the parts the model gave. A name in the run's years and
+ * sessions is "named"; a real file outside them is "not_needed" (with its name); parts that make
+ * no name are "review" with the reason.
  */
-export function readNames(reply: unknown, count: number, code: string, wanted: ReadonlySet<string>): NamedFile[] {
+export function readNames(reply: unknown, count: number, code: string, scope: NameScope): NamedFile[] {
   const out: NamedFile[] = Array.from({ length: count }, (_, i) => ({ i, outcome: "review" as const, why: "no answer" }));
   const arr = (reply as { files?: unknown })?.files;
   if (!Array.isArray(arr)) return out;
@@ -170,9 +174,11 @@ export function readNames(reply: unknown, count: number, code: string, wanted: R
       continue;
     }
     const name = nameFromParts(code, d);
-    if (!name) out[i] = { i, outcome: "review", why: `the AI sees a Cambridge file, but of a kind or layout the library does not keep (${why})` };
-    else if (!wanted.has(name)) out[i] = { i, outcome: "review", name, why: `the AI read it as ${name}, which the library does not ask for here (${why})` };
-    else out[i] = { i, outcome: "named", name, why };
+    const p = name ? parseCambridgeName(name) : null;
+    if (!p) out[i] = { i, outcome: "review", why: `the AI thinks it is a Cambridge file but could not give every part of its name (${why})` };
+    else if (!scope.years.includes(p.year) || !scope.sessions.includes(p.session)) {
+      out[i] = { i, outcome: "not_needed", name: name!, why: `the AI read it as ${name}, from a year or session not asked for (${why})` };
+    } else out[i] = { i, outcome: "named", name: name!, why };
   }
   return out;
 }

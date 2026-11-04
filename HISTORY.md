@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-04: The checklist no longer decides what may come in
+
+**What:** (1) any real Cambridge file of a library subject in the library (or run) years is accepted, whether or not the checklist asks for it; the checklist only says what is missing. The AI's answers are kept on that basis (before, a name the checklist did not list went to Needs your eye). A real file from another year is "not needed" with its name and never rejected for good, so a later run for that year takes it. (2) Any other two-letter Cambridge code (source files "sf", or one nobody has seen) is stored as it is and described in words ("Source files", or "Cambridge file (xx)"); a new code needs no code change, and the first page cannot turn it into another type. (3) Needs your eye: the AI's guess is already chosen, so you only check it. (4) "Download report" on the folder page saves a spreadsheet of every file and what happened to it, to send in one go instead of one case at a time.
+
+**Why:** owner: every run led to another tweak (pre-release, specimen pre-release, codes); "less manual work, more AI power".
+
+**Tested:** 120 unit tests (changed: AI names outside the checklist kept, other codes stored as they are); 205 browser checks (new: the report download; a source files PDF uploaded under its own name).
+
 ## 2026-11-04: Specimen pre-release material
 
 **What:** specimen pre-release material is a library file, `0478_y20_pm_2.pdf`: its Cambridge site name ("2020-specimen-paper-2-pre-release-material"), its folder words and its first page ("SPECIMEN PRE-RELEASE MATERIAL") all give that name. The checklist does not ask for 2020 specimens, so it shows under "Other stored files".

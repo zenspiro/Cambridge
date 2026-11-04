@@ -16,8 +16,8 @@ test("AI folder answers: missing or odd answers mean open", () => {
   assert.equal(readFolders("not json", 1)[0]!.open, true);
 });
 
-test("AI file answers: names are built here and kept only when the run wants them", () => {
-  const wanted = new Set(["0625_s23_qp_42.pdf", "0625_s23_er.pdf", "0625_y23_sp_4.pdf"]);
+test("AI file answers: names are built here; any file of the subject in the run's years is kept", () => {
+  // The checklist does not decide: a 2023 variant 3 or a pre-release file the checklist never asks for still comes in.
   const out = readNames({
     files: [
       { i: 0, kind: "paper", year: 2023, session: "s", type: "qp", paper: 4, variant: 2, why: "folder says 2023 May June, file says paper 42" },
@@ -27,17 +27,18 @@ test("AI file answers: names are built here and kept only when the run wants the
       { i: 4, kind: "not_needed", why: "topic questions" },
       { i: 5, kind: "unsure", why: "name says nothing" },
       { i: 6, kind: "paper", year: 2023, session: "y", type: "qp", paper: 4, why: "specimen" },
+      { i: 7, kind: "paper", year: 2023, session: "s", type: "pm", paper: 2, variant: 3, why: "pre-release" },
     ],
-  }, 8, "0625", wanted);
+  }, 8, "0625", { years: [2023], sessions: ["s", "y"] });
   assert.deepEqual(out.map((o) => [o.outcome, o.name ?? null]), [
     ["named", "0625_s23_qp_42.pdf"],
     ["named", "0625_s23_er.pdf"],
-    ["review", "0625_s19_qp_42.pdf"],
+    ["not_needed", "0625_s19_qp_42.pdf"],
     ["review", null],
     ["not_needed", null],
     ["review", null],
     ["named", "0625_y23_sp_4.pdf"],
-    ["review", null],
+    ["named", "0625_s23_pm_23.pdf"],
   ]);
 });
 

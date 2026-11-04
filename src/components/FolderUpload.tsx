@@ -79,7 +79,10 @@ export function FolderUpload(props: {
   const SESSION_FOLDERS = { m: "March", s: "June", w: "November", y: "Syllabus and specimens" } as const;
   const placeOf = (name: string) => {
     const p = parseCambridgeName(name);
-    return p ? `${props.subjectLabel} / ${p.year} / ${SESSION_FOLDERS[p.session]} / ${p.fileName}` : name;
+    if (!p) return name;
+    const subj = props.subjects.find((x) => x.code === p.code);
+    const label = p.code === props.code ? props.subjectLabel : subj ? `${subj.qualification} ${subj.name} (${p.code})` : p.code;
+    return `${label} / ${p.year} / ${SESSION_FOLDERS[p.session]} / ${p.fileName}`;
   };
   const input = useRef<HTMLInputElement>(null);
   const files = useRef<File[]>([]);
@@ -107,6 +110,35 @@ export function FolderUpload(props: {
   }, []);
 
   const codes = props.subjects.map((s) => s.code);
+  // A suggested name can be picked when it is a library subject's file from a library year.
+  const suggestable = (name: string) => {
+    const p = parseCambridgeName(name);
+    return !!p && codes.includes(p.code) && p.year >= props.fromYear && p.year <= props.toYear;
+  };
+
+  /** Every file and what happened to it, as a spreadsheet (CSV), to send in one go. */
+  function downloadReport() {
+    const cell = (v: string) => {
+      const s = /^[=+\-@]/.test(v) ? `'${v}` : v; // a spreadsheet never runs a name as a formula
+      return `"${s.replace(/"/g, '""')}"`;
+    };
+    const rows = [["Folder path", "File", "Result", "Library name", "What it is", "How it was worked out", "Why", "Upload"]];
+    for (const it of items) {
+      const name = it.name ?? picks[it.i] ?? it.suggest ?? "";
+      rows.push([
+        it.path.join(" / "), it.fileName, STATUS_WORDS[it.status], name, name ? describe(name) : "", it.how,
+        it.dupOf ? `Same file as ${it.dupOf}` : `${it.renamedFrom ? `its names said ${it.renamedFrom}; ` : ""}${it.why}`,
+        results[it.i]?.text ?? "",
+      ]);
+    }
+    const csv = "\ufeff" + rows.map((r) => r.map(cell).join(",")).join("\r\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `folder-report-${props.code}.csv`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }
 
   async function analyse(list: File[]) {
     setPhase("reading");
@@ -170,8 +202,9 @@ export function FolderUpload(props: {
     }
 
     finalise(plan, { have: new Set(props.have), codes, fromYear: props.fromYear, toYear: props.toYear });
+    // The AI's best guess is chosen for you: you check it, choose another, or leave it out.
     const preset: Record<number, string> = {};
-    for (const it of plan) if (it.status === "review" && it.suggest && props.choices.some((c) => c.name === it.suggest)) preset[it.i] = it.suggest;
+    for (const it of plan) if (it.status === "review" && it.suggest && suggestable(it.suggest)) preset[it.i] = it.suggest;
     setPicks(preset);
     setItems(plan);
     setPhase("preview");
@@ -267,6 +300,7 @@ export function FolderUpload(props: {
             </p>
             <div className="actions">
               <a className="btn btn-small btn-primary" href={`/admin/library/${encodeURIComponent(props.code)}`}>Open {props.subjectLabel} in the library</a>
+              <button className="btn btn-small" type="button" onClick={downloadReport}>Download report</button>
             </div>
             {good.length ? (
               <details>
@@ -323,11 +357,10 @@ export function FolderUpload(props: {
             </div>
           ) : null}
           {phase === "preview" ? (
-            toSend ? (
-              <div className="actions">
-                <button className="btn btn-primary" type="button" onClick={upload}>Upload {toSend} file{toSend === 1 ? "" : "s"}</button>
-              </div>
-            ) : <p className="muted">Nothing new to upload.</p>
+            <div className="actions">
+              {toSend ? <button className="btn btn-primary" type="button" onClick={upload}>Upload {toSend} file{toSend === 1 ? "" : "s"}</button> : <p className="muted">Nothing new to upload.</p>}
+              <button className="btn btn-small" type="button" id="folder-report" onClick={downloadReport}>Download report</button>
+            </div>
           ) : null}
         </section>
       ) : null}
@@ -342,8 +375,8 @@ export function FolderUpload(props: {
               <summary className="subtitle summary">{STATUS_WORDS[s]} ({list.length})</summary>
               {s === "review" ? (
                 <p className="muted">
-                  Neither the names, the first page nor the AI could place these. If one is a {props.subjectLabel} file you want,
-                  choose which it is; the rest are left out.
+                  Neither the names nor the first page could place these for sure. Where the AI had a guess it is already
+                  chosen: check it and upload, choose another file, or leave it out.
                 </p>
               ) : null}
               <ul className="list">
@@ -373,7 +406,10 @@ export function FolderUpload(props: {
                             <select className="input pick-select" id={`pick-${it.i}`} value={picks[it.i] ?? ""}
                               onChange={(e) => setPicks((p) => ({ ...p, [it.i]: e.target.value }))}>
                               <option value="">Leave it out</option>
-                              {props.choices.map((c) => <option key={c.name} value={c.name}>{`${placeOf(c.name)}: ${c.text}`}</option>)}
+                              {it.suggest && suggestable(it.suggest) && !props.choices.some((c) => c.name === it.suggest) ? (
+                                <option value={it.suggest}>{`${placeOf(it.suggest)}: ${describe(it.suggest)} (the AI's guess)`}</option>
+                              ) : null}
+                              {props.choices.map((c) => <option key={c.name} value={c.name}>{`${placeOf(c.name)}: ${c.text}${c.name === it.suggest ? " (the AI's guess)" : ""}`}</option>)}
                             </select>
                             {picks[it.i] ? <span className="muted">Goes to <span className="mono">{placeOf(picks[it.i]!)}</span></span> : null}
                           </span>

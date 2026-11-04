@@ -84,14 +84,14 @@ export async function aiJudge(db: Db, p: RunParams, body: Record<string, unknown
         : null;
       if (!files || files.some((f) => !f.name)) return { ok: false, status: 400, error: "bad_request" };
       const reply = await run(namesPrompt(scope, files), NAMES_SCHEMA, AGENT.aiMaxTokens);
-      return { ok: true, data: { files: readNames(reply, files.length, p.code, await wantedNames(db, p)) } };
+      return { ok: true, data: { files: readNames(reply, files.length, p.code, p) } };
     }
     if (task === "cover") {
       const text = typeof body?.text === "string" && body.text.trim().length >= 10 ? body.text.slice(0, 3000) : null;
       const where = typeof body?.where === "string" ? body.where.slice(0, 300) : "";
       if (!text) return { ok: false, status: 400, error: "bad_request" };
       const reply = await run(coverPrompt(scope, where, text), NAMES_SCHEMA, 600);
-      return { ok: true, data: { file: readNames(reply, 1, p.code, await wantedNames(db, p))[0] } };
+      return { ok: true, data: { file: readNames(reply, 1, p.code, p)[0] } };
     }
     const draft = typeof body?.draft === "string" && body.draft.length >= 20 && body.draft.length <= 1500 ? body.draft : null;
     if (!draft) return { ok: false, status: 400, error: "bad_request" };

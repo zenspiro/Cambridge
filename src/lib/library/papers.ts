@@ -1,6 +1,6 @@
 // Papers (components) and routes per syllabus version, and plain-words descriptions of
 // files that use them ("June 2024, Paper 2 Multiple Choice (Extended), variant 2, mark scheme").
-import { DOC_TYPE_LABELS, SESSION_LABELS } from "../config.ts";
+import { docTypeLabel, SESSION_LABELS } from "../config.ts";
 import type { Db } from "../db.ts";
 import { parseCambridgeName } from "./names.ts";
 
@@ -75,7 +75,7 @@ export function paperTitle(paper: number, p: Paper | null): string {
 export function describeFile(fileName: string, versionId: string | null, lookup: PaperLookup): string {
   const f = parseCambridgeName(fileName);
   if (!f) return fileName;
-  const type = (DOC_TYPE_LABELS[f.docType] ?? f.docType).toLowerCase();
+  const type = docTypeLabel(f.docType).toLowerCase();
   const when = f.session === "y" ? `Syllabus ${f.year} version` : `${SESSION_LABELS[f.session]} ${f.year}`;
   if (!f.paper) return `${when}, ${type}`;
   const paper = paperTitle(f.paper, lookup(versionId, f.paper));

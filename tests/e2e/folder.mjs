@@ -14,7 +14,7 @@ const check = (ok, label) => { console.log(`${ok ? "ok  " : "FAIL"} ${label}`); 
 const sql = (q) => execFileSync("npx", ["wrangler", "d1", "execute", "cambridge", "--local", "--json", "--command", q], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
 const rows = (q) => JSON.parse(sql(q))[0].results;
 
-const NAMES = ["0625_s25_qp_32.pdf", "0625_s25_ms_32.pdf", "0625_s25_qp_42.pdf", "0625_s25_ms_21.pdf", "0625_s25_qp_21.pdf", "0625_s25_ci_52.pdf"];
+const NAMES = ["0625_s25_qp_32.pdf", "0625_s25_ms_32.pdf", "0625_s25_qp_42.pdf", "0625_s25_ms_21.pdf", "0625_s25_qp_21.pdf", "0625_s25_ci_52.pdf", "0625_s25_sf_51.pdf"];
 const clean = () => sql(`DELETE FROM source_document WHERE file_name IN (${NAMES.map((n) => `'${n}'`).join(",")})`);
 clean();
 
@@ -32,7 +32,7 @@ writeFileSync(join(june, "Question Paper 21.pdf"), makePdf(["Cambridge IGCSE", "
 writeFileSync(join(june, "Revision notes.pdf"), fake()); // nobody can tell: the owner picks
 writeFileSync(join(june, "Teacher notes.docx"), "not a pdf");
 writeFileSync(join(june, "Question Paper 32 copy.pdf"), qp32); // an identical copy in the folder
-// A Cambridge name with a code the library does not keep: its type stands, whatever the cover says.
+// A Cambridge code the library has no name for: stored as it is, whatever the cover says.
 writeFileSync(join(june, "0625_s25_sf_51.pdf"), makePdf(["PHYSICS 0625/51", "Paper 5 Practical Test May/June 2025", "INSTRUCTIONS", tag()]));
 // An old year (the Drive copies go back to 2002): left out by its names, never read or sent to the AI.
 mkdirSync(join(root, "IGCSE Physics (0625)", "2002"), { recursive: true });
@@ -57,7 +57,7 @@ await page.waitForSelector("#folder-plan", { timeout: 30_000 });
 const text = await page.locator("main").innerText();
 check(/What is in the folder: 8 PDFs/.test(text) && /1 file is not a PDF and was left out/.test(text), "folder: PDFs found, other files left out");
 const toUpload = page.locator("#plan-new li");
-check((await toUpload.count()) === 4, `folder: four files to upload (${await toUpload.count()})`);
+check((await toUpload.count()) === 5, `folder: five files to upload (${await toUpload.count()})`);
 check((await page.locator("#plan-new li", { hasText: "Scan 7.pdf" }).locator("text=Worked out from its first page").count()) === 1, "folder: an unnamed file is named from its first page");
 check((await page.locator("#plan-new li", { hasText: "0625_s25_ms_21.pdf" }).locator("text=its names said 0625_s25_qp_21.pdf").count()) === 1, "folder: the first page wins over a wrong name");
 check((await page.locator("#plan-duplicate li").count()) === 1 && (await page.locator("#plan-duplicate li", { hasText: "Same file as" }).count()) === 1, "folder: the same file twice is uploaded once, and the page says which file is kept");
@@ -67,7 +67,11 @@ check(/AI today: \d+ question/.test(await page.locator(".ai-meter").innerText())
 check(/AI is not available here/.test(text), "folder: says when the AI could not help");
 const notes = page.locator("#plan-review li", { hasText: "Revision notes.pdf" });
 check((await notes.count()) === 1, "folder: an unclear file needs your eye");
-check((await page.locator("#plan-not_needed li", { hasText: "0625_s25_sf_51.pdf" }).locator("text=source files for a practical paper").count()) === 1, "folder: an unknown Cambridge code is not needed, never read as a question paper");
+check((await page.locator("#plan-new li", { hasText: "0625_s25_sf_51.pdf" }).locator("text=source files").count()) === 1, "folder: another Cambridge code is uploaded as it is, never read as a question paper");
+const [dl] = await Promise.all([page.waitForEvent("download"), page.click("#folder-report")]);
+const csv = readFileSync(await dl.path(), "utf8");
+check(dl.suggestedFilename() === "folder-report-0625.csv" && /"Folder path","File","Result"/.test(csv) && /"Revision notes.pdf","Needs your eye"/.test(csv) && csv.split("\r\n").length === 9,
+  `folder: Download report gives every file and what happened to it (${csv.split("\r\n").length - 1} rows)`);
 const pickText = await notes.locator("select option[value='0625_s25_ci_52.pdf']").innerText();
 check(pickText.startsWith("IGCSE Physics (0625) / 2025 / June / 0625_s25_ci_52.pdf"), `folder: the picker shows the full place in the library (${pickText})`);
 await notes.locator("select").selectOption("0625_s25_ci_52.pdf");
@@ -75,18 +79,18 @@ check((await notes.locator(".pick-line", { hasText: "Goes to IGCSE Physics (0625
 const box = await notes.locator("select").boundingBox();
 const row = await notes.boundingBox();
 check(box && row && box.width > row.width * 0.6, `folder: the picker is wide enough to read (${Math.round(box?.width ?? 0)} of ${Math.round(row?.width ?? 0)} px)`);
-await page.click("button:has-text('Upload 5 files')");
+await page.click("button:has-text('Upload 6 files')");
 await page.waitForSelector("#folder-done", { timeout: 30_000 });
-check(/5 files stored/.test(await page.locator("#folder-done").innerText()) && (await page.locator("#folder-done a", { hasText: "Open IGCSE Physics (0625) in the library" }).count()) === 1,
+check(/6 files stored/.test(await page.locator("#folder-done").innerText()) && (await page.locator("#folder-done a", { hasText: "Open IGCSE Physics (0625) in the library" }).count()) === 1,
   "folder: a clear summary when the upload is finished, with a link to the library");
 const stored = rows(`SELECT file_name FROM source_document WHERE file_name IN (${NAMES.map((n) => `'${n}'`).join(",")}) ORDER BY file_name`).map((r) => r.file_name);
-check(stored.join(",") === "0625_s25_ci_52.pdf,0625_s25_ms_21.pdf,0625_s25_ms_32.pdf,0625_s25_qp_32.pdf,0625_s25_qp_42.pdf", `folder: five files stored under their worked out names (${stored.join(",")})`);
+check(stored.join(",") === "0625_s25_ci_52.pdf,0625_s25_ms_21.pdf,0625_s25_ms_32.pdf,0625_s25_qp_32.pdf,0625_s25_qp_42.pdf,0625_s25_sf_51.pdf", `folder: six files stored under their worked out names (${stored.join(",")})`);
 
 // Picking the same folder again: everything is already in the library.
 await page.goto(BASE + "/admin/library/folder?code=0625");
 await page.setInputFiles("#folder", root);
 await page.waitForSelector("#folder-plan", { timeout: 30_000 });
-check((await page.locator("#plan-have li").count()) === 5 && (await page.locator("#plan-outside li").count()) === 1 && (await page.locator("text=Nothing new to upload").count()) === 1, "folder: a second pick skips files already stored");
+check((await page.locator("#plan-have li").count()) === 6 && (await page.locator("#plan-outside li").count()) === 1 && (await page.locator("text=Nothing new to upload").count()) === 1, "folder: a second pick skips files already stored");
 check(errors.length === 0, `folder: no script or CSP errors${errors.length ? ": " + errors.join(" | ") : ""}`);
 
 clean();
