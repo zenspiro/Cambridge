@@ -22,6 +22,9 @@ export const LIBRARY = {
   maxUploadBytes: 90 * 1024 * 1024,
   /** Upload batches per admin per hour. */
   uploadsPerHour: 30,
+  /** Folder upload: files sent one at a time, and AI questions, per admin per hour. */
+  folderFilesPerHour: 1500,
+  folderAiPerHour: 80,
   /** Other admin writes (sources) per admin per hour. */
   writesPerHour: 120,
   /** Rows shown on one library page. */
