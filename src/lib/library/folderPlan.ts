@@ -29,6 +29,8 @@ export type PlanItem = {
   suggest?: string;
   /** The first page's text, kept only while the AI may still be asked. */
   text?: string;
+  /** The paper's title as its first page prints it, to check the library's paper names. */
+  coverTitle?: { paper: number; name: string };
 };
 
 export const isPdf = (fileName: string, type: string) => /\.pdf$/i.test(fileName) || type === "application/pdf";
@@ -69,6 +71,14 @@ export function planFromNames(i: number, relPath: string, size: number, subjects
     item.why = `from ${year}, outside the library years (${years.fromYear} to ${years.toYear})`;
     return item;
   }
+  if (c.notKept) {
+    // Its own Cambridge name gives a type the library does not keep: never read as another type.
+    item.status = "not_needed";
+    item.why = c.why;
+    item.how = "Its Cambridge name";
+    item.evidence = 0;
+    return item;
+  }
   item.name = c.name;
   if (c.name && c.why === "Cambridge file name") {
     item.how = "Already has its Cambridge name";
@@ -83,7 +93,8 @@ export function planFromNames(i: number, relPath: string, size: number, subjects
 
 /** Step 2: the first page. It names unclear files and wins over names that disagree with it. */
 export function applyCover(item: PlanItem, cover: CoverReading, text: string, years?: Years): void {
-  if (item.status === "too_big" || item.status === "outside") return;
+  if (item.status === "too_big" || item.status === "outside" || item.status === "not_needed") return;
+  if (cover.paperTitle) item.coverTitle = cover.paperTitle;
   if (!cover.name && years && outsideYears(cover.year, years)) {
     item.status = "outside";
     item.why = `its first page says ${cover.year}, outside the library years (${years.fromYear} to ${years.toYear})`;
@@ -202,3 +213,34 @@ export const STATUS_WORDS: Record<PlanStatus, string> = {
   duplicate: "Same file twice in the folder",
   too_big: "Empty or too large",
 };
+
+/** Words compared loosely: case, punctuation and "and"/"&" do not matter. */
+const looseName = (s: string) => s.toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9]+/g, " ").trim();
+
+export type TitleCheck = { versionId: string; paper: number; library: string; cover: string; example: string };
+
+/**
+ * Paper names the library has that the files' own covers contradict, one per version and
+ * paper (older syllabus versions were seeded from the next one and may be wrong).
+ */
+export function paperTitleChecks(
+  items: PlanItem[],
+  papers: { syllabus_id: string; paper: number; name: string }[],
+  versionOf: (fileName: string) => string | null,
+): TitleCheck[] {
+  const out = new Map<string, TitleCheck>();
+  for (const it of items) {
+    if (!it.name || !it.coverTitle) continue;
+    const p = parseCambridgeName(it.name);
+    if (!p || p.paper !== it.coverTitle.paper) continue;
+    const versionId = versionOf(it.name);
+    const lib = versionId ? papers.find((x) => x.syllabus_id === versionId && x.paper === p.paper) : undefined;
+    if (!versionId || !lib) continue;
+    const a = looseName(lib.name);
+    const b = looseName(it.coverTitle.name);
+    if (b.startsWith(a) || a.startsWith(b)) continue;
+    const key = `${versionId}:${p.paper}`;
+    if (!out.has(key)) out.set(key, { versionId, paper: p.paper, library: lib.name, cover: it.coverTitle.name, example: it.name });
+  }
+  return [...out.values()];
+}

@@ -87,6 +87,9 @@
   .review-row { @apply items-center; }
   .review-act { @apply flex flex-wrap items-center gap-2; }
   .review-select { @apply mt-0 w-auto max-w-md py-1 text-base; }
+  .review-row .doc-main { @apply grow; }
+  .pick-line { @apply mt-2 flex w-full flex-col gap-1; }
+  .pick-select { @apply mt-0 w-full max-w-none py-1 text-base; }
   .event-good { @apply font-semibold text-green-800; }
   .event-bad { @apply font-semibold text-red-700; }
   .bar { @apply h-3 w-full overflow-hidden rounded-full; accent-color: var(--color-brand); }

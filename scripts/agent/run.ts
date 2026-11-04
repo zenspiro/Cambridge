@@ -467,6 +467,12 @@ async function main() {
               : classifyFile(path, item.name, subjects);
             if (!c.name) {
               if (c.code && c.code !== job.params.code) summary.otherSubjects[c.code] = (summary.otherSubjects[c.code] ?? 0) + 1;
+              else if ("notKept" in c && c.notKept) {
+                // Its own Cambridge name says a type the library does not keep: not needed, no AI.
+                report.notNeeded ??= { count: 0, examples: [] };
+                report.notNeeded.count++;
+                if (report.notNeeded.examples.length < 10) report.notNeeded.examples.push(`${[...path, item.name].join(" / ")}: ${c.why}`);
+              }
               else leftovers.push({ path, item, why: c.why });
               continue;
             }

@@ -5,7 +5,7 @@
 //   "PHYSICS 0625/02 / ... For examination from 2023 / SPECIMEN PAPER"
 // Each part found is reported with where it came from; a name is given only when every part the
 // name needs was read. Unsure covers go to the AI (agent `cover` task). Pure, Node and browser.
-import { nameFromParts, type DocType } from "./names.ts";
+import { nameFromParts, NO_VARIANT_TYPES, type DocType } from "./names.ts";
 
 export type CoverReading = {
   /** The Cambridge name, when the cover gives every part. */
@@ -19,6 +19,8 @@ export type CoverReading = {
   cambridge: boolean;
   /** No text at all (scanned or unreadable file). */
   empty: boolean;
+  /** The paper's title as the cover prints it ("Paper 2 Problem-solving and Programming"). */
+  paperTitle?: { paper: number; name: string };
 };
 
 const SESSIONS: [RegExp, "m" | "s" | "w"][] = [
@@ -32,6 +34,13 @@ const SESSION_NAMES = { m: "February/March", s: "May/June", w: "October/November
 
 // Headings for each type. Capitals are matched exactly, as Cambridge prints them, so small print
 // such as "listed in the confidential instructions" on a question paper does not count.
+// Headings that name the document outright win wherever they sit on the page: a pre-release
+// booklet also carries "INSTRUCTIONS", a transcript the paper's own heading.
+const STRONG_HEADINGS: [DocType, RegExp][] = [
+  ["pm", /PRE-RELEASE\s+MATERIAL/],
+  ["tn", /TEACHERS?[\u2019']\s*NOTES|Teachers?[\u2019']\s*Notes/],
+  ["qr", /\bTRANSCRIPT\b|^Transcript\b|Listening\s+Transcript/m],
+];
 const TYPE_HEADINGS: [DocType, RegExp][] = [
   ["er", /Principal\s+Examiner\s+Report|Examiner\s+Report\s+for\s+Teachers/i],
   ["gt", /Grade\s+threshold\s+table|Grade\s+thresholds?\b(?!\s+(?:and|or))/i],
@@ -46,6 +55,7 @@ const TYPE_HEADINGS: [DocType, RegExp][] = [
 
 /** The document type: the heading that appears first on the page wins. */
 function typeOf(t: string): DocType | null {
+  for (const [type, re] of STRONG_HEADINGS) if (re.test(t)) return type;
   let best: { type: DocType; at: number } | null = null;
   for (const [type, re] of TYPE_HEADINGS) {
     const m = re.exec(t);
@@ -56,6 +66,7 @@ function typeOf(t: string): DocType | null {
 
 const TYPE_WORDS: Record<DocType, string> = {
   qp: "question paper", ms: "mark scheme", in: "insert", ci: "confidential instructions", er: "examiner report",
+  pm: "pre-release material", qr: "listening transcript", tn: "teachers' notes",
   gt: "grade thresholds", sp: "specimen paper", sm: "specimen mark scheme", sy: "syllabus", su: "syllabus update", gd: "grade descriptions",
 };
 
@@ -117,6 +128,7 @@ export function readCover(text: string, codes: readonly string[]): CoverReading 
   if (perPaper) {
     if (comp && comp[1] === code) {
       if (session === "y") paper = Number(comp[2]! + comp[3]!) || null; // specimen "0625/02" is paper 2
+      else if (comp[2] === "0") paper = Number(comp[3]) || null; // "0520/03": paper 3, no variants
       else {
         paper = Number(comp[2]);
         variant = Number(comp[3]) || null;
@@ -124,7 +136,7 @@ export function readCover(text: string, codes: readonly string[]): CoverReading 
     }
     if (paper) found.push(session === "y" ? `paper ${paper}` : `paper ${paper}${variant ? ` variant ${variant}` : ""}`);
     else missing.push("paper number");
-    if (session !== "y" && paper && !variant) missing.push("variant");
+    if (session !== "y" && paper && !variant && !NO_VARIANT_TYPES.includes(type!)) missing.push("variant");
   }
 
   const name = code && session && year && type && !missing.length
@@ -134,5 +146,22 @@ export function readCover(text: string, codes: readonly string[]): CoverReading 
     ? `first page: ${found.length ? `read ${found.join(", ")}; ` : ""}no ${missing.join(", ")}`
     : `first page says ${found.join(", ")}`;
   if (!year) year = Number(/\b(?:February\s*\/\s*March|May\s*\/\s*June|October\s*\/\s*November|March|June|November)\s+(?:SESSION\s+)?(20\d\d|19\d\d)\b/i.exec(head)?.[1] ?? 0) || null;
-  return { name, code, year, why, cambridge, empty: false };
+  const title = coverPaperTitle(head);
+  return { name, code, year, why, cambridge, empty: false, ...(title ? { paperTitle: title } : {}) };
+}
+
+const TITLE_STOP = /\s*(?:\b(?:February|March|May|June|October|November|For examination|SPECIMEN|MARK SCHEME|PRE-RELEASE|INSERT|Paper\s+\d)\b.*)$/;
+
+/**
+ * The paper's title from the cover's head: "Paper 2 Problem-solving and Programming" on its own
+ * line (or followed by the session). Null when the cover has none (examiner reports).
+ */
+export function coverPaperTitle(head: string): { paper: number; name: string } | null {
+  for (const line of head.split("\n")) {
+    const m = /^\s*Paper\s+(\d)\s+(.+)$/.exec(line);
+    if (!m) continue;
+    const name = m[2]!.replace(TITLE_STOP, "").replace(/\s+/g, " ").replace(/[\s,.;:]+$/, "").trim();
+    if (name.length >= 3 && name.length <= 80 && /[A-Za-z]{3}/.test(name) && !/^\d/.test(name)) return { paper: Number(m[1]), name };
+  }
+  return null;
 }

@@ -9,6 +9,9 @@ const PLURALS: Record<string, [string, string]> = {
   ms: ["mark scheme", "mark schemes"],
   ci: ["confidential instructions", "confidential instructions"],
   in: ["insert", "inserts"],
+  pm: ["pre-release material", "pre-release materials"],
+  qr: ["listening transcript", "listening transcripts"],
+  tn: ["teachers' notes", "teachers' notes"],
   er: ["examiner report", "examiner reports"],
   gt: ["grade thresholds", "grade thresholds"],
   sp: ["specimen paper", "specimen papers"],
@@ -17,7 +20,7 @@ const PLURALS: Record<string, [string, string]> = {
   su: ["syllabus update", "syllabus updates"],
   gd: ["grade descriptions", "grade descriptions"],
 };
-const ORDER = ["qp", "ms", "ci", "in", "er", "gt", "sp", "sm", "sy", "su", "gd"];
+const ORDER = ["qp", "ms", "ci", "in", "pm", "qr", "tn", "er", "gt", "sp", "sm", "sy", "su", "gd"];
 const SESSION_ORDER: Record<string, number> = { w: 0, s: 1, m: 2, y: 3 };
 
 export type FileGroup = { key: string; label: string; year: number; session: ParsedName["session"]; files: ParsedName[] };

@@ -144,11 +144,16 @@ export function buildChecklist(code: string, versions: Version[], stored: Stored
           for (const t of r.perPaper) cells[t] = cell(examName(code, session, year, t, p, vnt), essential, have, used);
           if (r.ciPapers?.includes(p)) cells.ci = cell(examName(code, session, year, "ci", p, vnt), essential, have, used);
           if (r.inPapers?.includes(p)) cells.in = cell(examName(code, session, year, "in", p, vnt), essential, have, used);
+          if (r.pmPapers?.includes(p)) cells.pm = cell(examName(code, session, year, "pm", p, vnt), essential, have, used);
+          if (r.qrPapers?.includes(p)) cells.qr = cell(examName(code, session, year, "qr", p, vnt), false, have, used);
           rows.push({ paper: p, variant: vnt, essential, cells });
         }
       }
       rows.sort((a, b) => Number(b.essential) - Number(a.essential) || a.paper - b.paper || (a.variant ?? 0) - (b.variant ?? 0));
-      const docs = (r.perSession ?? []).map((t) => cell(examName(code, session, year, t), true, have, used));
+      const docs = [
+        ...(r.perSession ?? []).map((t) => cell(examName(code, session, year, t), true, have, used)),
+        ...(r.extraSessionDocs ?? []).map((d) => cell(examName(code, session, year, d.type, d.paper, null), false, have, used)),
+      ];
       sessionGroups.push({
         year, session, label: `${SESSION_LABELS[session]} ${year}`, versionId: v!.id, rows, docs, status: statusOf([...docs, ...rowCells(rows)]),
       });

@@ -23,7 +23,7 @@ test("subject map: versions hold their documents, specimens and sessions; papers
   const june24 = v23.rows.find((r) => r.label === "June 2024")!;
   assert.equal(june24.variant, 2);
   assert.equal(june24.cells[cellKey(2, "qp")]?.doc?.file_name, "0625_s24_qp_22.pdf");
-  assert.ok(june24.er && june24.gt, "whole-session files sit on the session's first row");
+  assert.ok(june24.docs?.er && june24.docs?.gt, "whole-session files sit on the session's first row");
   assert.ok(v23.docs.some((c) => c.docType === "sy") && v23.specimens.columns.length === 6);
   // All variants: three rows for June, essential first.
   const all = buildSubjectMap(list, papers, { allVariants: true }).find((v) => v.id === "0625-2023")!;

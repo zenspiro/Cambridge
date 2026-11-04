@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-04: Pre-release material, transcripts, teachers' notes; unknown codes; picker on its own line
+
+**What:** (1) three Cambridge file types the library did not know: pm pre-release material (0478 Paper 2 up to 2022, asked for with the paper), qr listening transcript and tn teachers' notes for the speaking test (French 0520, extras). The file names, the folder words ("Pre-release Material 22"), Cambridge's site names, the front page reader (the "PRE-RELEASE MATERIAL", "TRANSCRIPT" and "TEACHERS' NOTES" headings win) and the AI all know them; the library map shows them. (2) A file named like a Cambridge file with a code the library does not keep (sf source files, or any unknown code) keeps that type: it is "Not needed" with the type named, and neither the first page nor the AI may turn it into another type. (3) 0478 papers for 2020 to 2022 renamed from their covers: Paper 1 Theory, Paper 2 Problem-solving and Programming. The front page reader now reads the paper title, and the folder upload lists any paper whose cover title differs from the library's name. (4) The "Which file is it?" picker sits on its own line, full width, each choice showing the full place in the library ("IGCSE Computer Science (0478) / 2020 / November / 0478_w20_qp_21.pdf"), and says where the picked file goes. (5) Migration 0014 rebuilds `source_document` once more (second owner-approved exception): the type check now accepts any two lowercase letters, so later types need no rebuild.
+
+**Why:** owner report: "0478_w20_pm_21.pdf" (pre-release material) was read as a second copy of the Paper 2 question paper and sent to Needs your eye; the picker was cut off; owner asked for a lookup of other missing codes first.
+
+**Tested:** 119 unit tests (new: the owner's pm and qp pair both uploaded, new names, unknown codes, cover headings and titles, checklist and map, title checks); 204 browser checks (new: an unknown code is not needed, the picker shows the full place on its own line).
+
 ## 2026-11-04: Folder upload repeats, clearer rows, readable text
 
 **What:** when two files in a folder come out as the same Cambridge name, the one with the best evidence is uploaded (its own Cambridge name beats folder names, which beat the first page, which beats the AI; then the first one met). An identical copy is listed as a repeat with "Same file as ..., which is uploaded instead"; a different file read as the same name goes to Needs your eye instead of being dropped. Rows now describe files with their paper names for every subject ("Paper 2 Algorithms, Programming and Logic"), say "Will be stored as ..." only when the name changes, and give one plain line on how the file was worked out. All small text in the admin is one size larger (12 px is now 14 px, 14 px is now 16 px); the top bar stays on one line.
