@@ -20,6 +20,8 @@ export type SummaryFacts = {
   review: number;
   notNamed: number;
   maxFiles: number;
+  /** Google Drive kept refusing downloads and the agent stopped asking (a real limit). */
+  drivePaused?: { afterStored: number; notTried: number } | null;
 };
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString("en-GB")} ${n === 1 ? one : many}`;
@@ -49,6 +51,7 @@ export function ruleSummary(f: SummaryFacts): string {
   // Only real limits are named; otherwise the summary says plainly that nothing was cut short.
   const limits: string[] = [];
   if (f.driveFolders.some((d) => d.truncated)) limits.push("a Drive folder was larger than one run reads, so it stopped early");
+  if (f.drivePaused) limits.push(`Google Drive started refusing downloads after ${plural(f.drivePaused.afterStored, "file")}, so ${plural(f.drivePaused.notTried, "file")} ${f.drivePaused.notTried === 1 ? "was" : "were"} not tried; run the download again later for the rest`);
   if (f.found > f.maxFiles) limits.push(`one download stores at most ${f.maxFiles} files, so run it again for the rest`);
   out.push(limits.length ? `Limits: ${limits.join("; ")}.` : "Nothing was cut short.");
 

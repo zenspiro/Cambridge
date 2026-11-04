@@ -40,3 +40,9 @@ test("the AI's rewording is kept only when it says the same thing", () => {
   assert.equal(checkRewrite(draft, good), good);
   assert.equal(checkRewrite(draft, good.replace("; 57", " \u2014 57")), good.replace("; 57", ", 57"));
 });
+
+test("Google Drive refusing downloads is named as a limit, with what to do", () => {
+  const s = ruleSummary({ ...base, mode: "download", stored: 25, failed: 346, drivePaused: { afterStored: 25, notTried: 340 } });
+  assert.match(s, /Limits: Google Drive started refusing downloads after 25 files, so 340 files were not tried; run the download again later for the rest\./);
+  assert.match(s, /Stored 25 files; 346 files could not be stored/);
+});

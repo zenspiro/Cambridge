@@ -73,11 +73,23 @@ export function readReport(json: string): RunReport {
 
 export const arr = <T>(v: T[] | undefined, max = 1000): T[] => (Array.isArray(v) ? v.slice(0, max) : []);
 
+/** Why Google Drive refused a download, in words. */
+export const DRIVE_REASONS: Record<string, string> = {
+  drive_quota: "Google Drive's download limit for this file was reached (common for busy shared files); it lifts with time",
+  drive_rate: "Google Drive asked the agent to slow down",
+  drive_forbidden: "Google Drive refused the download (the owner may have turned downloads off)",
+  drive_missing: "Google Drive could not find the file any more",
+  drive_too_big: "the file is larger than the library allows",
+  drive_error: "Google Drive did not answer properly",
+  drive_paused: "not tried: Google Drive was refusing downloads, so the agent stopped asking. Run the download again later",
+};
+
 /** "Not a PDF", "the website answered 404", or the code itself. */
 export function reasonText(reason: string | undefined): string {
   if (!reason) return "";
   const known = (REASON_LABELS as Record<string, string>)[reason];
   if (known) return known;
+  if (reason in DRIVE_REASONS) return DRIVE_REASONS[reason]!;
   if (reason.startsWith("http_")) return `the website answered ${reason.slice(5)}`;
   if (reason === "download_failed") return "the download did not finish";
   return reason.replace(/_/g, " ");

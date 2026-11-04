@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-04: Google Drive download refusals handled
+
+**What:** when Google Drive refuses a download, the run now records Google's reason in words (download limit for a busy shared file, slow down, downloads turned off, file gone) instead of "the website answered 403". Downloads are paced a few seconds apart; a limit refusal waits 30 seconds and tries once more; after five refusals in a row the agent stops asking Drive for that run, marks the rest "not tried" and the summary says so, with "run the download again later". A later run fetches only what is still missing.
+
+**Why:** owner report: the Physics download stored 25 files, then Google refused the other 346 one by one, each shown as "the website answered 403", though the files open in a browser.
+
+**Tested:** 95 unit tests (new: Drive refusal reasons, the summary names the Drive limit); 171 browser checks (new: the fake Drive refuses one file with "downloadQuotaExceeded"; the run records it and explains it in words).
+
 ## 2026-11-04: Subject map
 
 **What:** each subject's library page now opens on a map of the whole subject: per syllabus version its syllabus documents and specimen papers, then every exam session as a row with each paper as a named column group (question paper, insert, mark scheme, confidential instructions, only where the paper has them) and the examiner report and grade thresholds. Ticks download, crosses add. Essential variants by default, "All variants" shows the rest; coursework and speaking are named as marked by the school. "Download map" gives the same hierarchy as JSON with every file described in words, and the AI engine's catalog now serves exactly that structure.

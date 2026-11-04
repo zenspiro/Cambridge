@@ -201,10 +201,10 @@ try {
   check(r5.status === 0, `drive dry run exits cleanly${r5.status ? ": " + r5.stderr : ""}`);
   const drep = JSON.parse(rows(`SELECT result FROM job WHERE id = '${dd}'`)[0].result);
   const dnames = drep.candidates.map((c) => c.name).sort();
-  check(dnames.join(",") === "0625_s24_er.pdf,0625_s24_ms_12.pdf,0625_s24_qp_12.pdf,0625_y23_sp_2.pdf", `drive: files worked out from folder and file names (${dnames.join(",")})`);
+  check(dnames.join(",") === "0625_s24_er.pdf,0625_s24_gt.pdf,0625_s24_ms_12.pdf,0625_s24_qp_12.pdf,0625_y23_sp_2.pdf", `drive: files worked out from folder and file names (${dnames.join(",")})`);
   check(drep.unmatched.some((u) => u.includes("Revision notes.pdf: could not tell the document type")), "drive: unclear files are reported with the reason");
   const root = drep.driveFolders.find((f) => f.folderId === "ROOTFOLDER01");
-  check(root?.looksLike === "IGCSE Physics 0625" && root.pdfs === 6 && root.otherSubjects["0620"] === 1, "drive: the folder is understood (subject, counts, other subjects)");
+  check(root?.looksLike === "IGCSE Physics 0625" && root.pdfs === 7 && root.otherSubjects["0620"] === 1, "drive: the folder is understood (subject, counts, other subjects)");
   check(drep.driveFolders.find((f) => f.folderId === "PRIVATEFOLDR")?.error?.includes("refused access"), "drive: a private folder is reported, not fatal");
   check(drep.driveSkipped === 1 && !drep.driveFolders.some((f) => f.folderId === "OTHERSUBJECT01") && !fake.driveHits.some((h) => h.path.includes("OTHERSUBJECT01")),
     "drive: folders for other subjects are skipped without a call to Google");
@@ -225,9 +225,13 @@ try {
   check(r6.status === 0, `drive download exits cleanly${r6.status ? ": " + r6.stderr : ""}`);
   const dstored = rows(`SELECT file_name, source_site_id, source_url FROM source_document WHERE job_id = '${dl2}' ORDER BY file_name`);
   check(dstored.length === 4 && dstored.every((d) => d.source_site_id === "local-drive" && /^https:\/\/drive\.google\.com\/file\/d\/DRVFILE000\d\/view$/.test(d.source_url)), "drive: four files stored, tagged with their Drive link");
+  const dlrep = JSON.parse(rows(`SELECT result FROM job WHERE id = '${dl2}'`)[0].result);
+  check(dlrep.failed.some((f) => f.name === "0625_s24_gt.pdf" && f.reason === "drive_quota"), "drive: a download Google refuses is recorded with Google's reason (quota)");
+  await page.goto(BASE + `/admin/agent/runs/${dl2}`);
+  check((await page.locator("main").innerText()).includes("download limit for this file was reached"), "drive: the run page explains a refused download in words");
   await page.goto(BASE + "/admin/sources");
   const folderLine = page.locator(".doc-main", { hasText: "looks like IGCSE Physics 0625" });
-  check((await folderLine.count()) === 1 && (await folderLine.textContent())?.includes("6 PDFs in 4 folders"), "drive: sources page shows what the folder held");
+  check((await folderLine.count()) === 1 && (await folderLine.textContent())?.includes("7 PDFs in 4 folders"), "drive: sources page shows what the folder held");
   check(!(await page.locator("main").innerText()).includes("ROOTFOLDER01"), "drive: sources page shows names, not folder codes");
   const fileApi = await apiRequest.newContext({ baseURL: BASE });
   const pdfBody = new TextEncoder().encode("%PDF-1.4\n%%EOF");
