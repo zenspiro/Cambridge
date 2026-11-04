@@ -65,6 +65,20 @@ test("folder and file words name pre-release material, transcripts and teachers'
 const PM_COVER = "This document has 4 pages.\n© UCLES 2020 [Turn over\nCambridge IGCSE\nCOMPUTER SCIENCE 0478/21\nPaper 2 Problem-solving and Programming October/November 2020\nPRE-RELEASE MATERIAL\nINSTRUCTIONS\n● This material should be given to candidates on receipt.";
 const QP_COVER = "This document has 16 pages.\n© UCLES 2020 [Turn over\nCambridge IGCSE\nCOMPUTER SCIENCE 0478/21\nPaper 2 Problem-solving and Programming October/November 2020\n1 hour 45 minutes\nYou must answer on the question paper.\nINSTRUCTIONS\n● Answer all questions.";
 
+// The owner's file: Cambridge's 2020 specimen pre-release material for 0478 Paper 2 (first page lines).
+const SPEC_PM_COVER = "This document consists of 2 printed pages.\n© UCLES 2019 [Turn over\nCambridge IGCSE\n\nCOMPUTER SCIENCE 0478/02\nPaper 2 Problem-solving and Programming For examination from 2020\nSPECIMEN PRE-RELEASE MATERIAL\nNo additional materials are required.";
+
+test("specimen pre-release material is a library file: 0478_y20_pm_2.pdf", () => {
+  assert.equal(parseCambridgeName("0478_y20_pm_2.pdf")?.docType, "pm");
+  assert.equal(readCover(SPEC_PM_COVER, CODES).name, "0478_y20_pm_2.pdf");
+  assert.equal(toCambridgeName("https://x.org/a/414824-2020-specimen-paper-2-pre-release-material.pdf", "0478"), "0478_y20_pm_2.pdf");
+  assert.equal(classifyFile(["computers science 0478", "2020", "2020 Specimen Papers"], "414824-2020-specimen-paper-2-pre-release-material.pdf", SUBJECTS).name, "0478_y20_pm_2.pdf");
+  const it = planFromNames(0, "computers science 0478/2020/2020 Specimen Papers/414824-2020-specimen-paper-2-pre-release-material.pdf", 199_000, SUBJECTS, 1e8, YEARS);
+  applyCover(it, readCover(SPEC_PM_COVER, CODES), SPEC_PM_COVER, YEARS);
+  finalise([it], { have: new Set(), codes: CODES, fromYear: 2020, toYear: 2026 });
+  assert.deepEqual([it.status, it.name], ["new", "0478_y20_pm_2.pdf"]);
+});
+
 test("the front page reader knows pre-release material, transcripts and teachers' notes", () => {
   const pm = readCover(PM_COVER, CODES);
   assert.equal(pm.name, "0478_w20_pm_21.pdf");

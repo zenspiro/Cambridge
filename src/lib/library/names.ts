@@ -19,8 +19,8 @@ export type ParsedName = {
 // transcript, tn teachers' notes (speaking tests).
 const EXAM = /^(\d{4})_([msw])(\d{2})_(?:(qp|ms|in|ci|pm|qr)_([1-9])([1-9])?|(tn)_0([1-9])|(er|gt))\.pdf$/;
 // Specimens and version documents: y + first exam year of the syllabus version.
-// sy syllabus, su syllabus update, gd grade descriptions.
-const SPEC = /^(\d{4})_y(\d{2})_(?:(sp|sm|in|ci)_([1-9])|(sy|su|gd))\.pdf$/;
+// sy syllabus, su syllabus update, gd grade descriptions; pm specimen pre-release material.
+const SPEC = /^(\d{4})_y(\d{2})_(?:(sp|sm|in|ci|pm)_([1-9])|(sy|su|gd))\.pdf$/;
 
 export function parseCambridgeName(raw: string): ParsedName | null {
   if (typeof raw !== "string" || raw.length > 40) return null;
