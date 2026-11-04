@@ -59,7 +59,7 @@ export async function storeDocument(db: Db, bucket: Bucket, input: StoreInput, n
   if (input.bytes.length === 0 || input.bytes.length > LIBRARY.maxFileBytes) return fail("size");
   if (!looksLikePdf(input.bytes)) return fail("not_pdf");
 
-  const syl = await db.prepare(Q.SYLLABUS_FOR_YEAR).bind(p.code, p.year).first<{ id: string }>();
+  const syl = await db.prepare(Q.SYLLABUS_FOR_FILE).bind(p.code, p.year, p.session).first<{ id: string }>();
   if (!syl) return fail("no_syllabus");
 
   const sha = await sha256HexBytes(input.bytes);
@@ -112,7 +112,7 @@ export async function renameDocument(db: Db, bucket: Bucket, id: string, newName
   if (!p) return "name";
   const range = await getLibrarySettings(db);
   if (p.year < range.fromYear || p.year > range.toYear) return "year";
-  const syl = await db.prepare(Q.SYLLABUS_FOR_YEAR).bind(p.code, p.year).first<{ id: string }>();
+  const syl = await db.prepare(Q.SYLLABUS_FOR_FILE).bind(p.code, p.year, p.session).first<{ id: string }>();
   if (!syl) return "no_syllabus";
   if (await db.prepare(`SELECT id FROM source_document WHERE file_name = ?1`).bind(p.fileName).first()) return "same_name";
   const obj = await bucket.get(row.r2_key);

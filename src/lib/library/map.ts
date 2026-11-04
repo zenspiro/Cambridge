@@ -18,6 +18,8 @@ export type MapRow = {
   year: number; session: "m" | "s" | "w"; label: string; variant: number | null; essential: boolean;
   /** First row of its session: carries the session's status and whole-session files. */
   first: boolean; sessionStatus: Status; cells: Partial<Record<string, Cell>>;
+  /** Another code's series ("1524"). */
+  series?: string;
   /** Whole-session files (examiner report, grade thresholds, teachers' notes), on the first row only. */
   docs?: Partial<Record<string, Cell>>;
 };
@@ -52,30 +54,36 @@ export function buildSubjectMap(list: Checklist, allPapers: Paper[], opts: { all
     const sessions = list.sessions.filter((s) => s.versionId === g.version.id);
     const rows: MapRow[] = [];
     for (const s of sessions) {
-      const chosen = s.rows.filter((r) => opts.allVariants || r.essential);
-      const variants = [...new Set(chosen.map((r) => r.variant))].sort((a, b) => {
-        const ea = chosen.some((r) => r.variant === a && r.essential);
-        const eb = chosen.some((r) => r.variant === b && r.essential);
-        return Number(eb) - Number(ea) || (a ?? 0) - (b ?? 0);
-      });
-      const docs: Partial<Record<string, Cell>> = {};
-      for (const c of s.docs) docs[c.docType] = c;
-      const many = variants.length > 1;
-      variants.forEach((v, i) => {
-        const cells: Partial<Record<string, Cell>> = {};
-        let essential = false;
-        for (const r of chosen.filter((x) => x.variant === v)) {
-          essential ||= r.essential;
-          for (const [t, c] of Object.entries(r.cells)) if (c) cells[cellKey(r.paper, t as DocType)] = c;
-        }
-        rows.push({
-          year: s.year, session: s.session, label: many || opts.allVariants ? `${s.label}, variant ${v}` : s.label,
-          variant: v, essential, first: i === 0, sessionStatus: s.status, cells, ...(i === 0 ? { docs } : {}),
+      // The main papers, then each other code's series ("June 2021, Pakistan series (1524)").
+      const parts: { code: string | undefined; label: string }[] = [{ code: undefined, label: s.label }, ...(s.series ?? []).map((x) => ({ code: x.code, label: `${s.label}, ${x.label}` }))];
+      parts.forEach((part, pi) => {
+        const chosen = s.rows.filter((r) => r.series === part.code && (opts.allVariants || r.essential));
+        const variants = [...new Set(chosen.map((r) => r.variant))].sort((a, b) => {
+          const ea = chosen.some((r) => r.variant === a && r.essential);
+          const eb = chosen.some((r) => r.variant === b && r.essential);
+          return Number(eb) - Number(ea) || (a ?? 0) - (b ?? 0);
         });
+        const own = s.docs.filter((c) => (part.code ? c.fileName.startsWith(`${part.code}_`) : !(s.series ?? []).some((x) => c.fileName.startsWith(`${x.code}_`))));
+        const docs: Partial<Record<string, Cell>> = {};
+        for (const c of own) docs[c.docType] = c;
+        const many = variants.length > 1;
+        variants.forEach((v, i) => {
+          const cells: Partial<Record<string, Cell>> = {};
+          let essential = false;
+          for (const r of chosen.filter((x) => x.variant === v)) {
+            essential ||= r.essential;
+            for (const [t, c] of Object.entries(r.cells)) if (c) cells[cellKey(r.paper, t as DocType)] = c;
+          }
+          rows.push({
+            year: s.year, session: s.session, label: many || opts.allVariants ? `${part.label}, variant ${v}` : part.label,
+            variant: v, essential, first: pi === 0 && i === 0, sessionStatus: s.status, cells, ...(i === 0 ? { docs } : {}),
+            ...(part.code ? { series: part.code } : {}),
+          });
+        });
+        if (variants.length === 0 && own.length) {
+          rows.push({ year: s.year, session: s.session, label: part.label, variant: null, essential: true, first: pi === 0, sessionStatus: s.status, cells: {}, docs, ...(part.code ? { series: part.code } : {}) });
+        }
       });
-      if (variants.length === 0 && s.docs.length) {
-        rows.push({ year: s.year, session: s.session, label: s.label, variant: null, essential: true, first: true, sessionStatus: s.status, cells: {}, docs });
-      }
     }
     const specCells: Partial<Record<string, Cell>> = {};
     for (const r of g.specimens) for (const [t, c] of Object.entries(r.cells)) if (c) specCells[cellKey(r.paper, t as DocType)] = c;

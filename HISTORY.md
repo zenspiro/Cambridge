@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-04: Pakistan series codes (1524) sit with their subject
+
+**What:** Cambridge set IGCSE Physics under code 1524 for the Pakistan-only 2021 series. A new table links such codes to the library syllabus (1524 to Physics 0625, seeded). Files keep their real names (`1524_s21_qp_12.pdf`; "1524_j21_*" in collections is read as June 2021), are stored with Physics, and show in June 2021 as "Pakistan series (1524)": its own row on the subject map and its own section on the session page, with the same papers, and variant 2 essential like the rest. The folder upload also learns new codes by itself: a first page with a code the library does not have next to a library subject's name ("CHEMISTRY 1525/22, May/June 2021") links that code to the subject, reads those files again and says so on the page. The agent treats linked codes as the run's subject.
+
+**Why:** owner's report: five 1524 Pakistan-only files went to Needs your eye; Pakistani students need them.
+
+**Tested:** 124 unit tests (new: the owner's five files uploaded under their own names, storing and the checklist series, the map row, learning a code from a cover and refusing bad ones); 206 browser checks (new: a cover teaches the page a new code and the file is stored under it).
+
 ## 2026-11-04: The checklist no longer decides what may come in
 
 **What:** (1) any real Cambridge file of a library subject in the library (or run) years is accepted, whether or not the checklist asks for it; the checklist only says what is missing. The AI's answers are kept on that basis (before, a name the checklist did not list went to Needs your eye). A real file from another year is "not needed" with its name and never rejected for good, so a later run for that year takes it. (2) Any other two-letter Cambridge code (source files "sf", or one nobody has seen) is stored as it is and described in words ("Source files", or "Cambridge file (xx)"); a new code needs no code change, and the first page cannot turn it into another type. (3) Needs your eye: the AI's guess is already chosen, so you only check it. (4) "Download report" on the folder page saves a spreadsheet of every file and what happened to it, to send in one go instead of one case at a time.

@@ -21,6 +21,11 @@ export type CoverReading = {
   empty: boolean;
   /** The paper's title as the cover prints it ("Paper 2 Problem-solving and Programming"). */
   paperTitle?: { paper: number; name: string };
+  /**
+   * A code the library does not have, printed next to a subject name ("PHYSICS 1524/12"), with
+   * the session and year: a candidate for another code of a library syllabus.
+   */
+  unknownCode?: { code: string; subjectWord: string; session: "m" | "s" | "w"; year: number };
 };
 
 const SESSIONS: [RegExp, "m" | "s" | "w"][] = [
@@ -147,7 +152,12 @@ export function readCover(text: string, codes: readonly string[]): CoverReading 
     : `first page says ${found.join(", ")}`;
   if (!year) year = Number(/\b(?:February\s*\/\s*March|May\s*\/\s*June|October\s*\/\s*November|March|June|November)\s+(?:SESSION\s+)?(20\d\d|19\d\d)\b/i.exec(head)?.[1] ?? 0) || null;
   const title = coverPaperTitle(head);
-  return { name, code, year, why, cambridge, empty: false, ...(title ? { paperTitle: title } : {}) };
+  let unknownCode: CoverReading["unknownCode"];
+  if (!code && cambridge && session && session !== "y" && year) {
+    const m = /(?:^|\n)\s*([A-Z][A-Z ,&()]{2,40}?)\s*(\d{4})\s?\/\s?\d\d(?!\d)/.exec(head);
+    if (m && !/^(19|20)\d\d$/.test(m[2]!)) unknownCode = { code: m[2]!, subjectWord: m[1]!.trim(), session, year };
+  }
+  return { name, code, year, why, cambridge, empty: false, ...(title ? { paperTitle: title } : {}), ...(unknownCode ? { unknownCode } : {}) };
 }
 
 const TITLE_STOP = /\s*(?:\b(?:February|March|May|June|October|November|For examination|SPECIMEN|MARK SCHEME|PRE-RELEASE|INSERT|Paper\s+\d)\b.*)$/;
