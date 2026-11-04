@@ -2,6 +2,22 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-04: Subject map
+
+**What:** each subject's library page now opens on a map of the whole subject: per syllabus version its syllabus documents and specimen papers, then every exam session as a row with each paper as a named column group (question paper, insert, mark scheme, confidential instructions, only where the paper has them) and the examiner report and grade thresholds. Ticks download, crosses add. Essential variants by default, "All variants" shows the rest; coursework and speaking are named as marked by the school. "Download map" gives the same hierarchy as JSON with every file described in words, and the AI engine's catalog now serves exactly that structure.
+
+**Why:** owner request: one first view per subject that shows, for each year and session, every paper type plus the syllabus and other documents, for both people and AI.
+
+**Tested:** 93 unit tests (new: map columns, rows, variants, inserts, school-assessed parts, JSON descriptions); 169 browser checks (new: a table per version, a row per session, named paper columns, document and specimen bands, All variants, Download map, unknown subject).
+
+## 2026-11-04: Run summaries written by rules, reworded by AI
+
+**What:** the summary at the top of a run page is now written by rules from the run's counts: what was found, what was read, real limits (or "Nothing was cut short") and the next step. Workers AI only rewords it; a rewording that adds or changes a number, or claims a limit the draft does not have, is thrown away and the rules' text is shown.
+
+**Why:** owner feedback: the AI summary of the 4 Nov Physics run claimed "the search was limited by the number of website pages read", which was invented.
+
+**Tested:** 91 unit tests (new: summary facts, real limits named, a year no source has, the owner's exact invented sentence rejected, changed numbers rejected); 162 browser checks.
+
 ## 2026-11-04: The agent gets judgement (Workers AI) and stops reading what it does not need
 
 **What:** Drive folders are opened only when they can hold what the run wants: a 2026 run no longer walks 2002 to 2025, other subjects' and other sessions' folders stay closed, and each folder reports the years it holds. A bare number like "1524" is no longer taken for a subject code. Cloudflare Workers AI (no key) is called through a new signed endpoint for three things: which unclear folders ("Topical", "Extended") to open, what the files the rules could not name are, and a plain-English summary at the top of the run page. The AI gives parts (year, session, type, paper, variant); the name is built and kept only if the checklist asks for it, otherwise it goes to a new "Needs your eye" list. "Not needed" counts notes and topic questions with examples. Without AI the agent works as before, with a rules summary, and says AI was not used.

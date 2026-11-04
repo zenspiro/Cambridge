@@ -4,14 +4,16 @@ import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/auth/guard";
 import { getEnv } from "@/lib/env";
 import { AdminShell, Notice } from "@/components/AdminShell";
-import { CellLink, GroupPill, StatusLine } from "@/components/LibraryBits";
+import { CellLink, StatusLine } from "@/components/LibraryBits";
 import { Crumbs, Legend } from "@/components/LibraryTables";
 import { DOC_TYPE_LABELS, SESSION_LABELS } from "@/lib/config";
 import { getLibrarySettings, libraryYears } from "@/lib/settings";
 import { loadHeader, loadSyllabus } from "@/lib/library/catalog";
 import { essentialFor, filterChecklist, groupCells, type Cell, type ChecklistFilter } from "@/lib/library/checklist";
 import { describeFile, duration, loadPapers, paperLookup, routeText, TIER_LABELS } from "@/lib/library/papers";
-import { sessionHref, versionHref, type ExamSession } from "@/lib/library/slugs";
+import { type ExamSession } from "@/lib/library/slugs";
+import { buildSubjectMap } from "@/lib/library/map";
+import { SubjectMapVersion } from "@/components/SubjectMap";
 
 export const metadata: Metadata = { title: "Library" };
 
@@ -65,8 +67,6 @@ export default async function SyllabusOverview({
       ]
     : [];
 
-  // Overview grid: one row per year, one tile per session.
-  const bySession = new Map(list.sessions.map((g) => [`${g.year}${g.session}`, g]));
   const worst = [...list.sessions]
     .filter((g) => g.status.essentialHave < g.status.essentialTotal)
     .sort((a, b) => (b.status.essentialTotal - b.status.essentialHave) - (a.status.essentialTotal - a.status.essentialHave) || b.year - a.year)
@@ -76,6 +76,8 @@ export default async function SyllabusOverview({
   const newestPapers = papers.filter((p) => p.syllabus_id === newest?.version.id);
   const newestRoutes = routes.filter((r) => r.syllabus_id === newest?.version.id);
   const ownVariants = essentialFor(list.versions[0]?.version, lib);
+  const allVariants = q.variants === "all";
+  const map = buildSubjectMap(list, papers, { allVariants });
 
   return (
     <AdminShell current="/admin/library" title={`${header.subject_name} ${code}`}>
@@ -94,6 +96,28 @@ export default async function SyllabusOverview({
         )}
         <p><Link className="btn btn-small" href={`/admin/agent?code=${code}`}>Run the agent for this subject</Link></p>
       </section>
+
+      {!view.filtered ? (
+        <>
+        <section className="card stack">
+          <div className="row-between">
+            <h2 className="subtitle">Subject map</h2>
+            <span className="map-actions">
+              {allVariants
+                ? <Link className="btn btn-small" href={`/admin/library/${code}`}>Essential variants only</Link>
+                : <Link className="btn btn-small" href={`/admin/library/${code}?variants=all`}>All variants</Link>}
+              <a className="btn btn-small" href={`/admin/library/${code}/map`}>Download map</a>
+            </span>
+          </div>
+          <p className="muted">
+            Every syllabus version with its documents and specimens, then each exam session with every paper&apos;s files
+            ({allVariants ? "all variants" : "essential variants"}), newest first. A tick downloads the file; a cross or + adds it.
+            The map file holds the same structure for the AI.
+          </p>
+        </section>
+        {map.map((v) => <SubjectMapVersion key={v.id} code={code} v={v} />)}
+        </>
+      ) : null}
 
       <form className="card filters filters-compact" method="get" role="search">
         <label className="field field-search">
@@ -167,53 +191,6 @@ export default async function SyllabusOverview({
         </section>
       ) : (
         <>
-          <section className="card stack">
-            <h2 className="subtitle">Exam sessions</h2>
-            <p className="muted">Each tile shows essential files stored for that session. Click one to see its papers.</p>
-            <table className="year-grid">
-              <thead>
-                <tr>
-                  <th scope="col"><span className="sr-only">Year</span></th>
-                  {(["m", "s", "w"] as ExamSession[]).map((s) => <th scope="col" key={s}>{SESSION_LABELS[s]}</th>)}
-                </tr>
-              </thead>
-              <tbody>
-                {libraryYears(lib).map((y) => (
-                  <tr key={y}>
-                    <th scope="row">{y}</th>
-                    {(["m", "s", "w"] as ExamSession[]).map((s) => {
-                      const g = bySession.get(`${y}${s}`);
-                      return (
-                        <td key={s}>
-                          {g ? (
-                            <Link className={`tile tile-${g.status.essentialHave === g.status.essentialTotal ? "ok" : g.status.essentialHave > 0 ? "part" : "none"}`}
-                              href={sessionHref(code, y, s)} aria-label={`${g.label}: ${g.status.essentialHave} of ${g.status.essentialTotal} essential`}>
-                              {g.status.essentialHave}/{g.status.essentialTotal}
-                            </Link>
-                          ) : (
-                            <span className="tile tile-off" title="Not public yet or not in the library">·</span>
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
-
-          <section className="card stack">
-            <h2 className="subtitle">Syllabus and specimens</h2>
-            <div className="tiles-row">
-              {list.versions.map((g) => (
-                <Link className="version-tile" key={g.version.id} href={versionHref(code, g.version.valid_from_year)}>
-                  <span>{g.version.valid_from_year} to {g.version.valid_to_year}</span>
-                  <GroupPill status={g.status} />
-                </Link>
-              ))}
-            </div>
-          </section>
-
           {newest && newestPapers.length > 0 ? (
             <section className="card stack">
               <h2 className="subtitle">Papers ({newest.version.valid_from_year} to {newest.version.valid_to_year} syllabus)</h2>

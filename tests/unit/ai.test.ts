@@ -71,9 +71,9 @@ test("AI requests: running run only, capped per run, checked against the checkli
   assert.deepEqual(await aiTask(db, { jobId: id, task: "names", files: [] }, stub), { ok: false, status: 400, error: "bad_request" });
   assert.deepEqual(await aiTask(db, { jobId: id, task: "drop tables" }, stub), { ok: false, status: 400, error: "bad_request" });
   const failing = async () => { throw new Error("JSON Mode couldn't be met"); };
-  assert.deepEqual(await aiTask(db, { jobId: id, task: "summary", facts: {} }, failing), { ok: false, status: 502, error: "ai_failed" });
+  assert.deepEqual(await aiTask(db, { jobId: id, task: "summary", draft: "Dry run for IGCSE Physics (0625): found 3 new files." }, failing), { ok: false, status: 502, error: "ai_failed" });
   const away = async () => { throw Object.assign(new Error("ai_unavailable"), { unavailable: true }); };
-  assert.deepEqual(await aiTask(db, { jobId: id, task: "summary", facts: {} }, away), { ok: false, status: 503, error: "ai_unavailable" });
+  assert.deepEqual(await aiTask(db, { jobId: id, task: "summary", draft: "Dry run for IGCSE Physics (0625): found 3 new files." }, away), { ok: false, status: 503, error: "ai_unavailable" });
   for (let i = 0; i < AGENT.aiCallsPerRun; i++) await ask();
   assert.deepEqual(await ask(), { ok: false, status: 429, error: "limit" }, "calls per run are capped");
 });

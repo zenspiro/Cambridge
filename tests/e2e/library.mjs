@@ -63,15 +63,33 @@ for (const width of [DESKTOP]) {
   // Subject overview: status, grid of sessions, versions, papers.
   await page.goto(BASE + "/admin/library/0625");
   check((await page.locator("nav.crumbs", { hasText: "Cambridge IGCSE" }).count()) === 1, `${width}px breadcrumb shows the hierarchy`);
-  check((await page.locator("table.year-grid a.tile").count()) >= 10, `${width}px overview grid has a tile per session`);
-  check((await page.locator("table.year-grid tbody tr").count()) === 5, `${width}px one grid row per library year`);
+  // The subject map: one table per syllabus version, a row per session, papers as column groups.
+  check((await page.locator("table.map-table").count()) >= 2, `${width}px subject map has a table per syllabus version`);
+  check((await page.locator("table.map-table tbody tr").count()) >= 10, `${width}px subject map has a row per exam session`);
+  check((await page.locator("table.map-table thead", { hasText: "Multiple Choice (Extended)" }).count()) >= 1, `${width}px map columns are named papers`);
+  check((await page.locator("table.map-table thead abbr", { hasText: "QP" }).count()) >= 6 && (await page.locator("table.map-table thead abbr", { hasText: "ER" }).count()) >= 1,
+    `${width}px map shows each paper's file types and the whole-session files`);
+  check((await page.locator(".map-docs", { hasText: "Syllabus documents" }).count()) >= 2 && (await page.locator(".map-docs", { hasText: "Specimen papers" }).count()) >= 1,
+    `${width}px map shows syllabus documents and specimens per version`);
+  check((await page.locator("table.map-table tbody tr", { hasText: "variant 1" }).count()) === 0, `${width}px the map shows essential variants only by default`);
   check((await page.locator(".info-table", { hasText: "Multiple Choice (Extended)" }).count()) === 1, `${width}px papers table names the papers`);
   check((await page.locator(".routes", { hasText: "Paper 2 + Paper 4 + (Paper 5 or Paper 6), grades A* to G" }).count()) === 1, `${width}px routes are shown`);
-  check((await page.locator("a.cell").count()) <= 10, `${width}px overview stays short (no file tables)`);
   await noOverflow("subject overview");
+  await page.goto(BASE + "/admin/library/0625?variants=all");
+  check((await page.locator("table.map-table tbody tr", { hasText: "variant 1" }).count()) >= 1, `${width}px All variants adds the other variants`);
+  // March has only variant 2 in the checklist; any other stored file has its own place on the map.
+  const onMap = !good.includes("_m") || good.endsWith("2.pdf");
+  check((await page.locator(`table.map-table a.cell-have[title^="${good}:"]`).count()) === (onMap ? 1 : 0), `${width}px a stored file is ticked in its place on the map`);
+  const mapFile = await page.request.get(BASE + "/admin/library/0625/map");
+  const mapJson = mapFile.ok() ? await mapFile.json() : null;
+  check(mapFile.headers()["content-disposition"]?.includes("0625-library-map.json") && mapJson?.label === "IGCSE Physics (0625)" &&
+    [...mapJson.versions.flatMap((v) => v.sessions.flatMap((s) => s.files)), ...mapJson.otherFiles].some((f) => f.fileName === good && f.stored && /Paper/.test(f.description)),
+    `${width}px Download map gives the same hierarchy as JSON, files described in words`);
+  check((await page.request.get(BASE + "/admin/library/9999/map")).status() === 404, `${width}px map of an unknown subject is not found`);
+  await page.goto(BASE + "/admin/library/0625");
 
   // A session page: papers with names, tier tags, essential variant 2 first.
-  await page.locator('a.tile[aria-label^="June 2024"]').click();
+  await page.locator("table.map-table th a", { hasText: /^June 2024$/ }).first().click();
   await page.waitForURL(/\/admin\/library\/0625\/2024\/june$/);
   check((await page.locator("nav.crumbs", { hasText: "June 2024" }).count()) === 1, `${width}px session page has its breadcrumb`);
   check((await page.locator("h2", { hasText: "Essential: variant 2" }).count()) === 1, `${width}px variant 2 is essential`);
@@ -93,7 +111,7 @@ for (const width of [DESKTOP]) {
   check(download.suggestedFilename() === good, `${width}px download is an attachment with the right name`);
 
   await page.goto(BASE + "/admin/library/0625?year=2099&type=%3Cscript%3E&paper=9&status=x");
-  check((await page.locator("table.year-grid").count()) === 1, `${width}px junk filters are ignored safely`);
+  check((await page.locator("table.map-table").count()) >= 1, `${width}px junk filters are ignored safely`);
   await page.goto(BASE + "/admin/library/0625?status=missing");
   check((await page.locator(".result-row .cell-have").count()) === 0 && (await page.locator(".result-row .cell-miss").count()) > 0, `${width}px Missing filter shows only missing essentials`);
   await page.goto(BASE + "/admin/library/0625?q=mark+scheme+paper+4&year=2024");

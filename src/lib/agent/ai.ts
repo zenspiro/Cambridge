@@ -175,18 +175,20 @@ function buildName(code: string, d: Record<string, unknown>): string | null {
 }
 
 // ---------- summary ----------
+// The facts are written by rules (runSummary.ts); the model only rewords them and checkRewrite()
+// rejects any version that changes a number or invents a limit.
 
 export const SUMMARY_SCHEMA = { type: "object", properties: { summary: { type: "string" } }, required: ["summary"] };
 
-export function summaryPrompt(scope: AiScope, facts: Record<string, unknown>) {
+export function summaryPrompt(draft: string) {
   return [
     { role: "system" as const, content: SYSTEM },
     {
       role: "user" as const,
       content:
-        `${scopeText(scope)}\nWrite three to five short plain sentences for the librarian: what this run found, why ` +
-        "nothing (or little) was found if so, and the one most useful next step. Use only these facts; do not invent " +
-        "numbers. No lists, no dashes.\nFacts: " + JSON.stringify(facts).slice(0, 6000),
+        "Reword this run summary for a librarian so it reads naturally, in three to five short sentences. Keep every " +
+        "number exactly as written and keep its meaning. Add nothing: no new facts, numbers, limits, causes or advice. " +
+        "No lists, no dashes.\nSummary: " + clean(draft, 1500),
     },
   ];
 }
