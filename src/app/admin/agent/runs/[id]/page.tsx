@@ -14,6 +14,7 @@ import { formatBytes } from "@/lib/library/labels";
 import { sessionHref, versionHref } from "@/lib/library/slugs";
 import { AGENT } from "@/lib/config";
 import { ReviewList } from "@/components/ReviewList";
+import { CheckList } from "@/components/CheckList";
 import { acceptChoices, decisionKey, decisionsFor, readReviewItems } from "@/lib/agent/review";
 import { dateFmt, REASON_LABELS, timeFmt } from "@/lib/library/labels";
 
@@ -86,7 +87,7 @@ export default async function RunPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ cancel?: string; ref?: string; r?: string; at?: string }>;
+  searchParams: Promise<{ cancel?: string; ref?: string; r?: string; f?: string; at?: string }>;
 }) {
   await requireAdmin();
   const { id } = await params;
@@ -117,6 +118,15 @@ export default async function RunPage({
   const [decisions, choices] = done && reviewItems.some((it) => it.driveId)
     ? await Promise.all([decisionsFor(env.DB, reviewItems), acceptChoices(env.DB, p)])
     : [new Map(), [] as string[]];
+  const checkItems = arr(rep.check?.items, 300).filter((x) => x && typeof x.id === "string" && typeof x.fileName === "string");
+  const checkNow = new Map<string, string>();
+  if (checkItems.length) {
+    const { results } = await env.DB
+      .prepare(`SELECT id, file_name FROM source_document WHERE id IN (SELECT value FROM json_each(?1))`)
+      .bind(JSON.stringify(checkItems.map((x) => x.id)))
+      .all<{ id: string; file_name: string }>();
+    for (const r of results) checkNow.set(r.id, r.file_name);
+  }
   const isStored = (name: string) => !!cellsByName.get(name)?.doc;
   const acceptedWaiting = reviewItems.filter((it) => {
     const d = it.driveId && it.siteId ? decisions.get(decisionKey(it.siteId, it.driveId)) : undefined;
@@ -147,6 +157,12 @@ export default async function RunPage({
           <p className="run-summary">
             {rep.summary.slice(0, 900)}
             <span className="muted"> ({rep.summaryBy === "ai" ? "summary written by the AI from this run's counts" : "summary"})</span>
+          </p>
+        ) : null}
+        {rep.cover?.read ? (
+          <p className="muted">
+            Front page reader: read the first page of {rep.cover.read} unclear file{rep.cover.read === 1 ? "" : "s"} and named {rep.cover.named}
+            {rep.cover.aiNamed ? ` (${rep.cover.aiNamed} with the AI's help)` : ""}.
           </p>
         ) : null}
         {rep.ai?.note ? <p className="muted">{String(rep.ai.note).slice(0, 200)}.</p> : null}
@@ -194,7 +210,15 @@ export default async function RunPage({
             <a className="link" href={logUrl} rel="noopener noreferrer" target="_blank">GitHub log for this run</a>
           </p>
         ) : null}
-        {done && run.status === "succeeded" ? (
+        {done && run.status === "succeeded" && p.mode === "check" ? (
+          <ul className="stats">
+            <li><strong>{rep.check?.read ?? 0}</strong> first pages read</li>
+            <li><strong>{rep.check?.matched ?? 0}</strong> match their names</li>
+            <li><strong>{rep.check?.items?.length ?? 0}</strong> to look at</li>
+            <li><strong>{rep.check?.unreadable ?? 0}</strong> could not be checked</li>
+          </ul>
+        ) : null}
+        {done && run.status === "succeeded" && p.mode !== "check" ? (
           <ul className="stats">
             <li><strong>{rep.pagesVisited ?? 0}</strong> {rep.pagesVisited === 1 ? "page" : "pages"} read</li>
             <li><strong>{rep.linksFound ?? 0}</strong> PDF {rep.linksFound === 1 ? "link" : "links"}</li>
@@ -310,6 +334,8 @@ export default async function RunPage({
       <FileList title={p.mode === "dry" ? "Would download" : "Found"} files={candidates.map((c) => ({ name: c.name, note: c.why && c.why !== "Cambridge file name" ? `worked out: ${c.why}` : undefined }))} describe={describe}
         note={p.mode === "dry" ? "Nothing has been downloaded yet. Press the button above to fetch these." : undefined} />
       <FileList title="Stored" files={arr(rep.stored).map((name) => ({ name }))} describe={describe} />
+      <FileList title="Renamed from their first page" files={arr(rep.renamed, 200).map((x) => ({ name: x.to, note: `the source called it ${x.from}` }))} describe={describe}
+        note="The first page of these showed they are not the file their name said, so they were stored under the right name." />
       <FileList title="Not stored" files={arr(rep.failed).map((f) => ({ name: f.name, note: reasonText(f.reason) }))} describe={describe} />
       {acceptedWaiting > 0 ? (
         <section className="card stack">
@@ -323,6 +349,8 @@ export default async function RunPage({
           </form>
         </section>
       ) : null}
+      <CheckList runId={run.id} items={checkItems} now={checkNow} describe={describe}
+        message={q.f} at={q.f && /^\d{1,3}$/.test(q.at ?? "") ? Number(q.at) : undefined} />
       <ReviewList runId={run.id} items={reviewItems} decisions={decisions} choices={choices} stored={isStored} describe={describe}
         message={q.r} at={q.r && /^\d{1,3}$/.test(q.at ?? "") ? Number(q.at) : undefined} />
       <List title={`Not needed: ${Number(rep.notNeeded?.count ?? 0)} files, examples`} items={arr(rep.notNeeded?.examples, 10)}

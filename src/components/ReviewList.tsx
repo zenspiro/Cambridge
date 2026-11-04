@@ -37,9 +37,10 @@ export function ReviewList({
       <details open={!!message || undefined}>
         <summary className="subtitle summary">Needs your eye ({items.length}{open && open !== items.length ? `, ${open} undecided` : ""})</summary>
         <p className="muted">
-          The agent could not place these, so nothing was fetched. If one is a paper you want, choose which file it is and
-          press Accept: the next download run fetches it under that name. Reject the rest so later runs skip them. Not in the
-          list? Add it by hand from the library.
+          The agent could not place these, so they were not stored. A download run reads the first page of unclear files
+          before they come here. If one is a paper you want, choose which file it is and press Accept: the next download run
+          fetches it under that name. Reject the rest so later runs skip them. Not in the list? Add it by hand from the
+          library.
         </p>
         <ul className="list">
           {items.map((it, i) => {

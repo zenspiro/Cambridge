@@ -73,12 +73,15 @@ export type Drive = ReturnType<typeof makeDrive>;
  * What a Drive refusal means, as a reason code for the run report. "quota" and "rate" are
  * Google limiting downloads (busy shared files, or too many in a row); they pass with time.
  */
-export function driveRefusal(e: DriveError): "drive_quota" | "drive_rate" | "drive_forbidden" | "drive_missing" | "drive_too_big" | "drive_error" {
+export function driveRefusal(e: DriveError): "drive_quota" | "drive_rate" | "drive_throttled" | "drive_forbidden" | "drive_missing" | "drive_too_big" | "drive_error" {
   const r = e.reason.toLowerCase();
   if (e.status === 413) return "drive_too_big";
   if (e.status === 404) return "drive_missing";
   if (/quota/.test(r)) return "drive_quota";
   if (e.status === 429 || /rate|limit/.test(r)) return "drive_rate";
+  // A bare 403 with no reason after a run of good downloads is Google limiting automated,
+  // signed-out downloads (owner's run 4 Nov 2026: 18 stored, then 403s; the files open fine).
+  if (e.status === 403 && !r) return "drive_throttled";
   if (e.status === 403) return "drive_forbidden";
   return "drive_error";
 }

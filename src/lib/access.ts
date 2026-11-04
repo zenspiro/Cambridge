@@ -15,4 +15,5 @@ export const PUBLIC_ROUTES: readonly string[] = [
   "api/agent/progress/route.ts",
   "api/agent/catalog/route.ts",
   "api/agent/ai/route.ts",
+  "api/agent/doc/route.ts",
 ];

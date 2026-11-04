@@ -27,10 +27,13 @@ export function readEvents(json: string): import("./runs.ts").RunEvent[] {
 }
 
 export function describeRun(p: RunParams): string {
-  const mode = p.mode === "dry" ? "Dry run" : "Download";
+  const mode = p.mode === "dry" ? "Dry run" : p.mode === "check" ? "Library check" : "Download";
   const sessions = p.sessions.map((s) => SESSION_LABELS[s] ?? s).join(", ");
   return `${mode}: ${p.years.join(", ")} (${sessions})`;
 }
+
+/** One stored file whose first page does not match its name (library check). */
+export type CheckItem = { id: string; fileName: string; coverName: string | null; why: string };
 
 /** What the agent sends back in its report. Read defensively: shown as text only. */
 export type RunReport = {
@@ -50,6 +53,12 @@ export type RunReport = {
   review?: unknown[];
   /** Files the AI judged not to be original Cambridge files. */
   notNeeded?: { count: number; examples: string[] };
+  rejected?: number;
+  /** Library check: stored files read by their first page, and those that do not match. */
+  check?: { read: number; matched: number; unreadable: number; items: CheckItem[] };
+  cover?: { read: number; named: number; aiNamed: number };
+  renamed?: { from: string; to: string }[];
+  heldBack?: number;
   /** Drive folders not read because their names are for other subjects. */
   driveSkipped?: number;
   stored?: string[];
@@ -77,10 +86,12 @@ export const arr = <T>(v: T[] | undefined, max = 1000): T[] => (Array.isArray(v)
 export const DRIVE_REASONS: Record<string, string> = {
   drive_quota: "Google Drive's download limit for this file was reached (common for busy shared files); it lifts with time",
   drive_rate: "Google Drive asked the agent to slow down",
-  drive_forbidden: "Google Drive refused the download (the owner may have turned downloads off)",
+  drive_throttled: "Google Drive is limiting automated downloads for now (the file itself is fine); the next download run tries again",
+  drive_forbidden: "Google Drive refused the download for this file",
   drive_missing: "Google Drive could not find the file any more",
   drive_too_big: "the file is larger than the library allows",
   drive_error: "Google Drive did not answer properly",
+  cover_mismatch: "held back: its first page says it is a different file (see Needs your eye)",
   drive_paused: "not tried: Google Drive was refusing downloads, so the agent stopped asking. Run the download again later",
 };
 

@@ -3,10 +3,11 @@
 // reply before anything uses it:
 //   folders: which subfolders, whose names the rules cannot read, may hold this run's papers.
 //   names:   what files the rules could not name are (parts only; the name is built here).
+//   cover:   what a file is from the text of its first page, when the rules are unsure.
 //   summary: the run in plain English for the run page.
 // The model never stores or fetches anything. Names it suggests must be files the checklist
 // asks for in this run, or they go to "needs your eye". Pure apart from the `run` function.
-import { examName, parseCambridgeName, type DocType } from "../library/names.ts";
+import { nameFromParts, type DocType } from "../library/names.ts";
 
 /** Calls the model with chat messages and a JSON schema; returns its parsed JSON or text. */
 export type ModelRun = (messages: { role: "system" | "user"; content: string }[], schema: object, maxTokens: number) => Promise<unknown>;
@@ -124,6 +125,25 @@ export function namesPrompt(scope: AiScope, files: { path: string[]; name: strin
   ];
 }
 
+/** One file's first page text: the same answer shape as `names` (one item, i = 0). */
+export function coverPrompt(scope: AiScope, where: string, text: string) {
+  return [
+    { role: "system" as const, content: SYSTEM },
+    {
+      role: "user" as const,
+      content:
+        `${scopeText(scope)}\nThe rules could not fully read the first page of this PDF. Its place: ${clean(where, 300)}.\n` +
+        "Using the first page text below, give one item with i = 0 and decide:\n" +
+        '- kind "paper": an original Cambridge file. Give year, session (m = Feb/March, s = May/June, w = Oct/Nov, ' +
+        "y = specimen or syllabus document), type (qp, ms, in, ci, er, gt, sp, sm, sy, su, gd), paper number and " +
+        'variant (component 42 is paper 4 variant 2; a specimen "0625/02" is paper 2).\n' +
+        '- kind "not_needed": not an original Cambridge file.\n' +
+        '- kind "unsure": the page does not tell you. Never invent a year, paper or variant.\n' +
+        "Give a short reason.\nFirst page text:\n" + clean(text.replace(/\n/g, " / "), 1500),
+    },
+  ];
+}
+
 export type NamedFile = { i: number; outcome: "named" | "not_needed" | "review"; name?: string; why: string };
 
 /**
@@ -147,31 +167,12 @@ export function readNames(reply: unknown, count: number, code: string, wanted: R
       out[i] = { i, outcome: "review", why: why || "unsure" };
       continue;
     }
-    const name = buildName(code, d);
+    const name = nameFromParts(code, d);
     if (!name) out[i] = { i, outcome: "review", why: `parts do not make a Cambridge name (${why})` };
     else if (!wanted.has(name)) out[i] = { i, outcome: "review", name, why: `${name} is not a file this run looks for (${why})` };
     else out[i] = { i, outcome: "named", name, why };
   }
   return out;
-}
-
-function buildName(code: string, d: Record<string, unknown>): string | null {
-  const year = Number(d.year);
-  const session = d.session as "m" | "s" | "w" | "y";
-  const type = d.type as DocType;
-  const paper = d.paper === undefined || d.paper === null ? null : Number(d.paper);
-  const variant = d.variant === undefined || d.variant === null ? null : Number(d.variant);
-  if (!Number.isInteger(year) || year < 2000 || year > 2099 || !["m", "s", "w", "y"].includes(session) || !TYPES.includes(type)) return null;
-  const yy = String(year % 100).padStart(2, "0");
-  let name: string;
-  if (session === "y") {
-    if (type === "sy" || type === "su" || type === "gd") name = `${code}_y${yy}_${type}.pdf`;
-    else if (paper && Number.isInteger(paper)) name = `${code}_y${yy}_${type === "qp" ? "sp" : type === "ms" ? "sm" : type}_${paper}.pdf`;
-    else return null;
-  } else if (type === "er" || type === "gt") name = examName(code, session, year, type);
-  else if (paper && variant && Number.isInteger(paper) && Number.isInteger(variant)) name = examName(code, session, year, type, paper, variant);
-  else return null;
-  return parseCambridgeName(name) ? name : null;
 }
 
 // ---------- summary ----------

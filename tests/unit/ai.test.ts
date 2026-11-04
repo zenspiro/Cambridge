@@ -77,3 +77,19 @@ test("AI requests: running run only, capped per run, checked against the checkli
   for (let i = 0; i < AGENT.aiCallsPerRun; i++) await ask();
   assert.deepEqual(await ask(), { ok: false, status: 429, error: "limit" }, "calls per run are capped");
 });
+
+test("AI cover task: first page text in, a checked name out", async () => {
+  const db = testDb();
+  const p = { code: "0625", years: [2024], sessions: ["s" as const], mode: "download" as const };
+  const id = (await startRun(db, p, "platform-admin", T))!;
+  await claimRun(db, id, T + 1);
+  let seen = "";
+  const stub = async (m: { content: string }[]) => {
+    seen = m[1]!.content;
+    return { files: [{ i: 0, kind: "paper", year: 2024, session: "s", type: "ms", paper: 4, variant: 2, why: "cover" }] };
+  };
+  const r = await aiTask(db, { jobId: id, task: "cover", where: "Physics / Scan 3.pdf", text: "PHYSICS 0625/42\nMay/June 2024\nMARK SCHEME" }, stub as never);
+  assert.deepEqual(r, { ok: true, data: { file: { i: 0, outcome: "named", name: "0625_s24_ms_42.pdf", why: "cover" } } });
+  assert.match(seen, /PHYSICS 0625\/42 \/ May\/June 2024 \/ MARK SCHEME/);
+  assert.deepEqual(await aiTask(db, { jobId: id, task: "cover", text: "" }, stub as never), { ok: false, status: 400, error: "bad_request" });
+});

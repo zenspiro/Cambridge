@@ -25,5 +25,20 @@ export async function POST(request: Request) {
       await a.db.prepare(`UPDATE source_drive_folder SET last_seen = ?2, last_seen_at = ?3 WHERE folder_id = ?1`).bind(id, summary, Date.now()).run();
     }
   }
+  // Files the front page reader judged not original Cambridge files: later runs skip them
+  // (never over a decision the owner made).
+  const rejects = (body?.report as { autoRejected?: unknown } | undefined)?.autoRejected;
+  if (done && Array.isArray(rejects)) {
+    for (const x of rejects.slice(0, 300)) {
+      const r = x as { siteId?: unknown; driveId?: unknown; where?: unknown };
+      if (typeof r.siteId !== "string" || typeof r.driveId !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(r.siteId) || !/^[A-Za-z0-9_-]{10,100}$/.test(r.driveId)) continue;
+      await a.db
+        .prepare(`INSERT INTO review_decision (id, site_id, item_key, decision, file_name, label, run_id, decided_by, decided_at)
+                  SELECT ?1, id, ?2, 'reject', NULL, ?3, ?4, 'agent', ?5 FROM source_site WHERE id = ?6 AND kind = 'gdrive'
+                  ON CONFLICT (site_id, item_key) DO NOTHING`)
+        .bind(crypto.randomUUID(), r.driveId, typeof r.where === "string" ? r.where.slice(0, 600) : "", jobId, Date.now(), r.siteId)
+        .run();
+    }
+  }
   return done ? json({ ok: true }) : json({ error: "no_run" }, 409);
 }

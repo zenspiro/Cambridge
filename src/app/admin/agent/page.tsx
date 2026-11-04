@@ -79,6 +79,7 @@ export default async function AgentPage({ searchParams }: { searchParams: Promis
           <div className="checks">
             <label className="check"><input type="radio" name="mode" value="dry" defaultChecked /> Dry run (list only)</label>
             <label className="check"><input type="radio" name="mode" value="download" /> Download missing files</label>
+            <label className="check"><input type="radio" name="mode" value="check" /> Check library (read the first page of stored files)</label>
           </div>
         </fieldset>
         <button className="btn btn-primary btn-block" type="submit">Run agent</button>
@@ -96,7 +97,7 @@ export default async function AgentPage({ searchParams }: { searchParams: Promis
             {runs.map((r) => {
               const p = JSON.parse(r.params) as RunParams;
               const rep = readReport(r.result);
-              const n = p.mode === "dry" ? `${arr(rep.candidates).length} to fetch` : `${arr(rep.stored).length} stored`;
+              const n = p.mode === "dry" ? `${arr(rep.candidates).length} to fetch` : p.mode === "check" ? `${rep.check?.items?.length ?? 0} to look at` : `${arr(rep.stored).length} stored`;
               return (
                 <li className="list-row" key={r.id}>
                   <span className="doc-main">

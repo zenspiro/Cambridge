@@ -184,7 +184,7 @@ try {
 
   // 8. Google Drive folders: the agent works out what each folder and file is.
   sql(`UPDATE source_site SET enabled = 0 WHERE id = 'local-test'`);
-  sql(`DELETE FROM source_document WHERE file_name IN ('0625_s24_qp_12.pdf','0625_s24_ms_12.pdf','0625_s24_er.pdf','0625_y23_sp_2.pdf')`);
+  sql(`DELETE FROM source_document WHERE file_name IN ('0625_s24_qp_12.pdf','0625_s24_ms_12.pdf','0625_s24_er.pdf','0625_y23_sp_2.pdf','0625_s24_ms_41.pdf','0625_s24_ms_23.pdf','0625_s24_qp_13.pdf')`);
   // The seeded Revisiontown Drive source is parked for the test; the test source has its own address.
   sql(`UPDATE source_site SET enabled = 0 WHERE kind = 'gdrive' AND id <> 'local-drive'`);
   sql(`INSERT OR REPLACE INTO source_site (id, name, base_url, enabled, notes, created_at, kind) VALUES ('local-drive', 'Test Drive', 'https://drive.google.com/e2e-test/', 1, '', 2, 'gdrive')`);
@@ -201,11 +201,11 @@ try {
   check(r5.status === 0, `drive dry run exits cleanly${r5.status ? ": " + r5.stderr : ""}`);
   const drep = JSON.parse(rows(`SELECT result FROM job WHERE id = '${dd}'`)[0].result);
   const dnames = drep.candidates.map((c) => c.name).sort();
-  check(dnames.join(",") === "0625_s24_er.pdf,0625_s24_gt.pdf,0625_s24_ms_12.pdf,0625_s24_qp_12.pdf,0625_y23_sp_2.pdf", `drive: files worked out from folder and file names (${dnames.join(",")})`);
+  check(dnames.join(",") === "0625_s24_er.pdf,0625_s24_gt.pdf,0625_s24_ms_12.pdf,0625_s24_qp_12.pdf,0625_s24_qp_13.pdf,0625_y23_sp_2.pdf", `drive: files worked out from folder and file names (${dnames.join(",")})`);
   const notes = drep.review?.find((u) => u.where?.endsWith("Revision notes.pdf"));
   check(notes?.why?.includes("could not tell the document type") && notes.driveId === "DRVFILE0004" && notes.by === "rules", "drive: unclear files go to Needs your eye with the reason");
   const root = drep.driveFolders.find((f) => f.folderId === "ROOTFOLDER01");
-  check(root?.looksLike === "IGCSE Physics 0625" && root.pdfs === 7 && root.otherSubjects["0620"] === 1, "drive: the folder is understood (subject, counts, other subjects)");
+  check(root?.looksLike === "IGCSE Physics 0625" && root.pdfs === 9 && root.otherSubjects["0620"] === 1, "drive: the folder is understood (subject, counts, other subjects)");
   check(drep.driveFolders.find((f) => f.folderId === "PRIVATEFOLDR")?.error?.includes("refused access"), "drive: a private folder is reported, not fatal");
   check(drep.driveSkipped === 1 && !drep.driveFolders.some((f) => f.folderId === "OTHERSUBJECT01") && !fake.driveHits.some((h) => h.path.includes("OTHERSUBJECT01")),
     "drive: folders for other subjects are skipped without a call to Google");
@@ -242,12 +242,19 @@ try {
   const r6 = await runAgent(dl2, 20, driveEnv);
   check(r6.status === 0, `drive download exits cleanly${r6.status ? ": " + r6.stderr : ""}`);
   const dstored = rows(`SELECT file_name, source_site_id, source_url FROM source_document WHERE job_id = '${dl2}' ORDER BY file_name`);
-  check(dstored.length === 5 && dstored.every((d) => d.source_site_id === "local-drive" && /^https:\/\/drive\.google\.com\/file\/d\/DRVFILE000\d\/view$/.test(d.source_url)), "drive: five files stored, tagged with their Drive link");
+  check(dstored.length === 7 && dstored.every((d) => d.source_site_id === "local-drive" && /^https:\/\/drive\.google\.com\/file\/d\/DRVFILE00\d\d\/view$/.test(d.source_url)), `drive: seven files stored, tagged with their Drive link (${dstored.map((d) => d.file_name).join(",")})`);
+  check(dstored.some((d) => d.file_name === "0625_s24_ms_41.pdf" && d.source_url.includes("DRVFILE0010")), "cover: an unnamed file is named from its first page and stored");
+  check(dstored.some((d) => d.file_name === "0625_s24_ms_23.pdf" && d.source_url.includes("DRVFILE0011")) && !dstored.some((d) => d.file_name === "0625_s24_qp_13.pdf"),
+    "cover: a misnamed file is stored under the name its first page gives");
   check(dstored.some((d) => d.file_name === chosen && d.source_url.includes("DRVFILE0004")), "review: the accepted file is fetched under the chosen name");
   const dlrep = JSON.parse(rows(`SELECT result FROM job WHERE id = '${dl2}'`)[0].result);
   check(dlrep.failed.some((f) => f.name === "0625_s24_gt.pdf" && f.reason === "drive_quota"), "drive: a download Google refuses is recorded with Google's reason (quota)");
+  check(dlrep.cover?.read === 1 && dlrep.cover.named === 1 && dlrep.renamed?.[0]?.to === "0625_s24_ms_23.pdf" && /first page of 1 unclear file and named 1/.test(dlrep.summary ?? ""),
+    "cover: the report and summary count first pages read and files renamed");
   await page.goto(BASE + `/admin/agent/runs/${dl2}`);
   check((await page.locator("main").innerText()).includes("download limit for this file was reached"), "drive: the run page explains a refused download in words");
+  check((await page.locator("text=Front page reader: read the first page of 1 unclear file and named 1").count()) === 1 && (await page.locator("summary", { hasText: "Renamed from their first page (1)" }).count()) === 1,
+    "cover: the run page shows what the front page reader did");
   // A rejected file is skipped by later runs.
   await page.goto(`${BASE}/admin/agent/runs/${dd}`);
   await page.click("#review summary");
@@ -265,7 +272,7 @@ try {
   sql(`DELETE FROM source_document WHERE file_name = '${chosen}' AND job_id = '${dl2}'`);
   await page.goto(BASE + "/admin/sources");
   const folderLine = page.locator(".doc-main", { hasText: "looks like IGCSE Physics 0625" });
-  check((await folderLine.count()) === 1 && (await folderLine.textContent())?.includes("7 PDFs in 4 folders"), "drive: sources page shows what the folder held");
+  check((await folderLine.count()) === 1 && (await folderLine.textContent())?.includes("9 PDFs in 4 folders"), "drive: sources page shows what the folder held");
   check(!(await page.locator("main").innerText()).includes("ROOTFOLDER01"), "drive: sources page shows names, not folder codes");
   const fileApi = await apiRequest.newContext({ baseURL: BASE });
   const pdfBody = new TextEncoder().encode("%PDF-1.4\n%%EOF");
@@ -276,6 +283,29 @@ try {
   check([403, 409].includes(sneaky.status()), "drive: only Drive file links are accepted for a Drive source");
   await fileApi.dispose();
   sql(`UPDATE source_site SET enabled = 1 WHERE id = 'local-test'`);
+
+  // 8b. Library check: a stored file whose first page says it is another file can be renamed.
+  sql(`DELETE FROM source_document WHERE file_name IN ('0625_s24_qp_42.pdf','0625_s24_ms_43.pdf')`);
+  const { makePdf } = await import("../unit/helpers/pdf.ts");
+  await page.goto(BASE + "/admin/library/upload");
+  await page.setInputFiles("#files", [{ name: "0625_s24_qp_42.pdf", mimeType: "application/pdf",
+    buffer: Buffer.from(makePdf(["Cambridge IGCSE", "PHYSICS 0625/43", "Paper 4 Theory (Extended) May/June 2024", "MARK SCHEME", `check ${Date.now()}`], { compress: true })) }]);
+  await page.click("form[action='/admin/library/upload/send'] button[type=submit]");
+  await page.waitForURL(/\/admin\/library\/upload\?job=/);
+  const ck = newRun("check");
+  const r8 = await runAgent(ck, 20);
+  const crep = JSON.parse(rows(`SELECT result FROM job WHERE id = '${ck}'`)[0].result);
+  const mism = crep.check?.items?.find((x) => x.fileName === "0625_s24_qp_42.pdf");
+  check(r8.status === 0 && mism?.coverName === "0625_s24_ms_43.pdf" && crep.check.matched >= 2 && /Library check for IGCSE Physics \(0625\)/.test(crep.summary ?? ""),
+    `check: the library check reads stored files and finds one whose first page says otherwise${r8.status ? ": " + r8.stderr : ""}`);
+  await page.goto(`${BASE}/admin/agent/runs/${ck}`);
+  const wrongRow = page.locator("#check li", { hasText: "0625_s24_qp_42.pdf" });
+  check((await wrongRow.locator("text=Its first page says").count()) === 1, "check: the run page explains the mismatch in words");
+  await wrongRow.locator("button", { hasText: "Rename to 0625_s24_ms_43.pdf" }).click();
+  await page.waitForURL(/f=ok_renamed/);
+  check((await page.locator("#check li", { hasText: "Renamed to 0625_s24_ms_43.pdf" }).count()) === 1 && rows(`SELECT COUNT(*) AS n FROM source_document WHERE file_name = '0625_s24_ms_43.pdf'`)[0].n === 1,
+    "check: a mismatched file is renamed to what its first page says");
+  sql(`DELETE FROM source_document WHERE file_name = '0625_s24_ms_43.pdf'`);
 
   // 9. Settings page.
   await page.goto(BASE + "/admin/settings");

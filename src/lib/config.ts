@@ -72,8 +72,10 @@ export const AGENT = {
   driveDelayMs: 1_000,
   driveMaxFolders: 2_000,
   driveMaxDepth: 8,
+  /** Unclear Drive files whose first page one download run may read (each is a download). */
+  coverReadsPerRun: 60,
   /** Workers AI: calls one run may make, files or folders per call, and the reply size. */
-  aiCallsPerRun: 40,
+  aiCallsPerRun: 80,
   aiBatch: 40,
   aiMaxTokens: 2_500,
 } as const;
