@@ -2,6 +2,8 @@
 
 Handover brief for Claude Code. Read this whole file before starting. Section 15 (Working Standards) applies to every change.
 
+Owner decisions from 5 Nov 2026 on the AI engine, accounts, pricing, payments and the student interface are in `docs/PLAN.md` and win over this brief where they differ.
+
 ---
 
 ## 1. Product Summary

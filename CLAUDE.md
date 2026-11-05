@@ -2,6 +2,8 @@
 
 Current state, kept short. The full brief (product, copyright rules, standards) is `docs/BRIEF.md`; read it first. Section 15 applies to every change.
 
+Product and commercial decisions (AI engine, accounts and portals, pricing, payments, student interface, scale) are in `docs/PLAN.md`; they win over the brief where they differ. Read it before planning any student, parent, teacher or payment work.
+
 ## Owner preferences
 - Replies: short, humanized bullet points, one topic or step at a time.
 - Never use the em dash character anywhere: replies, code, comments, commits, docs, page copy.

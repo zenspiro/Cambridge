@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-05: Product plan saved (docs only)
+
+**What:** `docs/PLAN.md` records the owner's decisions so far: the AI engine (a subject brain per subject, the AI checks itself until there is budget for teachers, diagrams drawn as code and checked, animated explanations), accounts (student, parent with family, teacher seats with option A+ and academy commission), pricing structure (per-country price lists in PKR, AED, SAR, USD, GBP, Single / Core / All tiers, monthly and session pass, free tier, family discount), payments (Safepay for PKR, Paddle for the rest, business registered in Pakistan), the student interface brief with three style mockups, and the database scale answer. CLAUDE.md and the brief point to it.
+
+**Why:** owner asked for decisions to be saved where future sessions can find them.
+
+**Tested:** docs only, no code changed.
+
 ## 2026-11-05: No reloads for small actions, agent "nothing ticked means all", one-card folder upload
 
 **What:** (1) Run the agent: with no year or session ticked, it covers every library year and every session; anything ticked limits it to that. (2) Switching a source on or off, removing a source, page or folder, adding pages, folders or websites, and Accept, Reject, Undo, Rename and Remove on run pages now happen in place: no page reload, no jump to the top, folded cards stay open; the confirm is a Yes / Never mind beside the button, never a browser popup. (3) Upload a folder is one card: choose the subject (it switches straight away, the Choose button is gone) and the folder. A folder can also be dragged onto the card, which skips Chrome's own "Upload files to this site?" question.
