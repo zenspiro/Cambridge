@@ -145,7 +145,85 @@ education industry, so recommendations come from the builder; the owner decides.
   - A school can get its own database later.
   - Vectors ("similar questions", subject brain search) live in Cloudflare Vectorize.
 
+## 8. Phased build plan (draft 5 Nov 2026, awaiting owner approval)
+
+Replaces brief section 13 once approved. Each step is planned, approved ("go"), built, tested and merged before the
+next. Start with one subject (recommended: IGCSE Physics 0625, the fullest library) and add subjects only when each
+passes its quality bar. Admin work and the library already built (Phase 0) stay as they are.
+
+### Phase 1: Foundations (student and parent accounts)
+1. **Theme system.** Style tokens for themes A, B and C in the central stylesheet (`data-theme` on the page), student
+   and parent page frames, shared component classes. Look only: same markup and wording in every theme.
+2. **Sign-in.** Email code and Google for students and parents (admin sign-in stays as it is). Roles held per
+   person, so one person can have several.
+3. **Profiles and parent approval.** First and last name, email, birth year, country; parent approval for under 18
+   (age limit per country, an admin setting); exam session per subject in the profile; see, export and delete.
+4. **Families.** A parent creates a family, adds children (invite code or creates the account), invites a second
+   guardian.
+5. **Access grants, teacher-ready.** Every right to use the app comes from one grant table (free tier, own plan,
+   family plan, later a teacher seat), so seats plug in later without rebuilding.
+
+You see at the end: students and parents can sign up, approve, link, and land on empty home screens in any theme.
+
+### Phase 2: The subject brain (admin side; must exist before students practise)
+1. **Topic tree.** Topics and learning goals per syllabus, drafted by AI from the syllabus PDF, shown in admin.
+2. **Reading the papers.** Past papers, mark schemes and examiner reports turned into structured questions, mark
+   points, common mistakes, topic frequency and paper blueprints (runs on GitHub Actions).
+3. **Question making with self-checks.** Original questions; a second AI from another provider solves each one, code
+   recalculates numbers, similarity check against past papers; diagrams drawn as code and checked by a second AI.
+   Failures are thrown away.
+4. **Test bank and quality score.** Model answers must score full marks, examiner-report mistakes must lose marks; a
+   quality score per subject in admin; every AI change must pass before going live.
+
+You see at the end: an approved Physics question bank and its quality score.
+
+### Phase 3: Student practice (free beta)
+1. **Home and diagnostic.** Diagnostic test, home screen (countdown, predicted grade, today's plan), multiple choice
+   practice in place with no reloads.
+2. **Written answers and AI marking.** Typed answers with a maths keyboard, marks per point, where the mark was lost,
+   "I'm stuck" hints, flag a marking.
+3. **Progress.** Mastery per topic, predicted grade, recommendations, streaks, XP, class or friend leaderboards
+   later with the teacher portal.
+4. **Parent dashboard.** Children's progress, weak topics, time spent, weekly email summary.
+
+You see at the end: a free beta with real students on Physics.
+
+### Phase 4: Paid launch
+1. **Price lists and plans.** Per currency in admin; Single, Core, All; monthly and session pass; free tier limits;
+   family discount.
+2. **Payments.** Safepay (PKR) and Paddle (others) with signed webhooks that switch access grants on and off.
+3. **Timed mock exams.** Built to the paper blueprint, answers saved in the background, predicted grade at the end.
+4. **Go-live.** Workers Paid, AI spend alerts, privacy policy and terms after the lawyer's review.
+
+You see at the end: students and parents can pay and sit mock exams.
+
+### Phase 5: Teacher portal
+Classrooms (subject plus exam session), seats on a teacher subscription, assigned work only (A+), fair-use limit per
+seat, dashboards across classrooms, class discount and academy commission.
+
+### Phase 6: Growth
+More subjects (one at a time, quality bar first), animated explanations, photos of handwritten work, AI tutor chat,
+WhatsApp summaries, "Find on Cambridge", O Level and A Level.
+
+### Needed from the owner along the way
+- Phase 1: approve Better Auth (sign-in library) and an email sender for sign-in codes.
+- Phase 2: a Claude API key and a second AI provider's key (set as secrets by the owner, never shared in chat).
+- Phase 4: brand name and domain, Safepay and Paddle accounts, real prices, the lawyer's review.
+
+### Coding standards that apply to all of it (brief section 15, CLAUDE.md)
+- One central stylesheet with named classes and theme tokens; no inline styles (`check:inline` counts never grow).
+- No page reloads unless necessary, never browser popups. This overrides the brief's older "no AJAX" line: practice,
+  marking and mock exams save in the background through small route handlers.
+- One shared helper per job; look for an existing one first. Shared queries in one place.
+- Each view and each action has its own handler; no monolithic handlers.
+- No hardcoded settings, limits, prices, age limits, model names or brand names: config, Worker vars or the database.
+- Security on every route: auth, role allow-list, ownership of every record, server-side validation, bound SQL,
+  same-origin POSTs, rate limits inside the database write, signed webhooks, secrets only in the secret store.
+- Real foreign keys with cascade toward the owner, so deletion and export find everything.
+- Student and parent pages tested at 375 px in all three themes; admin at 1400 px.
+- Docs (CLAUDE.md, HISTORY.md, FEATURES.md, DEV-CHECKLIST.md, tests README, guides) in the same commit as the code.
+
 ## Still open
 
-- Brand name and domain (brief, section 14).
-- Then a phased build plan replacing brief section 13 (student and parent first).
+- Brand name and domain (brief, section 14), needed by Phase 4.
+- Owner approval of the phased build plan (section 8).
