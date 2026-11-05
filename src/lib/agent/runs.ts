@@ -22,9 +22,14 @@ export function checkRunParams(
   if (typeof input.code !== "string" || !codes.includes(input.code)) return null;
   const code = input.code;
   if (input.mode !== "dry" && input.mode !== "download" && input.mode !== "check") return null;
-  const years = [...new Set(input.years.map((y) => Number(y)))].filter((y) => Number.isInteger(y) && y >= lib.fromYear && y <= lib.toYear);
-  const sessions = [...new Set(input.sessions)].filter((s): s is RunSession => SESSIONS.includes(s as RunSession));
-  if (years.length === 0 || years.length !== input.years.length || sessions.length === 0 || sessions.length !== input.sessions.length) return null;
+  // Nothing ticked means everything (owner decision 5 Nov 2026): every library year, every session.
+  const allYears: number[] = [];
+  for (let y = lib.toYear; y >= lib.fromYear; y--) allYears.push(y);
+  const years = input.years.length === 0 ? allYears
+    : [...new Set(input.years.map((y) => Number(y)))].filter((y) => Number.isInteger(y) && y >= lib.fromYear && y <= lib.toYear);
+  const sessions = input.sessions.length === 0 ? [...SESSIONS]
+    : [...new Set(input.sessions)].filter((s): s is RunSession => SESSIONS.includes(s as RunSession));
+  if (years.length === 0 || (input.years.length && years.length !== input.years.length) || sessions.length === 0 || (input.sessions.length && sessions.length !== input.sessions.length)) return null;
   return { code, years: years.sort((a, b) => b - a), sessions: SESSIONS.filter((s) => sessions.includes(s)), mode: input.mode };
 }
 

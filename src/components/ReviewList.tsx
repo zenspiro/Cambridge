@@ -1,4 +1,5 @@
 import { Notice } from "@/components/AdminShell";
+import { ActionForm } from "@/components/ActionForm";
 import { decisionKey, type Decision, type ReviewItem } from "@/lib/agent/review";
 import { groupFiles } from "@/lib/library/summary";
 
@@ -14,7 +15,7 @@ const MESSAGES: Record<string, string> = {
 
 /**
  * "Needs your eye" with a decision per file: accept it as one of this run's missing checklist
- * files, or reject it. Plain POST forms; later runs read the decisions.
+ * files, or reject it. Sent in the background (no page reload); later runs read the decisions.
  */
 export function ReviewList({
   runId, items, decisions, choices, stored, describe, message, at,
@@ -61,17 +62,17 @@ export function ReviewList({
                         ? `Accepted as ${describe(d.fileName)}${stored(d.fileName) ? ", now in the library" : ", fetched by the next download"}.`
                         : "Rejected: later runs skip it."}
                     </span>
-                    <form method="post" action="/admin/agent/review">
+                    <ActionForm action="/admin/agent/review" messages={MESSAGES}>
                       <input type="hidden" name="id" value={runId} />
                       <input type="hidden" name="i" value={i} />
                       <input type="hidden" name="action" value="undo" />
                       <button className="btn btn-small" type="submit">Undo</button>
-                    </form>
+                    </ActionForm>
                   </span>
                 ) : (
                   <span className="review-act">
                     {choices.length ? (
-                      <form className="actions" method="post" action="/admin/agent/review">
+                      <ActionForm className="actions" action="/admin/agent/review" messages={MESSAGES}>
                         <input type="hidden" name="id" value={runId} />
                         <input type="hidden" name="i" value={i} />
                         <input type="hidden" name="action" value="accept" />
@@ -85,14 +86,14 @@ export function ReviewList({
                           ))}
                         </select>
                         <button className="btn btn-small btn-primary" type="submit">Accept</button>
-                      </form>
+                      </ActionForm>
                     ) : null}
-                    <form method="post" action="/admin/agent/review">
+                    <ActionForm action="/admin/agent/review" messages={MESSAGES}>
                       <input type="hidden" name="id" value={runId} />
                       <input type="hidden" name="i" value={i} />
                       <input type="hidden" name="action" value="reject" />
                       <button className="btn btn-small" type="submit">Reject</button>
-                    </form>
+                    </ActionForm>
                   </span>
                 )}
               </li>

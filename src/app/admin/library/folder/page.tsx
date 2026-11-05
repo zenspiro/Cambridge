@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/guard";
 import { getEnv } from "@/lib/env";
 import { AdminShell } from "@/components/AdminShell";
@@ -39,21 +38,9 @@ export default async function FolderPage({ searchParams }: { searchParams: Promi
   return (
     <AdminShell current="/admin/library/upload" title="Upload a folder">
       <p className="muted">
-        For a folder downloaded from Google Drive (unzip it first). The page keeps the folder names and works out every
-        file the way the agent does: from the file and folder names, then from each file&apos;s first page, then with the AI.
-        You see the result before anything is uploaded. Files with Cambridge names can also go through{" "}
-        <Link className="link" href="/admin/library/upload">the plain upload</Link>.
+        For a folder downloaded from Google Drive (unzip it first). Every file is worked out from its names, its first page
+        and the AI, and you see the result before anything is uploaded.
       </p>
-      <form className="card stack" method="get" action="/admin/library/folder">
-        <label className="label-inline" htmlFor="folder-code">Main subject of the folder</label>
-        <div className="actions">
-          <select className="input review-select" id="folder-code" name="code" defaultValue={code}>
-            {subjects.map((s) => <option key={s.code} value={s.code}>{s.label}</option>)}
-          </select>
-          <button className="btn btn-small" type="submit">Choose</button>
-        </div>
-        <p className="muted">Files of other subjects in the folder are still recognised and stored; the AI and the list of missing files use this subject.</p>
-      </form>
       <FolderUpload
         code={code}
         subjectLabel={label}
@@ -64,6 +51,7 @@ export default async function FolderPage({ searchParams }: { searchParams: Promi
         maxFileBytes={LIBRARY.maxFileBytes}
         papers={allPapers}
         versions={allVersions}
+        subjectOptions={subjects}
         choices={choices.map((n) => ({ name: n, text: describeFile(n, versionForFile(versions, n), look) }))}
       />
     </AdminShell>

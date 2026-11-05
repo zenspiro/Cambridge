@@ -5,6 +5,7 @@
 export const PUBLIC_ROUTES: readonly string[] = [
   "page.tsx", // placeholder home page
   "health/route.ts", // pass or fail only
+  "brand/[file]/route.ts", // current logo, square logo and favicon only (public by nature)
   "admin/login/page.tsx", // the sign-in form
   "admin/session/route.ts", // sign-in POST: rate limited and audited
   // Agent endpoints: no session, but every request must pass agentRequest()

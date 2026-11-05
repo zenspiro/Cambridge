@@ -3,6 +3,7 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/guard";
 import { getEnv } from "@/lib/env";
 import { AdminShell, Notice } from "@/components/AdminShell";
+import { ActionForm } from "@/components/ActionForm";
 import { LIST_SITES } from "@/lib/library/queries";
 import { listSubjects } from "@/lib/library/catalog";
 import { aliasLabel, loadAliases } from "@/lib/library/alias";
@@ -39,7 +40,7 @@ type Page = { id: string; site_id: string; syllabus_code: string; url: string; l
 
 const day = (ms: number | null) => (ms ? new Date(ms).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }) : "");
 
-export default async function SourcesPage({ searchParams }: { searchParams: Promise<{ e?: string; remove?: string; removepage?: string; removefolder?: string; ref?: string; added?: string; dupes?: string; bad?: string }> }) {
+export default async function SourcesPage({ searchParams }: { searchParams: Promise<{ e?: string; ref?: string; added?: string; dupes?: string; bad?: string }> }) {
   await requireAdmin();
   const q = await searchParams;
   const env = await getEnv();
@@ -74,18 +75,10 @@ export default async function SourcesPage({ searchParams }: { searchParams: Prom
           </span>
           <a className="link" href={`https://drive.google.com/drive/folders/${encodeURIComponent(f.folder_id)}`} rel="noopener noreferrer" target="_blank">Open in Google Drive</a>
         </span>
-        {q.removefolder === f.id ? (
-          <span className="confirm">
-            <span>Remove this folder?</span>
-            <form method="post" action="/admin/sources/folders/remove">
-              <input type="hidden" name="id" value={f.id} />
-              <button className="btn btn-small btn-danger" type="submit">Yes, remove</button>
-            </form>
-            <Link className="btn btn-small" href="/admin/sources">Never mind</Link>
-          </span>
-        ) : (
-          <Link className="btn btn-small" href={`/admin/sources?removefolder=${encodeURIComponent(f.id)}`}>Remove</Link>
-        )}
+        <ActionForm action="/admin/sources/folders/remove" messages={MESSAGES} confirm="Remove this folder?">
+          <input type="hidden" name="id" value={f.id} />
+          <button className="btn btn-small" type="submit">Remove</button>
+        </ActionForm>
       </li>
     );
   };
@@ -155,23 +148,15 @@ export default async function SourcesPage({ searchParams }: { searchParams: Prom
                               </details>
                             ) : null}
                           </span>
-                          {q.removepage === p.id ? (
-                            <span className="confirm">
-                              <span>Remove this page?</span>
-                              <form method="post" action="/admin/sources/pages/remove">
-                                <input type="hidden" name="id" value={p.id} />
-                                <button className="btn btn-small btn-danger" type="submit">Yes, remove</button>
-                              </form>
-                              <Link className="btn btn-small" href="/admin/sources">Never mind</Link>
-                            </span>
-                          ) : (
-                            <Link className="btn btn-small" href={`/admin/sources?removepage=${encodeURIComponent(p.id)}`}>Remove</Link>
-                          )}
+                          <ActionForm action="/admin/sources/pages/remove" messages={MESSAGES} confirm="Remove this page?">
+                            <input type="hidden" name="id" value={p.id} />
+                            <button className="btn btn-small" type="submit">Remove</button>
+                          </ActionForm>
                         </li>
                       ))}
                     </ul>
                     {webSites.length ? (
-                      <form className="inline-form" method="post" action="/admin/sources/pages/add">
+                      <ActionForm className="inline-form" action="/admin/sources/pages/add" messages={MESSAGES}>
                         <input type="hidden" name="code" value={s.code} />
                         <label className="sr-only" htmlFor={`site-${s.code}`}>Website</label>
                         <select className="input review-select" id={`site-${s.code}`} name="site" defaultValue={webSites[0]!.id}>
@@ -180,7 +165,7 @@ export default async function SourcesPage({ searchParams }: { searchParams: Prom
                         <label className="sr-only" htmlFor={`page-${s.code}`}>New page for {s.label}</label>
                         <input className="input" id={`page-${s.code}`} name="url" type="url" required maxLength={300} placeholder="https://..." />
                         <button className="btn btn-small" type="submit">Add page</button>
-                      </form>
+                      </ActionForm>
                     ) : null}
                   </div>
 
@@ -189,13 +174,13 @@ export default async function SourcesPage({ searchParams }: { searchParams: Prom
                     {dirs.length === 0 ? <span className="muted">No folders yet.</span> : null}
                     <ul className="list">{dirs.map(folderRow)}</ul>
                     {drive ? (
-                      <form className="stack-tight" method="post" action="/admin/sources/folders/add">
+                      <ActionForm className="stack-tight" action="/admin/sources/folders/add" messages={MESSAGES} counts>
                         <input type="hidden" name="site" value={drive.id} />
                         <input type="hidden" name="code" value={s.code} />
                         <label className="label-inline" htmlFor={`links-${s.code}`}>Add folders for {s.label}: one shared folder link per line</label>
                         <textarea className="input textarea" id={`links-${s.code}`} name="links" rows={2} maxLength={10000} required placeholder="https://drive.google.com/drive/folders/..." />
                         <button className="btn btn-small" type="submit">Add folders</button>
-                      </form>
+                      </ActionForm>
                     ) : null}
                   </div>
 
@@ -229,31 +214,23 @@ export default async function SourcesPage({ searchParams }: { searchParams: Prom
                 <span className="mono muted">{s.base_url}</span>
                 {s.notes ? <span className="muted">{s.notes}</span> : null}
               </span>
-              {q.remove === s.id ? (
-                <span className="confirm">
-                  <span>Remove this source and all its pages or folders?</span>
-                  <form method="post" action="/admin/sources/remove">
-                    <input type="hidden" name="id" value={s.id} />
-                    <button className="btn btn-small btn-danger" type="submit">Yes, remove</button>
-                  </form>
-                  <Link className="btn btn-small" href="/admin/sources">Never mind</Link>
-                </span>
-              ) : (
-                <span className="actions">
-                  <form method="post" action="/admin/sources/toggle">
-                    <input type="hidden" name="id" value={s.id} />
-                    <input type="hidden" name="enabled" value={s.enabled ? "0" : "1"} />
-                    <button className="btn btn-small" type="submit">{s.enabled ? "Switch off" : "Switch on"}</button>
-                  </form>
-                  <Link className="btn btn-small" href={`/admin/sources?remove=${encodeURIComponent(s.id)}`}>Remove</Link>
-                </span>
-              )}
+              <span className="actions">
+                <ActionForm action="/admin/sources/toggle" messages={MESSAGES}>
+                  <input type="hidden" name="id" value={s.id} />
+                  <input type="hidden" name="enabled" value={s.enabled ? "0" : "1"} />
+                  <button className="btn btn-small" type="submit">{s.enabled ? "Switch off" : "Switch on"}</button>
+                </ActionForm>
+                <ActionForm action="/admin/sources/remove" messages={MESSAGES} confirm="Remove this source and all its pages or folders?">
+                  <input type="hidden" name="id" value={s.id} />
+                  <button className="btn btn-small" type="submit">Remove</button>
+                </ActionForm>
+              </span>
             </li>
           ))}
         </ul>
         <details>
           <summary className="link">Add a website</summary>
-          <form className="stack" method="post" action="/admin/sources/add">
+          <ActionForm className="stack" action="/admin/sources/add" messages={MESSAGES}>
             <label className="label" htmlFor="name">Name</label>
             <input className="input" id="name" name="name" required maxLength={80} />
             <label className="label" htmlFor="url">Address (https)</label>
@@ -261,7 +238,7 @@ export default async function SourcesPage({ searchParams }: { searchParams: Prom
             <label className="label" htmlFor="notes">Notes (optional)</label>
             <input className="input" id="notes" name="notes" maxLength={300} />
             <button className="btn btn-primary" type="submit">Add source</button>
-          </form>
+          </ActionForm>
         </details>
       </section>
     </AdminShell>

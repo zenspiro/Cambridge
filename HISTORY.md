@@ -2,6 +2,30 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-05: Brand settings and the three student themes (Phase 1, step 1)
+
+**What:** (1) A Brand page in admin: platform name, short name, description, footer statement (with {name}), the theme new students start in, and the logo, square logo and favicon (PNG, JPG or WebP, checked by their bytes; SVG refused). Pictures are stored in the app's file storage under a name made from their contents and served at `/brand/...` with a year-long cache; only the current pictures are served. Page titles, the description and browser icons now come from these settings. (2) The three student themes, Bold, Playful and Clean, as sets of style tokens in the central stylesheet, with our own copies of five fonts. One layout and the same words in every theme; parent pages always use Clean. (3) The student page frame (brand, menu at the bottom on phones and at the side on wide screens, footer statement) and its building blocks: cards, buttons, chips, progress bars, predicted grades, today's plan, answer options (right and wrong), feedback, hint, streak, Playful's mascot. (4) A Themes page in admin: every building block with sample words in a phone-sized box, a theme switch that works without a reload, and a full-page view.
+
+**Why:** owner decisions: keep all three styles as switchable themes (look only), brand items configurable in admin, own fonts, calm parent pages, no SVG logos.
+
+**Tested:** 140 unit tests (new: brand text checks, damaged values fall back, pictures by their bytes, upload, replace and remove with old files deleted, every theme sets every token, WCAG AA contrast of every text pair in every theme, nothing below 14 px, fonts only from our own folder); 30 new browser checks (brand saves in place and shows in the title, SVG refused, PNG served and cached, old files not served, the frame shows the logo, inline confirm on remove, theme switch without a reload, feedback on a wrong answer, and the student frame at 375 px in all three themes: no sideways scroll, menu at the bottom, footer, theme font loaded, no script errors).
+
+## 2026-11-05: Product plan saved (docs only)
+
+**What:** `docs/PLAN.md` records the owner's decisions so far: the AI engine (a subject brain per subject, the AI checks itself until there is budget for teachers, diagrams drawn as code and checked, animated explanations), accounts (student, parent with family, teacher seats with option A+ and academy commission), pricing structure (per-country price lists in PKR, AED, SAR, USD, GBP, Single / Core / All tiers, monthly and session pass, free tier, family discount), payments (Safepay for PKR, Paddle for the rest, business registered in Pakistan), the student interface brief with three style mockups, and the database scale answer. CLAUDE.md and the brief point to it.
+
+**Why:** owner asked for decisions to be saved where future sessions can find them.
+
+**Tested:** docs only, no code changed.
+
+## 2026-11-05: No reloads for small actions, agent "nothing ticked means all", one-card folder upload
+
+**What:** (1) Run the agent: with no year or session ticked, it covers every library year and every session; anything ticked limits it to that. (2) Switching a source on or off, removing a source, page or folder, adding pages, folders or websites, and Accept, Reject, Undo, Rename and Remove on run pages now happen in place: no page reload, no jump to the top, folded cards stay open; the confirm is a Yes / Never mind beside the button, never a browser popup. (3) Upload a folder is one card: choose the subject (it switches straight away, the Choose button is gone) and the folder. A folder can also be dragged onto the card, which skips Chrome's own "Upload files to this site?" question.
+
+**Why:** owner: an empty agent form should mean everything; removing or switching off a source kept sending the page back to the top; two cards and a Choose button that did not work; no system popups.
+
+**Tested:** 129 unit tests (new: nothing ticked means all); 211 browser checks (new: switch off keeps the scroll position, inline confirm without popups, remove without reload, folder links added in place, run page decisions without reload, subject switches in one card, a run with nothing ticked covers every year and session).
+
 ## 2026-11-05: Sources per subject, with what Cambridge offers
 
 **What:** the Sources page is now one card per subject instead of one block for Google Drive and one for Cambridge. Each card shows its Cambridge pages (subject page and past papers page), how many files each offers and which are not in the library yet (with the full list), its Google Drive folders, any linked codes (Pakistan series), forms to add a page or folders for that subject, and links to run the agent or open the library. The websites list (switch on or off, remove, add) sits at the bottom. Cambridge was scanned once from here, following its robots.txt: all 16 subjects have exactly two file pages, all were already saved and live; their 381 file links are stored with each page.
