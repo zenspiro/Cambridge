@@ -2,6 +2,8 @@
 
 Admin pages are desktop only (owner decision, 2 Nov 2026): the admin suites run at 1400 px. Public and student pages are tested at 375 px and 1400 px.
 
+Rule for browser checks: after an in-place update (`ActionForm`, `router.refresh()`), wait for the new content (`locator.waitFor`), never check it the moment the message appears; CI machines are slower.
+
 ## Unit tests (`tests/unit/`, `npm run test:unit`)
 Node's built-in test runner, TypeScript loaded directly. Files must not import Next or Cloudflare modules. `helpers/d1.ts` gives a D1 stand-in on Node's SQLite with every migration applied, so database logic is tested with the real SQL.
 

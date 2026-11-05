@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-05: CI fix: browser checks wait for in-place updates
+
+**What:** after merge #29 one browser check failed on CI ("me: an exam session is added in place") although the same code passed on the pull request. The check looked for the new list row the moment the "saved" message appeared; the page redraws a moment later, so on a slower machine the row was not there yet. That check and two similar ones now wait up to 10 s for the text. Nothing in the app changed; merge #29 was not deployed because of this.
+
+**Why:** owner reported the failed merge.
+
+**Tested:** themes and profile browser tests, 31 checks each, locally.
+
 ## 2026-11-05: Profiles, parent approval and your data (Phase 1, step 3)
 
 **What:** the welcome step asks country (everyone) and birth year (students). A student who could be under the age limit (18 by default, a different limit per country in Admin > Settings > Parent approval) only sees "Ask a parent to approve" until a parent says yes: the parent gets an email with a link to a page with Approve and Decline (decline asks first and deletes the student's account). Links work once, for 7 days, and are stored scrambled. A new "Me" page: name, country, birth year (locked once approved), theme (changes without a reload and is remembered), exam sessions per subject (the student home asks once, with Skip, and lists them), Download my data and Delete my account.

@@ -75,7 +75,7 @@ await phone.getByRole("button", { name: "Playful" }).click();
 check((await phone.locator(".s-app").getAttribute("data-theme")) === "b", "gallery: Playful switches the theme");
 check(await page.evaluate(() => window.__noReload === true), "gallery: switching does not reload the page");
 await phone.getByRole("button", { name: "2 A" }).click();
-check(await phone.getByText("Where you lost the mark").isVisible(), "gallery: a wrong answer shows where the mark was lost");
+check(await phone.getByText("Where you lost the mark").waitFor({ timeout: 10_000 }).then(() => true, () => false), "gallery: a wrong answer shows where the mark was lost");
 check(!(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)), "gallery: no sideways scroll at 1400 px");
 check(errors.length === 0, `admin pages: no script or CSP errors${errors.length ? ": " + errors.join(" | ") : ""}`);
 
