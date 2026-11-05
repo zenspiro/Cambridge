@@ -173,6 +173,10 @@ You see at the end: students and parents can sign up, approve, link, and land on
 
 ### Phase 2: The subject brain (admin side; must exist before students practise)
 1. **Topic tree.** Topics and learning goals per syllabus, drafted by AI from the syllabus PDF, shown in admin.
+   **Built 5 Nov 2026.** Owner decisions: runs on GitHub Actions; second provider Google Gemini (cheaper for this job);
+   no human review (owner is not a subject expert): code checks every word against the PDF's text and the numbering,
+   Gemini copies separately, the text settles differences, Claude gets one more try; Ready only when all checks pass
+   and the two agree on 97%+. Later steps use Ready trees only.
 2. **Reading the papers.** Past papers, mark schemes and examiner reports turned into structured questions, mark
    points, common mistakes, topic frequency and paper blueprints (runs on GitHub Actions).
 3. **Question making with self-checks.** Original questions; a second AI from another provider solves each one, code
@@ -213,7 +217,7 @@ WhatsApp summaries, "Find on Cambridge", O Level and A Level.
 
 ### Needed from the owner along the way
 - Phase 1: approve Better Auth (sign-in library) and an email sender for sign-in codes.
-- Phase 2: a Claude API key and a second AI provider's key (set as secrets by the owner, never shared in chat).
+- Phase 2: a Claude API key and a Gemini API key, as GitHub Actions secrets `CLAUDE_API_KEY` and `GEMINI_API_KEY` (set by the owner, never shared in chat; `docs/guides/topic-tree-setup.md`).
 - Phase 4: brand name and domain, Safepay and Paddle accounts, real prices, the lawyer's review.
 
 ### Coding standards that apply to all of it (brief section 15, CLAUDE.md)

@@ -94,7 +94,10 @@ export default async function SyllabusOverview({
         ) : (
           <p className="notice">Every essential file is in.</p>
         )}
-        <p><Link className="btn btn-small" href={`/admin/agent?code=${code}`}>Run the agent for this subject</Link></p>
+        <p className="row-actions">
+          <Link className="btn btn-small" href={`/admin/agent?code=${code}`}>Run the agent for this subject</Link>
+          <Link className="btn btn-small" href={`/admin/library/${code}/topics`}>Topic tree</Link>
+        </p>
       </section>
 
       {!view.filtered ? (

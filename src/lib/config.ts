@@ -65,6 +65,46 @@ export const OTHER_TYPE_LABELS: Readonly<Record<string, string>> = {
 /** A type in words; a code nobody has named yet reads "Cambridge file (xx)". */
 export const docTypeLabel = (t: string): string => DOC_TYPE_LABELS[t] ?? OTHER_TYPE_LABELS[t] ?? `Cambridge file (${t})`;
 
+/**
+ * The subject brain (Phase 2). Step 1, the topic tree: Claude copies a syllabus's subject content into topics and
+ * learning goals; code checks every word against the PDF's own text and the numbering; a second AI (Gemini) reads
+ * the same PDF on its own and the two are compared. Models are Worker vars (CLAUDE_MODEL, GEMINI_MODEL), never here.
+ */
+export const BRAIN = {
+  /** A run with no sign of life for this long is closed (one Claude answer can take several minutes). */
+  staleAfterMs: 30 * 60_000,
+  /** Topic tree runs an admin may start per hour. */
+  runsPerHour: 6,
+  /** The tree page reloads itself this often while a run is active. */
+  refreshSeconds: 15,
+  /** Claude drafts at most this many times per run (the second try is given the problems found). */
+  attempts: 2,
+  /** Claude's answer limit (streamed), its effort, and Gemini's answer limit. */
+  claudeMaxTokens: 96_000,
+  claudeEffort: "high",
+  geminiMaxTokens: 65_536,
+  /** Size limits on a tree (both AIs' answers are cut to these before checking). */
+  maxTopics: 600,
+  maxGoals: 4_000,
+  maxTitle: 200,
+  maxGoalText: 1_500,
+  maxNotes: 3_000,
+  /** Largest syllabus PDF sent to the AIs, and largest stored tree plus report (bytes of JSON). */
+  maxPdfBytes: 20 * 1024 * 1024,
+  maxTreeBytes: 1_500_000,
+  /** Word check: characters compared in runs of this length; a goal passes when this share of it is found. */
+  gramLength: 10,
+  minWordCover: 0.9,
+  /** A syllabus text shorter than this means the PDF could not be read, so the word check cannot run. */
+  minTextChars: 5_000,
+  /** Two wordings count as the same when this similar (letters and digits only, pairs of characters). */
+  sameText: 0.85,
+  /** Share of goals both AIs must agree on (after the word check settles who copied right) for "ready". */
+  minAgreement: 0.97,
+  /** Problems and disagreements kept in a report. */
+  maxReportItems: 150,
+} as const;
+
 export const AGENT = {
   /** Most files one download run may store. */
   maxFilesPerRun: 400,

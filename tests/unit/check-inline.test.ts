@@ -26,14 +26,16 @@ test("normal React code passes", () => {
   assert.ok(Object.values(scan(ok)).every((n) => n === 0));
 });
 
-test("agent scripts load in Node's strip-only TypeScript mode (no parameter properties, enums or namespaces)", async () => {
+test("agent and brain scripts load in Node's strip-only TypeScript mode (no parameter properties, enums or namespaces)", async () => {
   const { readdirSync, readFileSync } = await import("node:fs");
-  const dir = new URL("../../scripts/agent/", import.meta.url);
-  for (const f of readdirSync(dir).filter((x) => x.endsWith(".ts"))) {
-    const src = readFileSync(new URL(f, dir), "utf8");
-    assert.ok(!/constructor\s*\([^)]*\b(public|private|protected|readonly)\s/.test(src), `${f}: parameter properties`);
-    assert.ok(!/^\s*(export\s+)?(const\s+)?enum\s/m.test(src), `${f}: enum`);
-    assert.ok(!/^\s*(export\s+)?namespace\s/m.test(src), `${f}: namespace`);
+  const dirs = [new URL("../../scripts/agent/", import.meta.url), new URL("../../scripts/brain/", import.meta.url)];
+  for (const dir of dirs) {
+    for (const f of readdirSync(dir).filter((x) => x.endsWith(".ts"))) {
+      const src = readFileSync(new URL(f, dir), "utf8");
+      assert.ok(!/constructor\s*\([^)]*\b(public|private|protected|readonly)\s/.test(src), `${f}: parameter properties`);
+      assert.ok(!/^\s*(export\s+)?(const\s+)?enum\s/m.test(src), `${f}: enum`);
+      assert.ok(!/^\s*(export\s+)?namespace\s/m.test(src), `${f}: namespace`);
+    }
   }
   await import("../../scripts/agent/drive.ts");
 });
