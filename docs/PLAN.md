@@ -9,8 +9,8 @@ education industry, so recommendations come from the builder; the owner decides.
 1. Student and parent first.
 2. Teacher portal second, but the database must be ready for teachers, seats and classrooms from day one, so nothing
    is rebuilt later.
-3. Topics agreed one at a time: 1 AI engine, 2 accounts, 3 pricing, 4 payments, 5 student interface (style mockups
-   made, choice pending), 6 child safety and parental consent (not discussed yet).
+3. Topics agreed one at a time: 1 AI engine, 2 accounts, 3 pricing, 4 payments, 5 student interface (three switchable
+   themes), 6 child safety and parental consent (not discussed yet).
 
 ## 1. AI engine (the USP; quality decides whether the product lives)
 
@@ -106,8 +106,16 @@ education industry, so recommendations come from the builder; the owner decides.
   with nicknames, and no public profiles.
 - **Parent screens:** calm and report-like, no game elements.
 - **Style mockups (5 Nov 2026):** A "bold and focused" (recommended), B "playful game", C "clean study", home and
-  practice screens each, on a private design canvas: https://claude.ai/artifact/CgbzTnsKctmmLTUvC7Mkuz. Owner's
-  choice pending.
+  practice screens each, on a private design canvas: https://claude.ai/artifact/CgbzTnsKctmmLTUvC7Mkuz.
+- **Themes (owner 5 Nov 2026): keep all three as themes the student can switch.**
+  - One layout, built once; a theme changes look only: colours, fonts, corner shapes, shadows, illustrations.
+  - The wording is the same in every theme (owner chose look only), so B's "quests" and "LET'S GO!" become the
+    shared wording or go. Its mascot may stay as a picture without its own lines.
+  - Default theme A; picked at sign-up or in settings, switchable anytime.
+  - Questions, AI feedback, grades, streaks and XP are the same in all three.
+  - Parent screens stay calm and report-like in every theme.
+  - Built from shared style settings (tokens), so another theme later is cheap.
+  - Every student screen is tested in all three themes at 375 px.
 
 ## 6. Database and scale (answered 5 Nov 2026)
 
@@ -121,7 +129,6 @@ education industry, so recommendations come from the builder; the owner decides.
 
 ## Still open
 
-- Student interface style: A, B or C.
 - Topic 6: child safety and parental consent.
 - Brand name and domain (brief, section 14).
 - Then a phased build plan replacing brief section 13 (student and parent first).
