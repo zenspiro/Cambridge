@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { testBucket, testDb } from "./helpers/d1.ts";
 import { classifyFile, folderDecision, mainOf } from "../../src/lib/agent/classify.ts";
 import { readCover } from "../../src/lib/library/cover.ts";
-import { applyCover, finalise, planFromNames } from "../../src/lib/library/folderPlan.ts";
+import { applyCover, finalise, noteFor, planFromNames } from "../../src/lib/library/folderPlan.ts";
 import { knownSubjects, loadSyllabus } from "../../src/lib/library/catalog.ts";
 import { learnAlias } from "../../src/lib/library/alias.ts";
 import { storeDocument } from "../../src/lib/library/store.ts";
@@ -86,4 +86,47 @@ test("a cover with an unknown code next to a library subject links the code by i
   assert.deepEqual(await learnAlias(db, { code: "1999", subjectWord: "Astrology", year: 2021, session: "s" }), { ok: false, reason: "no_subject" });
   assert.deepEqual(await learnAlias(db, { code: "12a4", subjectWord: "Physics", year: 2021, session: "s" }), { ok: false, reason: "bad" });
   assert.equal(readCover("Physics notes\nPHYSICS 1524/12 May/June 2021", ["0625"]).unknownCode, undefined, "no Cambridge mark, no learning");
+});
+
+test("owner's Maths folder: 1521 files are linked to 0580 from their folder, then all uploaded", async () => {
+  const db = testDb();
+  let subjects = await knownSubjects(db);
+  const years = { fromYear: 2020, toYear: 2026 };
+  const dir = "Maths 0580/2021/2021 July (Pakistan only)";
+  const files = ["1521_j21_er_32.pdf", "1521_j21_er_42.pdf", "1521_j21_gt.pdf", "1521_j21_ms_32.pdf", "1521_j21_qp_42.pdf"];
+  const first = planFromNames(0, `${dir}/${files[0]}`, 1000, subjects, 1e8, years);
+  assert.deepEqual([first.name, first.aliasOf], ["1521_s21_er_32.pdf", "0580"]);
+  // The page links the code (as the folder says Pakistan), then plans with it.
+  const r = await learnAlias(db, { code: "1521", mainCode: "0580", label: "Pakistan series", year: 2021, session: "s" });
+  assert.ok(r.ok && r.alias.main_code === "0580" && r.alias.label === "Pakistan series");
+  subjects = await knownSubjects(db);
+  assert.equal(subjects.find((s) => s.code === "1521")?.series, "Pakistan series");
+  const plan = files.map((f, i) => planFromNames(i, `${dir}/${f}`, 1000 + i, subjects, 1e8, years));
+  finalise(plan, { have: new Set(["0580_s21_er.pdf"]), codes: subjects.map((s) => s.code), ...years });
+  assert.deepEqual(plan.map((p) => p.status), ["new", "new", "new", "new", "new"]);
+  assert.match(noteFor(plan[3]!, { ...years, describe: (n) => n, seriesOf: (c) => (c === "1521" ? "Pakistan series (1521)" : null) }), /Part of the Pakistan series \(1521\), stored with its subject/);
+  // A folder code is never used to link a library code, and a bad main code is refused.
+  assert.deepEqual(await learnAlias(db, { code: "0620", mainCode: "0580", year: 2021, session: "s" }), { ok: false, reason: "known" });
+  assert.deepEqual(await learnAlias(db, { code: "1777", mainCode: "9999", year: 2021, session: "s" }), { ok: false, reason: "no_subject" });
+});
+
+test("owner's ms_33 trio: a first page misread as ms_31 does not beat the file names; the copy is a copy", async () => {
+  const db = testDb();
+  const subjects = await knownSubjects(db);
+  const years = { fromYear: 2020, toYear: 2026 };
+  const dir = "Maths 0580/2021/2021 June";
+  const a = planFromNames(0, `${dir}/0580_s21_ms_31.pdf`, 5000, subjects, 1e8, years);
+  const b = planFromNames(1, `${dir}/0580_s21_ms_33(1).pdf`, 7000, subjects, 1e8, years);
+  const c = planFromNames(2, `${dir}/0580_s21_ms_33.pdf`, 7000, subjects, 1e8, years);
+  const misread = readCover("Cambridge IGCSE\nMATHEMATICS 0580/31\nPaper 3 (Core) May/June 2021\nMARK SCHEME", ["0580"]);
+  applyCover(b, misread, "x", years);
+  applyCover(c, misread, "x", years);
+  assert.equal(c.name, "0580_s21_ms_31.pdf", "the cover renames first");
+  finalise([a, b, c], { have: new Set(), codes: ["0580"], ...years });
+  assert.deepEqual([a.status, a.name], ["new", "0580_s21_ms_31.pdf"]);
+  assert.deepEqual([b.status, b.name], ["new", "0580_s21_ms_33.pdf"]);
+  assert.deepEqual([c.status, c.name, c.dupOf], ["duplicate", "0580_s21_ms_33.pdf", "Maths 0580 / 2021 / 2021 June / 0580_s21_ms_33(1).pdf"]);
+  const words = { ...years, describe: (n: string) => n };
+  assert.match(noteFor(b, words), /Kept its file name/);
+  assert.match(noteFor(c, words), /^A copy of .*Only one is uploaded\.$/);
 });

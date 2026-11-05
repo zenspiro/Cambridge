@@ -74,14 +74,14 @@ export const subjectLabel = (subjects: SubjectOption[], code: string) => subject
  * for a syllabus (1524, Pakistan series) with `main` set to the syllabus they belong to.
  */
 export const KNOWN_SUBJECTS = `
-SELECT DISTINCT y.code, s.name, q.short_name AS qualification, NULL AS main FROM syllabus y JOIN subject s ON s.id = y.subject_id
+SELECT DISTINCT y.code, s.name, q.short_name AS qualification, NULL AS main, NULL AS series FROM syllabus y JOIN subject s ON s.id = y.subject_id
   JOIN qualification q ON q.id = s.qualification_id
 UNION
-SELECT a.code, s.name, q.short_name, a.main_code FROM syllabus_alias a JOIN syllabus y ON y.code = a.main_code
+SELECT DISTINCT a.code, s.name, q.short_name, a.main_code, a.label FROM syllabus_alias a JOIN syllabus y ON y.code = a.main_code
   JOIN subject s ON s.id = y.subject_id JOIN qualification q ON q.id = s.qualification_id
 ORDER BY 1`;
 
-export type KnownSubjectRow = { code: string; name: string; qualification: string; main?: string | null };
+export type KnownSubjectRow = { code: string; name: string; qualification: string; main?: string | null; series?: string | null };
 
 export async function knownSubjects(db: Db): Promise<KnownSubjectRow[]> {
   const { results } = await db.prepare(KNOWN_SUBJECTS).bind().all<KnownSubjectRow>();

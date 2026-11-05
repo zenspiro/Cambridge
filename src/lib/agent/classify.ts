@@ -8,6 +8,8 @@ export type KnownSubject = {
   code: string; name: string; qualification: string;
   /** For another code of a syllabus (1524, Pakistan series): the syllabus it belongs to (0625). */
   main?: string | null;
+  /** That other code's series name ("Pakistan series"). */
+  series?: string | null;
 };
 
 /** The syllabus a code belongs to: itself, or the main code of another code (1524 is 0625). */
@@ -18,6 +20,12 @@ export type Classified = {
   confidence: "high" | "medium" | "none";
   /** Where each part came from, or what is missing: shown in the run report. */
   why: string;
+  /**
+   * A Cambridge name whose code the library does not have, inside a folder of a library subject
+   * ("Maths 0580 / 2021 July (Pakistan only) / 1521_j21_er_32.pdf"): that subject's code, so the
+   * code can be linked to it (a country series, like Pakistan's 1521 for Maths).
+   */
+  aliasOf?: string;
 };
 export type FolderReading = {
   code: string | null;
@@ -131,7 +139,18 @@ export function classifyFile(path: string[], fileName: string, subjects: KnownSu
   const tidy = fileName.toLowerCase().replace(/\s*\(\d+\)(?=\.pdf$)/, "").replace(/[\s-]+/g, "_").replace(/^(\d{4})_j(\d{2})_/, "$1_s$2_");
   const direct = parseCambridgeName(tidy);
   // Files of subjects not in the library are named too: the agent counts them per subject.
-  if (direct) return { name: direct.fileName, code: direct.code, confidence: "high", why: "Cambridge file name" };
+  if (direct) {
+    const known = subjects.some((s) => s.code === direct.code);
+    if (!known) {
+      // Its code is not a library code: the nearest folder naming a library subject says whose it is.
+      for (const f of [...path].reverse()) {
+        const c = codeOf(f, subjects) ?? subjectByName(words(f), subjects)?.code ?? null;
+        const main = c ? mainOf(subjects, c) : null;
+        if (main && main !== direct.code) return { name: direct.fileName, code: direct.code, confidence: "high", why: "Cambridge file name", aliasOf: main };
+      }
+    }
+    return { name: direct.fileName, code: direct.code, confidence: "high", why: "Cambridge file name" };
+  }
 
   // 2. Read the parts from the file name, then fill gaps from the folders (nearest first).
   const fw = words(fileName);

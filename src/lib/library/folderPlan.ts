@@ -29,6 +29,10 @@ export type PlanItem = {
   suggest?: string;
   /** The first page's text, kept only while the AI may still be asked. */
   text?: string;
+  /** The first page disagreed with its own name, but its own name was kept. */
+  coverDoubt?: boolean;
+  /** Its own Cambridge name has a code the library does not have; its folder says this subject's code. */
+  aliasOf?: string;
   /** The paper's title as its first page prints it, to check the library's paper names. */
   coverTitle?: { paper: number; name: string };
 };
@@ -72,6 +76,7 @@ export function planFromNames(i: number, relPath: string, size: number, subjects
     return item;
   }
   item.name = c.name;
+  if (c.aliasOf) item.aliasOf = c.aliasOf;
   if (c.name && c.why === "Cambridge file name") {
     item.how = "Already has its Cambridge name";
     item.evidence = 0;
@@ -146,6 +151,21 @@ export function applyAi(item: PlanItem, v: { outcome?: string; name?: string; wh
 
 /** Step 4: each name against the library: new, already stored, outside the years, or a repeat. */
 export function finalise(items: PlanItem[], o: { have: ReadonlySet<string>; codes: readonly string[]; fromYear: number; toYear: number }): void {
+  // The first page renamed a file to a name another file in the folder carries as its own name
+  // (a misread digit, "ms_33" read as "ms_31"): the file's own name is the better evidence.
+  const own = new Map<string, PlanItem>();
+  for (const it of items) if (it.evidence === 0 && it.name && !it.renamedFrom) own.set(it.name, it);
+  for (const it of items) {
+    if (!it.renamedFrom || !it.name) continue;
+    const holder = own.get(it.name);
+    if (!holder || holder === it) continue;
+    it.why = `its first page seemed to say ${it.name}, but ${[...holder.path, holder.fileName].join(" / ")} has that name, so its own name is kept`;
+    it.name = it.renamedFrom;
+    delete it.renamedFrom;
+    it.how = "Already has its Cambridge name";
+    it.evidence = 0;
+    it.coverDoubt = true;
+  }
   for (const it of items) {
     delete it.text;
     if (it.status === "too_big" || it.status === "not_needed" || (it.status === "outside" && !it.name)) continue;
@@ -240,4 +260,46 @@ export function paperTitleChecks(
     if (!out.has(key)) out.set(key, { versionId, paper: p.paper, library: lib.name, cover: it.coverTitle.name, example: it.name });
   }
   return [...out.values()];
+}
+
+/**
+ * One plain sentence for a row: what the file is taken to be and why, in everyday words (the
+ * detailed reason stays in `why`, for the report). `describe` turns a name into words and
+ * `seriesOf` names another code's series ("Pakistan series") when it has one.
+ */
+export function noteFor(it: PlanItem, o: { fromYear: number; toYear: number; describe: (name: string) => string; seriesOf?: (code: string) => string | null }): string {
+  const series = it.name && o.seriesOf ? o.seriesOf(it.name.slice(0, 4)) : null;
+  const tail = series ? ` Part of the ${series}, stored with its subject.` : "";
+  switch (it.status) {
+    case "new":
+    case "have": {
+      const start = it.status === "have" ? "Already in the library." : "";
+      const how = it.coverDoubt ? "Kept its file name (its first page was unclear, and another file already has the name it seemed to show)."
+        : it.renamedFrom ? `The file name said ${it.renamedFrom}, but the first page shows it is this file, so it is stored under the right name.`
+        : it.evidence === 0 ? "Its file name already says what it is."
+        : it.evidence === 1 ? "Worked out from its folder names."
+        : it.evidence === 2 ? "Worked out from its first page."
+        : "The AI worked out what it is.";
+      return `${start} ${it.status === "have" ? "" : how}${tail}`.trim();
+    }
+    case "duplicate":
+      return `A copy of ${it.dupOf ?? "another file"}. Only one is uploaded.`;
+    case "outside": {
+      const y = (it.name && parseCambridgeName(it.name)?.year) || (/(19|20)\d\d/.exec(it.why)?.[0] ?? "");
+      return `From ${y || "a year"} the library does not keep (it keeps ${o.fromYear} to ${o.toYear}, set in Settings).`;
+    }
+    case "not_needed":
+      return "Not a Cambridge exam file (notes, worksheets and the like), so it is left out.";
+    case "unknown_subject":
+      return "From a subject that is not in the library, so it is left out.";
+    case "too_big":
+      return it.size === 0 ? "The file is empty." : "The file is too large to store.";
+    case "review": {
+      if (/two different files are both read as|and the two files differ/.test(it.why)) {
+        return `This looks like the same paper as another file in the folder, but the two files are different. ${it.suggest ? "Pick which paper it is below, or leave it out." : "Leave it out unless you know which paper it is."}`;
+      }
+      if (/first page is for syllabus/.test(it.why)) return "Its name and its first page point to different subjects. Pick what it is below, or leave it out.";
+      return it.suggest ? "Could not tell for sure what this is. The AI's best guess is chosen below: upload it as that, or change it." : "Could not tell what this is (no clear name or first page). Pick it below if you know, or leave it out.";
+    }
+  }
 }

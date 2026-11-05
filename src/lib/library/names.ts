@@ -17,7 +17,8 @@ export type ParsedName = {
 // Exam sessions: per-paper files with an optional variant digit ("qp_42"; teachers' notes are
 // written "tn_03": paper 3, which has no variants), or per-session files. pm pre-release material, qr listening
 // transcript, tn teachers' notes (speaking tests).
-const EXAM = /^(\d{4})_([msw])(\d{2})_(?:(qp|ms|in|ci|pm|qr)_([1-9])([1-9])?|(tn)_0([1-9])|(er|gt))\.pdf$/;
+const EXAM = /^(\d{4})_([msw])(\d{2})_(?:(qp|ms|in|ci|pm|qr)_([1-9])([1-9])?|(tn)_0([1-9])|(er|gt)(?:_([1-9])([1-9])?)?)\.pdf$/;
+// (Some series, like Pakistan's 2021 one, have an examiner report per paper: "1521_s21_er_32.pdf".)
 // Specimens and version documents: y + first exam year of the syllabus version.
 // sy syllabus, su syllabus update, gd grade descriptions; pm specimen pre-release material.
 const SPEC = /^(\d{4})_y(\d{2})_(?:(sp|sm|in|ci|pm)_([1-9])|(sy|su|gd))\.pdf$/;
@@ -31,7 +32,7 @@ export function parseCambridgeName(raw: string): ParsedName | null {
   let m = EXAM.exec(fileName);
   if (m) {
     const docType = (m[4] ?? m[7] ?? m[9]) as DocType;
-    const paper = m[5] ?? m[8];
+    const paper = m[5] ?? m[8] ?? m[10];
     return {
       fileName,
       code: m[1]!,
@@ -39,7 +40,7 @@ export function parseCambridgeName(raw: string): ParsedName | null {
       year: 2000 + Number(m[3]),
       docType,
       paper: paper ? Number(paper) : null,
-      variant: m[6] ? Number(m[6]) : null,
+      variant: m[6] ?? m[11] ? Number(m[6] ?? m[11]) : null,
     };
   }
   // Any other Cambridge code ("0417_w24_sf_02.pdf", source files): a real file of a kind the
