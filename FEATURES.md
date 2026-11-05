@@ -21,6 +21,8 @@ A plain list of what the platform does today, for non-developers.
 - Live run page: progress bar, current step, time so far, and a plain-words line for every page and file (for example "Stored: June 2024, Paper 1 Multiple Choice (Core), variant 1, question paper"), a link to the GitHub log, and a Cancel button. It updates itself every 10 seconds.
 - After a run: what changed in the library, session by session, with how many of the files were essential.
 - Settings: library years, the latest public exam session, and which variants count as essential.
+- Brand (admin): the platform name, short name, description, footer statement, the theme new students start in, and the logo, square logo and favicon. Changes show on every page at once.
+- Student themes: Bold, Playful and Clean. Same pages and words, three looks. The Themes page in admin shows every part of the student pages in each theme, in a phone-sized box, with a switch.
 
 ## Coming next
 - Student sign-in with an email code or Google.

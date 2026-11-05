@@ -26,6 +26,8 @@ Node's built-in test runner, TypeScript loaded directly. Files must not import N
 | `map.test.ts` | Subject map: versions with documents, specimens and sessions, papers as columns with their file types, variants, inserts, school-assessed parts, the JSON for the AI |
 | `ai.test.ts` | Workers AI answers: folder choices default to open, file names built from parts and kept only if the checklist asks for them, file names sent as data, summary cleaning, lenient JSON, running run only, per-run cap, unavailable and failing AI |
 | `run-summary.test.ts` | Run summary facts by rules, real limits only, the AI rewording kept only when every number matches and no limit is invented |
+| `brand.test.ts` | Brand settings: text checks, damaged values fall back, pictures recognised by their bytes (SVG refused), upload, replace and remove with old files deleted and audited, only current files served |
+| `themes.test.ts` | Every theme in config has a token block with the same tokens, WCAG AA contrast for every text pair and subject colour, nothing below 14 px, fonts only from `/fonts/` |
 | `check-inline.test.ts` | The inline code scanner catches each banned pattern and passes normal React code |
 
 ## Browser smoke test (`tests/e2e/smoke.mjs`, `npm run test:e2e`)
@@ -43,3 +45,7 @@ Needs a running Worker, migrations and `.dev.vars` (with `AGENT_SECRET`). Starts
 ## Folder upload test (`tests/e2e/folder.mjs`, part of `npm run test:e2e`)
 
 Builds a folder like an unzipped Google Drive download (names in folders, a scan with a real cover, a wrong name its cover corrects, a repeat, a non-PDF, an unclear file), picks it on `/admin/library/folder`, checks the preview, picks a file for the unclear one, uploads, checks the five stored names, then picks the folder again and checks everything is skipped. It also checks a file with another Cambridge code is uploaded under its own name, Download report gives every file, error pages are retried by themselves and "Try again" sends the rest, the picker shows the full place in the library on its own line, a 2002 file is left out by its name, the AI meter shows on the page and the finish summary appears. Without Workers AI locally, it checks the page says so.
+
+## Themes and brand test (`tests/e2e/themes.mjs`, part of `npm run test:e2e`)
+
+Signs in with the local password. On `/admin/brand` (1400 px): saving the name happens without a reload and shows in the page title; an SVG logo is refused; a PNG is stored, served as a PNG with a year-long cache and shown in the student frame; unknown files are not served; Remove asks inline. The name is put back afterwards. On `/admin/themes`: the switch changes the theme without a reload and a wrong answer shows its feedback. Then `/admin/themes/phone` at 375 px in each theme: theme applied, no sideways scroll, menu at the bottom, footer statement, the theme's font loaded, no script or CSP errors.

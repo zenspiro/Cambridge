@@ -106,3 +106,29 @@ export const AI_USAGE = {
   neuronsPerMillionInput: 26_668,
   neuronsPerMillionOutput: 204_805,
 } as const;
+
+/** Student themes (owner decision 5 Nov 2026): one layout, three looks, the same words in all. */
+export const THEMES = [
+  { id: "a", label: "Bold" },
+  { id: "b", label: "Playful" },
+  { id: "c", label: "Clean" },
+] as const;
+export type ThemeId = (typeof THEMES)[number]["id"];
+/** Parent screens stay calm whatever theme the child picked (owner decision 5 Nov 2026). */
+export const PARENT_THEME: ThemeId = "c";
+
+/** Brand settings limits. The values themselves live in the database (setting 'brand', /admin/brand). */
+export const BRAND = {
+  maxNameLength: 60,
+  maxShortNameLength: 20,
+  maxDescriptionLength: 200,
+  maxFooterLength: 400,
+  maxImageBytes: 1024 * 1024,
+  /** Brand saves and uploads per admin per hour share LIBRARY.writesPerHour (adminPost). */
+  imageKinds: {
+    logo: { label: "Logo", hint: "Wide logo for page headers, about 600 by 160 pixels." },
+    square: { label: "Square logo", hint: "Square icon for phone home screens and small headers, 512 by 512 pixels." },
+    favicon: { label: "Favicon", hint: "Browser tab icon, 64 by 64 pixels (PNG works best)." },
+  },
+} as const;
+export type BrandImageKind = keyof typeof BRAND.imageKinds;

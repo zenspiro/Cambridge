@@ -1,4 +1,6 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
+import { brandDefaults, getBrand, type Brand } from "./brand.ts";
+import { reportError } from "./errors.ts";
 
 /** Bindings, vars and secrets. Secrets are set in the Cloudflare dashboard, never in code. */
 export type AppEnv = CloudflareEnv & {
@@ -18,8 +20,25 @@ export async function getEnv(): Promise<AppEnv> {
   return env as AppEnv;
 }
 
-/** Brand name comes from config (brief 15.3), never hardcoded. */
-export async function appName(): Promise<string> {
+/** The APP_NAME var: used only when the brand settings have no name yet. */
+export async function fallbackName(): Promise<string> {
   const env = await getEnv();
   return env.APP_NAME || "Exam Prep";
+}
+
+/** Brand settings from /admin/brand (brief 15.3: never hardcoded). A database problem falls back to the defaults. */
+export async function currentBrand(): Promise<Brand> {
+  const env = await getEnv();
+  const name = env.APP_NAME || "Exam Prep";
+  try {
+    return await getBrand(env.DB, name);
+  } catch (err) {
+    reportError("brand.read", err);
+    return brandDefaults(name);
+  }
+}
+
+/** The platform name, as set on the Brand page. */
+export async function appName(): Promise<string> {
+  return (await currentBrand()).name;
 }

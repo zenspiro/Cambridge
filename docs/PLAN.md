@@ -152,7 +152,7 @@ next. Start with one subject (recommended: IGCSE Physics 0625, the fullest libra
 passes its quality bar. Admin work and the library already built (Phase 0) stay as they are.
 
 ### Phase 1: Foundations (student and parent accounts)
-1. **Theme system.** Style tokens for themes A, B and C in the central stylesheet (`data-theme` on the page), student
+1. **Theme system (built 5 Nov 2026).** Style tokens for themes A, B and C in the central stylesheet (`data-theme` on the page), student
    and parent page frames, shared component classes. Look only: same markup and wording in every theme.
    **Brand settings in admin (owner 5 Nov 2026):** platform name, footer statement, logo, square logo and favicon
    (and every similar brand item) are set in the admin panel, never in code.

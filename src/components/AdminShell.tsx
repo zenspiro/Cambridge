@@ -10,6 +10,8 @@ const NAV = [
   { href: "/admin/agent", label: "Agent" },
   { href: "/admin/sources", label: "Sources" },
   { href: "/admin/settings", label: "Settings" },
+  { href: "/admin/brand", label: "Brand" },
+  { href: "/admin/themes", label: "Themes" },
 ] as const;
 
 /** Frame for every signed-in admin page. Pages still call requireAdmin() themselves. */

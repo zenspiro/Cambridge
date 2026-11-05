@@ -66,3 +66,14 @@ Only one run can go at a time. To stop one, press **Cancel run**, then **Yes, ca
 - **Default essential variants:** used only for a subject without its own setting (each subject sets its own on its overview). Currently variant 2.
 
 When a new session's papers come out: move the latest public session forward, then run the agent for just that session.
+
+## Brand
+Admin > Brand sets what every student, parent and teacher page shows:
+- **Platform name** and **short name** (the short one is used on phone home screens).
+- **Description**: the line search results and link previews show.
+- **Footer statement**: shown at the bottom of every student and parent page. Write {name} where the platform name should go.
+- **Theme for new students**: Bold, Playful or Clean. Students can switch later.
+- **Pictures**: logo (wide, about 600 by 160 pixels), square logo (512 by 512, used as the phone icon) and favicon (64 by 64). PNG, JPG or WebP up to 1 MB. SVG files are not accepted. Without a logo, the platform name shows as text.
+
+## Themes
+Admin > Themes shows every part of the student pages with sample words, in a phone-sized box. Use the switch at the top of the phone to see Bold, Playful and Clean; pick an answer to see the feedback. "Open as a full page" shows it as a student would see it. Parent pages always use the calm Clean look.

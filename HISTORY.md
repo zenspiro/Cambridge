@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-05: Brand settings and the three student themes (Phase 1, step 1)
+
+**What:** (1) A Brand page in admin: platform name, short name, description, footer statement (with {name}), the theme new students start in, and the logo, square logo and favicon (PNG, JPG or WebP, checked by their bytes; SVG refused). Pictures are stored in the app's file storage under a name made from their contents and served at `/brand/...` with a year-long cache; only the current pictures are served. Page titles, the description and browser icons now come from these settings. (2) The three student themes, Bold, Playful and Clean, as sets of style tokens in the central stylesheet, with our own copies of five fonts. One layout and the same words in every theme; parent pages always use Clean. (3) The student page frame (brand, menu at the bottom on phones and at the side on wide screens, footer statement) and its building blocks: cards, buttons, chips, progress bars, predicted grades, today's plan, answer options (right and wrong), feedback, hint, streak, Playful's mascot. (4) A Themes page in admin: every building block with sample words in a phone-sized box, a theme switch that works without a reload, and a full-page view.
+
+**Why:** owner decisions: keep all three styles as switchable themes (look only), brand items configurable in admin, own fonts, calm parent pages, no SVG logos.
+
+**Tested:** 140 unit tests (new: brand text checks, damaged values fall back, pictures by their bytes, upload, replace and remove with old files deleted, every theme sets every token, WCAG AA contrast of every text pair in every theme, nothing below 14 px, fonts only from our own folder); 30 new browser checks (brand saves in place and shows in the title, SVG refused, PNG served and cached, old files not served, the frame shows the logo, inline confirm on remove, theme switch without a reload, feedback on a wrong answer, and the student frame at 375 px in all three themes: no sideways scroll, menu at the bottom, footer, theme font loaded, no script errors).
+
 ## 2026-11-05: Product plan saved (docs only)
 
 **What:** `docs/PLAN.md` records the owner's decisions so far: the AI engine (a subject brain per subject, the AI checks itself until there is budget for teachers, diagrams drawn as code and checked, animated explanations), accounts (student, parent with family, teacher seats with option A+ and academy commission), pricing structure (per-country price lists in PKR, AED, SAR, USD, GBP, Single / Core / All tiers, monthly and session pass, free tier, family discount), payments (Safepay for PKR, Paddle for the rest, business registered in Pakistan), the student interface brief with three style mockups, and the database scale answer. CLAUDE.md and the brief point to it.
