@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-05: Student and parent sign-in (Phase 1, step 2)
+
+**What:** students and parents sign in at `/signin` with a 6-digit email code (the code step appears in place) or with Google. A first sign-in creates the account and asks once: student or parent, first and last name. Students land on an empty student home, parents on an empty family home (always the calm look). Sign out on both. Codes work for 10 minutes, 5 tries, stored scrambled; code emails are limited per address and per network; the answer is the same for new and registered emails. Admin > Brand has a new "Email sender" field. Built on Better Auth (approved), with only the Google callback of its own endpoints exposed. Admin sign-in is unchanged.
+
+**Why:** owner approved Better Auth and Resend; Google sign-in now (option A); 30-day sessions (recommended default).
+
+**Tested:** 147 unit tests (new: email, code and name checks, the code email, local mailbox and Resend sending, the real Better Auth on SQLite: code stored hashed, wrong and right codes, tries per code, cookie rules, no IP stored, audits, roles and cascade on delete; CSP allows only Google's sign-in page as a form target); 36 new browser checks at 375 px (student and parent sign-up by code, wrong code, welcome once, role homes and redirects, sign-out and sign-in again, cookie rules, theme, cross-site refused, Better Auth endpoints not exposed, the same answer for new and registered emails, the code limit), and the sign-in page in the smoke test at 375 and 1400 px.
+
 ## 2026-11-05: Brand settings and the three student themes (Phase 1, step 1)
 
 **What:** (1) A Brand page in admin: platform name, short name, description, footer statement (with {name}), the theme new students start in, and the logo, square logo and favicon (PNG, JPG or WebP, checked by their bytes; SVG refused). Pictures are stored in the app's file storage under a name made from their contents and served at `/brand/...` with a year-long cache; only the current pictures are served. Page titles, the description and browser icons now come from these settings. (2) The three student themes, Bold, Playful and Clean, as sets of style tokens in the central stylesheet, with our own copies of five fonts. One layout and the same words in every theme; parent pages always use Clean. (3) The student page frame (brand, menu at the bottom on phones and at the side on wide screens, footer statement) and its building blocks: cards, buttons, chips, progress bars, predicted grades, today's plan, answer options (right and wrong), feedback, hint, streak, Playful's mascot. (4) A Themes page in admin: every building block with sample words in a phone-sized box, a theme switch that works without a reload, and a full-page view.

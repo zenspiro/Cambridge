@@ -45,7 +45,8 @@ export function buildCsp(nonce: string, opts: { dev?: boolean; plainHttp?: boole
     "worker-src": ["'self'"],
     "manifest-src": ["'self'"],
     "base-uri": ["'none'"],
-    "form-action": ["'self'"],
+    // Google sign-in: the "Continue with Google" form is answered with a redirect to Google's sign-in page.
+    "form-action": ["'self'", "https://accounts.google.com"],
     "frame-ancestors": ["'none'"],
   };
   const parts = Object.entries(directives).map(([k, v]) => `${k} ${v.join(" ")}`);

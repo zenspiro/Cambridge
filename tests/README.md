@@ -27,6 +27,7 @@ Node's built-in test runner, TypeScript loaded directly. Files must not import N
 | `ai.test.ts` | Workers AI answers: folder choices default to open, file names built from parts and kept only if the checklist asks for them, file names sent as data, summary cleaning, lenient JSON, running run only, per-run cap, unavailable and failing AI |
 | `run-summary.test.ts` | Run summary facts by rules, real limits only, the AI rewording kept only when every number matches and no limit is invented |
 | `brand.test.ts` | Brand settings: text checks, damaged values fall back, pictures recognised by their bytes (SVG refused), upload, replace and remove with old files deleted and audited, only current files served |
+| `accounts.test.ts` | Sign-in checks (email, code, names, roles), the code email, local mailbox and Resend sending, the real Better Auth on SQLite (code hashed, wrong and right codes, tries per code, cookie rules, no IP, audits), roles and cascade on delete |
 | `themes.test.ts` | Every theme in config has a token block with the same tokens, WCAG AA contrast for every text pair and subject colour, nothing below 14 px, fonts only from `/fonts/` |
 | `check-inline.test.ts` | The inline code scanner catches each banned pattern and passes normal React code |
 
@@ -49,3 +50,7 @@ Builds a folder like an unzipped Google Drive download (names in folders, a scan
 ## Themes and brand test (`tests/e2e/themes.mjs`, part of `npm run test:e2e`)
 
 Signs in with the local password. On `/admin/brand` (1400 px): saving the name happens without a reload and shows in the page title; an SVG logo is refused; a PNG is stored, served as a PNG with a year-long cache and shown in the student frame; unknown files are not served; Remove asks inline. The name is put back afterwards. On `/admin/themes`: the switch changes the theme without a reload and a wrong answer shows its feedback. Then `/admin/themes/phone` at 375 px in each theme: theme applied, no sideways scroll, menu at the bottom, footer statement, the theme's font loaded, no script or CSP errors.
+
+## Sign-in test (`tests/e2e/accounts.mjs`, part of `npm run test:e2e`)
+
+Needs `BETTER_AUTH_SECRET` and `EMAIL_TRANSPORT=local` in `.dev.vars` (CI copies `.dev.vars.example`). At 375 px: a student and a parent sign up with an email code read from the local test mailbox (`wrangler r2 object get --local`), a wrong code is refused, the welcome step shows once, each lands on their own home (student in the default theme, parent in Clean), the cookie is HttpOnly, Secure and SameSite=Lax, a student cannot open the parent home, sign-out closes the home and signing in again goes straight home. Then attacks: a code request from another site, Better Auth's own endpoints (not exposed), the same answer for new and registered emails, and the per-email code limit. It never sends real email.

@@ -5,7 +5,7 @@ import { chromium } from "playwright";
 
 const BASE = process.env.BASE_URL ?? "http://localhost:8787";
 // Public pages at phone and desktop width. Admin pages are desktop only (owner decision).
-const PAGES = ["/", "/does-not-exist"];
+const PAGES = ["/", "/signin", "/does-not-exist"];
 const ADMIN_PAGES = ["/admin/login"];
 const WIDTHS = [375, 1400];
 

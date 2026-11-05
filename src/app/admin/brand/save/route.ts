@@ -11,6 +11,7 @@ export async function POST(request: Request) {
       description: form.get("description"),
       footer: form.get("footer"),
       defaultTheme: form.get("defaultTheme"),
+      emailFrom: form.get("emailFrom"),
     });
     if (!text) return "bad_text";
     await saveBrandText(db, text, await fallbackName(), actorId);
