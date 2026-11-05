@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-04: Folder upload survives server hiccups
+
+**What:** each file whose upload gets something other than the server's own answer (a Cloudflare error page while the Worker starts, a 5xx, a dropped connection) is tried again by itself after 2, 5 and 10 seconds. Real refusals (wrong year, already stored, not a PDF) are not retried. A file that still fails says what happened ("the server did not answer properly (error 503, tried 4 times)"), and the finish summary has "Try the N failed files again", so nothing needs the folder picked again. The upload route now always answers in JSON.
+
+**Why:** owner's report: a run of 2020 and 2021 Physics files all came back "could not be stored", the words the page used when the reply was not the server's own answer.
+
+**Tested:** 124 unit tests; 207 browser checks (new: every file's first try gets a fake Cloudflare error page and is retried by itself; one file keeps failing until "Try again", then all seven are stored).
+
 ## 2026-11-04: Pakistan series codes (1524) sit with their subject
 
 **What:** Cambridge set IGCSE Physics under code 1524 for the Pakistan-only 2021 series. A new table links such codes to the library syllabus (1524 to Physics 0625, seeded). Files keep their real names (`1524_s21_qp_12.pdf`; "1524_j21_*" in collections is read as June 2021), are stored with Physics, and show in June 2021 as "Pakistan series (1524)": its own row on the subject map and its own section on the session page, with the same papers, and variant 2 essential like the rest. The folder upload also learns new codes by itself: a first page with a code the library does not have next to a library subject's name ("CHEMISTRY 1525/22, May/June 2021") links that code to the subject, reads those files again and says so on the page. The agent treats linked codes as the run's subject.

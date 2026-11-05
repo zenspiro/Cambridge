@@ -12,7 +12,12 @@ import { describeFile, paperLookup, versionForFile, type Paper } from "@/lib/lib
 import { firstPageText } from "@/lib/pdf/firstPage";
 
 type Phase = "idle" | "reading" | "preview" | "uploading" | "done";
-type Result = { ok: boolean; text: string };
+/** One file's upload. `retry`: worth sending again (a server or network hiccup, not a refusal). */
+type Result = { ok: boolean; text: string; retry?: boolean };
+
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+// Refusals that will not change on a second try; anything else (server hiccup) is retried.
+const FINAL_REASONS = new Set(["name", "year", "size", "not_pdf", "no_syllabus", "same_name", "same_content"]);
 
 const AI_CALLS = 60;
 const AI_BATCH = 40;
@@ -240,12 +245,41 @@ export function FolderUpload(props: {
     setPhase("preview");
   }
 
-  async function upload() {
+  /**
+   * Sends one file. A reply that is not the server's own answer (a Cloudflare error page while the
+   * Worker starts, a dropped connection, a 5xx) is tried again after 2, 5 and 10 seconds.
+   */
+  async function sendOne(name: string, file: File): Promise<Result | "signed_out" | "busy"> {
+    let last: Result = { ok: false, text: "the upload did not reach the server", retry: true };
+    for (const pause of [0, 2000, 5000, 10000]) {
+      if (pause) await wait(pause);
+      try {
+        const r = await fetch("/admin/library/folder/file", { method: "POST", headers: { "Content-Type": "application/pdf", "x-file-name": name }, body: file });
+        if (r.status === 401) return "signed_out";
+        if (r.status === 429) return "busy";
+        const out = (await r.json().catch(() => null)) as { ok?: boolean; reason?: string; error?: string } | null;
+        if (out?.ok) return { ok: true, text: `Stored as ${name}` };
+        if (out?.reason && FINAL_REASONS.has(out.reason)) return { ok: false, text: REASON_LABELS[out.reason as keyof typeof REASON_LABELS] };
+        last = {
+          ok: false, retry: true,
+          text: out?.reason === "storage" ? "the server could not save it (tried 4 times)"
+            : out?.error === "forbidden" ? "the server refused the request (reload the page and try again)"
+            : `the server did not answer properly (error ${r.status}, tried 4 times)`,
+        };
+        if (out?.error === "forbidden") return last;
+      } catch {
+        last = { ok: false, text: "the upload did not reach the server (tried 4 times)", retry: true };
+      }
+    }
+    return last;
+  }
+
+  async function upload(only?: PlanItem[]) {
     stop.current = false;
     setStopNote("");
     setPhase("uploading");
-    const queue = items.filter((it) => it.status === "new" || (it.status === "review" && picks[it.i]));
-    const taken = new Set(queue.filter((it) => it.status === "new").map((it) => it.name!));
+    const queue = only ?? items.filter((it) => it.status === "new" || (it.status === "review" && picks[it.i]));
+    const taken = new Set(only ? [] : queue.filter((it) => it.status === "new").map((it) => it.name!));
     setTotal(queue.length);
     let k = 0;
     for (const it of queue) {
@@ -261,21 +295,14 @@ export function FolderUpload(props: {
         continue;
       }
       taken.add(name);
-      let res: Result;
-      try {
-        const r = await fetch("/admin/library/folder/file", { method: "POST", headers: { "Content-Type": "application/pdf", "x-file-name": name }, body: files.current[it.i] });
-        const out = (await r.json().catch(() => null)) as { ok?: boolean; reason?: string } | null;
-        if (r.status === 401) {
-          setStopNote("You were signed out. Sign in again and pick the folder: files already stored are skipped.");
-          break;
-        }
-        if (r.status === 429) {
-          setStopNote("Too many uploads this hour. Wait a little, then pick the folder again: files already stored are skipped.");
-          break;
-        }
-        res = out?.ok ? { ok: true, text: `Stored as ${name}` } : { ok: false, text: REASON_LABELS[out?.reason as keyof typeof REASON_LABELS] ?? "could not be stored" };
-      } catch {
-        res = { ok: false, text: "the upload did not reach the server" };
+      const res = await sendOne(name, files.current[it.i]!);
+      if (res === "signed_out") {
+        setStopNote("You were signed out. Sign in again and pick the folder: files already stored are skipped.");
+        break;
+      }
+      if (res === "busy") {
+        setStopNote("Too many uploads this hour. Wait a little, then press Try again: files already stored are skipped.");
+        break;
       }
       setResults((r) => ({ ...r, [it.i]: res }));
     }
@@ -319,6 +346,7 @@ export function FolderUpload(props: {
         const sent = items.filter((it) => results[it.i]);
         const good = sent.filter((it) => results[it.i]!.ok);
         const bad = sent.filter((it) => !results[it.i]!.ok);
+        const again = bad.filter((it) => results[it.i]!.retry);
         const have = items.filter((it) => it.status === "have").length;
         const left = items.length - sent.length - have;
         return (
@@ -330,6 +358,11 @@ export function FolderUpload(props: {
             </p>
             <div className="actions">
               <a className="btn btn-small btn-primary" href={`/admin/library/${encodeURIComponent(props.code)}`}>Open {props.subjectLabel} in the library</a>
+              {again.length ? (
+                <button className="btn btn-small btn-primary" type="button" id="folder-retry" onClick={() => upload(again)}>
+                  Try the {again.length} failed file{again.length === 1 ? "" : "s"} again
+                </button>
+              ) : null}
               <button className="btn btn-small" type="button" onClick={downloadReport}>Download report</button>
             </div>
             {good.length ? (
@@ -393,7 +426,7 @@ export function FolderUpload(props: {
           ) : null}
           {phase === "preview" ? (
             <div className="actions">
-              {toSend ? <button className="btn btn-primary" type="button" onClick={upload}>Upload {toSend} file{toSend === 1 ? "" : "s"}</button> : <p className="muted">Nothing new to upload.</p>}
+              {toSend ? <button className="btn btn-primary" type="button" onClick={() => upload()}>Upload {toSend} file{toSend === 1 ? "" : "s"}</button> : <p className="muted">Nothing new to upload.</p>}
               <button className="btn btn-small" type="button" id="folder-report" onClick={downloadReport}>Download report</button>
             </div>
           ) : null}

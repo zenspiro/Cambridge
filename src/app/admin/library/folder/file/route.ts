@@ -10,7 +10,18 @@ const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { sta
 
 // Folder upload: one PDF at a time, under the Cambridge name the page worked out. Admin only,
 // same origin, rate limited; stored through the same checks as every other upload.
+// Every answer is JSON, even when something unexpected fails, so the page can say what happened
+// and try again instead of showing a bare error.
 export async function POST(request: Request) {
+  try {
+    return await handle(request);
+  } catch (err) {
+    const ref = reportError("library.folder", err);
+    return json({ fileName: (request.headers.get("x-file-name") ?? "").slice(0, 40), ok: false, reason: "storage", ref }, 500);
+  }
+}
+
+async function handle(request: Request) {
   if (!isSameOrigin(request)) return json({ error: "forbidden" }, 403);
   const session = await adminSession();
   if (!session) return json({ error: "signed_out" }, 401);
