@@ -5,9 +5,10 @@ import { frameBrand } from "@/lib/brand";
 import { requireAccount } from "@/lib/account/server";
 import { homeFor } from "@/lib/account/roles";
 import { birthYears, examYears, getProfile, listExamPlans } from "@/lib/account/profile";
+import { myFamily } from "@/lib/account/family";
 import { countryOptions } from "@/lib/countries";
 import { listSubjects, subjectLabel } from "@/lib/library/catalog";
-import { ACCOUNT, PARENT_THEME, SESSION_LABELS } from "@/lib/config";
+import { ACCOUNT, FAMILY, PARENT_THEME, SESSION_LABELS } from "@/lib/config";
 import { StudentFrame } from "@/components/student/StudentFrame";
 import { SignOut } from "@/components/student/SignOut";
 import { StudentNotice } from "@/components/student/Notice";
@@ -27,6 +28,14 @@ const MESSAGES = {
   bad_details: "Please type your first and last name (letters only) and pick your country.",
   bad_theme: "Please pick one of the themes.",
   bad_exam: "Please pick a subject, a session and a year.",
+  ok_joined: "You joined your family.",
+  ok_left: "You left the family.",
+  bad_code: "That code does not work. Check it with your parent, or ask them for a new one.",
+  in_family: "You are already in a family.",
+  full: `That family is full (up to ${FAMILY.maxChildren} children).`,
+  not_student: "Only students can join a family.",
+  too_young: "You can leave once you are over the age for parent approval.",
+  no_family: "You are not in a family.",
   busy: "Too many changes for now. Please wait a little.",
 };
 
@@ -39,7 +48,12 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
   const brand = await currentBrand();
   const student = s.roles.includes("student");
   const year = new Date().getUTCFullYear();
-  const [profile, plans, subjects] = await Promise.all([getProfile(db, s.userId), student ? listExamPlans(db, s.userId) : [], student ? listSubjects(db) : []]);
+  const [profile, plans, subjects, family] = await Promise.all([
+    getProfile(db, s.userId),
+    student ? listExamPlans(db, s.userId) : [],
+    student ? listSubjects(db) : [],
+    student ? myFamily(db, s.userId) : null,
+  ]);
   const theme = student ? (s.theme ?? brand.defaultTheme) : PARENT_THEME;
   return (
     <StudentFrame brand={frameBrand(brand)} theme={theme} nav={student ? STUDENT_NAV : PARENT_NAV} current="/me" actions={<SignOut />}>
@@ -112,6 +126,30 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
             </div>
             <button className="s-btn" type="submit">Add exam</button>
           </ActionForm>
+        </section>
+      ) : null}
+
+      {student ? (
+        <section className="s-card" id="family" aria-label="Your family">
+          <h2 className="s-h2">Your family</h2>
+          {family ? (
+            <>
+              <p>You are in {family.parentFirstName} {family.parentLastName}&apos;s family (parent).</p>
+              {family.canLeave ? (
+                <ActionForm action="/account/family/leave" messages={MESSAGES} confirm="Leave this family?">
+                  <button className="s-btn" type="submit">Leave the family</button>
+                </ActionForm>
+              ) : null}
+            </>
+          ) : (
+            <ActionForm className="s-form" action="/account/family/join" messages={MESSAGES}>
+              <label className="s-field">
+                <span className="s-label">Join my family: your parent&apos;s family code</span>
+                <input className="s-input s-input-code" name="code" required autoComplete="off" maxLength={FAMILY.codeLength + 2} />
+              </label>
+              <button className="s-btn" type="submit">Join</button>
+            </ActionForm>
+          )}
         </section>
       ) : null}
 

@@ -235,6 +235,30 @@ export async function decideConsent(db: Db, token: string, answer: "approved" | 
   return { ...link, answer };
 }
 
+/**
+ * A signed-in parent answers from their own home instead of the email link: the request must still be pending, in
+ * date, and addressed to the parent's own (verified) email. Same effects as the link.
+ */
+export async function decideConsentAsParent(db: Db, requestId: string, parentEmail: string, parentId: string, answer: "approved" | "declined", now = Date.now()): Promise<{ ok: true; childId: string } | { ok: false }> {
+  const done = await db
+    .prepare(
+      `UPDATE parent_consent SET status = ?2, decided_at = ?3
+       WHERE id = ?1 AND status = 'pending' AND expires_at > ?3 AND parent_email = ?4 RETURNING child_id`,
+    )
+    .bind(requestId, answer, now, parentEmail.toLowerCase())
+    .first<{ child_id: string }>();
+  if (!done) return { ok: false };
+  await audit(db, { actorId: parentId, action: `consent.${answer}`, entity: "account", entityId: done.child_id }, now);
+  if (answer === "approved") await setProfile(db, done.child_id, { approved_at: now }, now);
+  else await deleteAccount(db, done.child_id, parentId, now);
+  return { ok: true, childId: done.child_id };
+}
+
+/** Marks a student approved (a parent made their account, which is the approval). */
+export async function markApproved(db: Db, userId: string, now = Date.now()) {
+  await setProfile(db, userId, { approved_at: now }, now);
+}
+
 // ---------- Your data ----------
 
 /** Everything we hold about one person, for "Download my data". Never tokens, codes or secrets. */
@@ -250,6 +274,7 @@ export async function exportAccount(db: Db, userId: string): Promise<Record<stri
     roles: await all(`SELECT role, created_at FROM user_role WHERE user_id = ?1`),
     profile: await db.prepare(`SELECT birth_year, country, theme, approved_at, exam_skipped_at, updated_at FROM profile WHERE user_id = ?1`).bind(userId).first(),
     exam_plans: await all(`SELECT syllabus_code, session, year, created_at FROM exam_plan WHERE user_id = ?1`),
+    family: await all(`SELECT 'parent' AS as_role, created_at AS since FROM family WHERE parent_id = ?1 UNION ALL SELECT 'child', joined_at FROM family_child WHERE child_id = ?1`),
     parent_approval: await all(`SELECT parent_email, status, created_at, expires_at, decided_at FROM parent_consent WHERE child_id = ?1`),
     sign_in_methods: await all(`SELECT "providerId" AS provider, "createdAt" AS created_at FROM "auth_account" WHERE "userId" = ?1`),
     sessions: await all(`SELECT "createdAt" AS created_at, "expiresAt" AS expires_at, "userAgent" AS device FROM "auth_session" WHERE "userId" = ?1`),

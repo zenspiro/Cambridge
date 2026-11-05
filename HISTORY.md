@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-05: Families (Phase 1, step 4)
+
+**What:** the parent home shows the family: each child with their status (active, waiting for approval, still setting up), exam sessions, Download their data, Remove (inline confirm) and Delete account (inline confirm). A parent adds children three ways: a family code the child types on Me ("Join my family", 7 days), automatically when the parent approved the child by email and signs in with that email (once; a removed child is not added back), or by making the child's account (the child's own email; counted as approved). Children waiting for this parent's approval show on the home with an Approve button. Students see "Your family" on Me; adults can leave.
+
+**Why:** owner decisions: recommended options, no second guardian.
+
+**Tested:** 160 unit tests (new: codes typed loosely, replaced and expiring, students only, one family per child, the limit, linking by approval once, approving from home only for the addressed parent, parent-made accounts never over an existing email, remove, leave for adults only, cascades both ways); 20 new browser checks at 375 px; full suite from a fresh database: 333 browser checks. Found and fixed during testing: the automatic link re-added a child the parent had removed.
+
 ## 2026-11-05: CI fix: browser checks wait for in-place updates
 
 **What:** after merge #29 one browser check failed on CI ("me: an exam session is added in place") although the same code passed on the pull request. The check looked for the new list row the moment the "saved" message appeared; the page redraws a moment later, so on a slower machine the row was not there yet. That check and two similar ones now wait up to 10 s for the text. Nothing in the app changed; merge #29 was not deployed because of this.

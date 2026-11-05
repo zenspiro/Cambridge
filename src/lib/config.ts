@@ -177,3 +177,13 @@ export const CONSENT = {
 } as const;
 /** Profile changes (names, theme, exam sessions) per person per hour. */
 export const ACCOUNT_WRITES_PER_HOUR = 120;
+
+/** Families (Phase 1 step 4, owner decisions 5 Nov 2026): one parent per family, no second guardian. */
+export const FAMILY = {
+  maxChildren: 8,
+  codeDays: 7,
+  /** Family codes use letters and digits that cannot be mixed up (no 0/O, 1/I/L). */
+  codeLength: 8,
+  joinTriesPerHour: 10,
+  childAccountsPerDay: 5,
+} as const;

@@ -160,7 +160,7 @@ passes its quality bar. Admin work and the library already built (Phase 0) stay 
    person, so one person can have several.
 3. **Profiles and parent approval (built 5 Nov 2026).** First and last name, email, birth year, country; parent approval for under 18
    (age limit per country, an admin setting); exam session per subject in the profile; see, export and delete.
-4. **Families (decided 5 Nov 2026, not built yet).** One family per parent; a child belongs to one family; no second
+4. **Families (built 5 Nov 2026).** One family per parent; a child belongs to one family; no second
    guardian (owner). A parent adds an existing child with a family code the child types on Me (7 days), and a child
    they approved by email links by itself when the parent signs in with that email. Children need their own email
    (parent-made child accounts need one too and count as approved). Parent home: children, their details, exam
