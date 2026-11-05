@@ -119,7 +119,7 @@ export const DRIVE_BASE = "https://drive.google.com/";
 const MAX_FOLDERS_PER_ADD = 50;
 
 /** Adds every Drive folder link in the text (one per line). Duplicates and bad lines are counted, not stored. */
-export async function addDriveFolders(db: Db, siteId: string, text: unknown, actorId: string, now = Date.now()) {
+export async function addDriveFolders(db: Db, siteId: string, text: unknown, actorId: string, now = Date.now(), label = "") {
   const site = await db.prepare(`SELECT id, kind FROM source_site WHERE id = ?1`).bind(siteId).first<{ id: string; kind: string }>();
   if (!site || site.kind !== "gdrive") return { ok: false as const, error: "missing" as const };
   const lines = typeof text === "string" ? text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, MAX_FOLDERS_PER_ADD) : [];
@@ -128,9 +128,9 @@ export async function addDriveFolders(db: Db, siteId: string, text: unknown, act
     const id = driveFolderId(line);
     if (!id) { bad++; continue; }
     const row = await db
-      .prepare(`INSERT INTO source_drive_folder (id, site_id, folder_id, created_by, created_at) VALUES (?1, ?2, ?3, ?4, ?5)
+      .prepare(`INSERT INTO source_drive_folder (id, site_id, folder_id, label, created_by, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
                 ON CONFLICT DO NOTHING RETURNING id`)
-      .bind(randomId(), site.id, id, actorId, now)
+      .bind(randomId(), site.id, id, label.slice(0, 120), actorId, now)
       .first<{ id: string }>();
     if (row) added++;
     else dupes++;

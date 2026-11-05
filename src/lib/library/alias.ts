@@ -30,12 +30,14 @@ export const aliasLabel = (a: Pick<Alias, "code" | "label">): string => `${a.lab
  */
 export async function learnAlias(
   db: Db,
-  input: { code: string; subjectWord: string; year: number; session: string },
+  input: { code: string; subjectWord?: string; mainCode?: string; label?: string; year: number; session: string },
   now = Date.now(),
 ): Promise<{ ok: true; alias: Alias } | { ok: false; reason: "bad" | "known" | "no_subject" | "many_subjects" }> {
   const code = String(input.code ?? "");
   const word = String(input.subjectWord ?? "").trim().toLowerCase().replace(/\s+/g, " ");
-  if (!/^\d{4}$/.test(code) || !word || word.length > 60 || !Number.isInteger(input.year) || input.year < 2000 || input.year > 2099 || !["m", "s", "w"].includes(input.session)) {
+  const mainIn = input.mainCode ? String(input.mainCode) : "";
+  const label = input.label === "Pakistan series" ? "Pakistan series" : "Other series";
+  if (!/^\d{4}$/.test(code) || (!word && !/^\d{4}$/.test(mainIn)) || word.length > 60 || !Number.isInteger(input.year) || input.year < 2000 || input.year > 2099 || !["m", "s", "w"].includes(input.session)) {
     return { ok: false, reason: "bad" };
   }
   if (await db.prepare(`SELECT 1 FROM syllabus WHERE code = ?1`).bind(code).first()) return { ok: false, reason: "known" };
@@ -49,13 +51,16 @@ export async function learnAlias(
     await db.prepare(`UPDATE syllabus_alias SET from_year = ?2, to_year = ?3, sessions = ?4 WHERE code = ?1`).bind(code, alias.from_year, alias.to_year, alias.sessions).run();
     return { ok: true, alias };
   }
-  const { results } = await db
-    .prepare(`SELECT DISTINCT y.code FROM syllabus y JOIN subject s ON s.id = y.subject_id WHERE lower(s.name) = ?1`)
-    .bind(word)
-    .all<{ code: string }>();
+  // The subject: given by the file's folder (its code), or by the word on the cover ("PHYSICS").
+  const { results } = mainIn
+    ? await db.prepare(`SELECT DISTINCT code FROM syllabus WHERE code = ?1`).bind(mainIn).all<{ code: string }>()
+    : await db
+      .prepare(`SELECT DISTINCT y.code FROM syllabus y JOIN subject s ON s.id = y.subject_id WHERE lower(s.name) = ?1`)
+      .bind(word)
+      .all<{ code: string }>();
   if (results.length === 0) return { ok: false, reason: "no_subject" };
   if (results.length > 1) return { ok: false, reason: "many_subjects" };
-  const alias: Alias = { code, main_code: results[0]!.code, label: "Other series", from_year: input.year, to_year: input.year, sessions: input.session };
+  const alias: Alias = { code, main_code: results[0]!.code, label, from_year: input.year, to_year: input.year, sessions: input.session };
   await db
     .prepare(`INSERT INTO syllabus_alias (code, main_code, label, from_year, to_year, sessions, source, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'cover', ?7) ON CONFLICT DO NOTHING`)
     .bind(alias.code, alias.main_code, alias.label, alias.from_year, alias.to_year, alias.sessions, now)

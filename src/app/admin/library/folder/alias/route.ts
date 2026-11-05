@@ -24,7 +24,8 @@ export async function POST(request: Request) {
   const env = await getEnv();
   if (!(await allow(env.DB, await limitKey("folder-alias", session.actorId), 30, 3_600_000))) return json({ error: "limit" }, 429);
   const r = await learnAlias(env.DB, {
-    code: String(body?.code ?? ""), subjectWord: String(body?.subjectWord ?? ""), year: Number(body?.year), session: String(body?.session ?? ""),
+    code: String(body?.code ?? ""), subjectWord: String(body?.subjectWord ?? ""), mainCode: String(body?.mainCode ?? ""),
+    label: String(body?.label ?? ""), year: Number(body?.year), session: String(body?.session ?? ""),
   });
   if (!r.ok) return json({ error: r.reason }, r.reason === "bad" ? 400 : 409);
   await audit(env.DB, { actorId: session.actorId, action: "library.alias", entity: "syllabus_alias", entityId: r.alias.code, detail: { main: r.alias.main_code } });

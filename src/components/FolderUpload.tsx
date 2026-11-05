@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { KnownSubject } from "@/lib/agent/classify";
 import { readCover } from "@/lib/library/cover";
-import { applyAi, applyCover, finalise, isPdf, paperTitleChecks, planFromNames, STATUS_WORDS, type PlanItem, type PlanStatus } from "@/lib/library/folderPlan";
+import { applyAi, applyCover, finalise, isPdf, noteFor, paperTitleChecks, planFromNames, STATUS_WORDS, type PlanItem, type PlanStatus } from "@/lib/library/folderPlan";
 import { parseCambridgeName } from "@/lib/library/names";
 import { REASON_LABELS } from "@/lib/library/labels";
 import { describeFile, paperLookup, versionForFile, type Paper } from "@/lib/library/papers";
@@ -120,6 +120,18 @@ export function FolderUpload(props: {
   const subjectsRef = useRef<KnownSubject[]>(props.subjects);
   const [learned, setLearned] = useState<string[]>([]);
   const codesNow = () => subjectsRef.current.map((s) => s.code);
+  /** Adds a code the server linked to a subject, and a line for the page. */
+  const learn = (a: { code: string; main_code: string; label: string } | undefined, status: number, notes: string[]) => {
+    if (status !== 200 || !a) return;
+    const main = subjectsRef.current.find((s) => s.code === a.main_code);
+    if (!main) return;
+    if (!subjectsRef.current.some((s) => s.code === a.code)) subjectsRef.current = [...subjectsRef.current, { ...main, code: a.code, main: a.main_code, series: a.label }];
+    notes.push(`${a.code} is the ${a.label} code of ${main.qualification} ${main.name} (${a.main_code})`);
+  };
+  const seriesOf = (code: string) => {
+    const s = subjectsRef.current.find((x) => x.code === code && x.main);
+    return s ? `${s.series || "Other series"} (${code})` : null;
+  };
   const mainCode = (code: string) => subjectsRef.current.find((s) => s.code === code)?.main || code;
   // A suggested name can be picked when it is a library subject's file from a library year.
   const suggestable = (name: string) => {
@@ -163,6 +175,20 @@ export function FolderUpload(props: {
     setStep("Reading names");
     const years = { fromYear: props.fromYear, toYear: props.toYear };
     const plan = pdfs.map((f, i) => planFromNames(i, f.webkitRelativePath || f.name, f.size, props.subjects, props.maxFileBytes, years));
+    const notes: string[] = [];
+
+    // Files named with a code the library does not have, inside a library subject's folder
+    // ("Maths 0580 / ... / 1521_j21_qp_32.pdf"): the code is linked to that subject first.
+    const byFolder = new Map<string, PlanItem>();
+    for (const it of plan) if (it.aliasOf && it.name && !codesNow().includes(it.name.slice(0, 4))) byFolder.set(it.name.slice(0, 4), it);
+    for (const [code, it] of byFolder) {
+      const p = parseCambridgeName(it.name!)!;
+      if (p.session === "y") continue;
+      setStep(`Linking code ${code} to its subject`);
+      const pakistan = [...it.path, it.fileName].some((x) => /pakistan/i.test(x));
+      const r = await postJson("/admin/library/folder/alias", { code, mainCode: it.aliasOf, year: p.year, session: p.session, label: pakistan ? "Pakistan series" : "" });
+      learn(r.data?.alias as { code: string; main_code: string; label: string } | undefined, r.status, notes);
+    }
 
     // The first page of every file: names the unclear ones and checks the others.
     const unknown = new Map<number, { text: string; code: NonNullable<ReturnType<typeof readCover>["unknownCode"]> }>();
@@ -185,23 +211,16 @@ export function FolderUpload(props: {
     // A first page with a code the library does not have next to a library subject's name
     // ("PHYSICS 1524/12, May/June 2021"): the code is linked to that subject, then read again.
     const tried = new Set<string>();
-    const notes: string[] = [];
+    const before = notes.length;
     for (const { code } of unknown.values()) {
-      if (tried.has(code.code)) continue;
+      if (tried.has(code.code) || codesNow().includes(code.code)) continue;
       tried.add(code.code);
       setStep(`Linking code ${code.code} to its subject`);
       const r = await postJson("/admin/library/folder/alias", code);
-      const a = r.data?.alias as { code: string; main_code: string } | undefined;
-      if (r.status !== 200 || !a) continue;
-      const main = subjectsRef.current.find((s) => s.code === a.main_code);
-      if (!main) continue;
-      if (!subjectsRef.current.some((s) => s.code === a.code)) subjectsRef.current = [...subjectsRef.current, { ...main, code: a.code, main: a.main_code }];
-      notes.push(`${a.code} (${main.qualification} ${main.name} ${a.main_code})`);
+      learn(r.data?.alias as { code: string; main_code: string; label: string } | undefined, r.status, notes);
     }
-    if (notes.length) {
-      for (const [k, u] of unknown) applyCover(plan[k]!, readCover(u.text, codesNow()), u.text, years);
-      setLearned(notes);
-    }
+    if (notes.length > before) for (const [k, u] of unknown) applyCover(plan[k]!, readCover(u.text, codesNow()), u.text, years);
+    setLearned(notes);
 
     // The AI for what is left: first pages with text one by one, the rest by their names.
     let calls = 0;
@@ -405,7 +424,7 @@ export function FolderUpload(props: {
           {aiNote ? <p className="muted">{aiNote}</p> : null}
           {learned.length ? (
             <p className="notice" id="folder-learned">
-              Read from first pages: code {learned.join(", ")} is now linked to that subject, so its files are stored under their own names with it.
+              Linked by itself: {learned.join("; ")}. Those files are stored under their own names, with that subject.
             </p>
           ) : null}
           {stopNote ? <p className="alert" role="alert">{stopNote}</p> : null}
@@ -443,7 +462,7 @@ export function FolderUpload(props: {
               <summary className="subtitle summary">{STATUS_WORDS[s]} ({list.length})</summary>
               {s === "review" ? (
                 <p className="muted">
-                  Neither the names nor the first page could place these for sure. Where the AI had a guess it is already
+                  These are the only files it could not settle by itself. Where the AI had a guess it is already
                   chosen: check it and upload, choose another file, or leave it out.
                 </p>
               ) : null}
@@ -455,18 +474,10 @@ export function FolderUpload(props: {
                       <span className="doc-main">
                         <span>{it.name ? describe(it.name) : it.fileName}</span>
                         <span className="mono muted">{[...it.path, it.fileName].join(" / ")}</span>
-                        {it.dupOf ? (
-                          <span className="muted">Same file as {it.dupOf}, which is uploaded instead.</span>
-                        ) : (
-                          <>
-                            {it.name && it.name !== it.fileName.toLowerCase() && (it.status === "new" || it.status === "have") ? (
-                              <span>{it.status === "have" ? "In the library as" : "Will be stored as"} <span className="mono">{it.name}</span></span>
-                            ) : null}
-                            <span className="muted">
-                              {it.how}{it.renamedFrom ? ` (its names said ${it.renamedFrom})` : ""}{it.how && it.why ? ": " : ""}{it.why}
-                            </span>
-                          </>
-                        )}
+                        {it.name && it.name !== it.fileName.toLowerCase() && (it.status === "new" || it.status === "have") ? (
+                          <span>{it.status === "have" ? "In the library as" : "Will be stored as"} <span className="mono">{it.name}</span></span>
+                        ) : null}
+                        <span className="row-note">{noteFor(it, { fromYear: props.fromYear, toYear: props.toYear, describe, seriesOf })}</span>
                         {!res && s === "review" && phase === "preview" && props.choices.length ? (
                           // Its own line, the full width of the row, so the whole place in the library shows.
                           <span className="pick-line">

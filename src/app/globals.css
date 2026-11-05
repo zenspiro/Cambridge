@@ -88,6 +88,7 @@
   .review-act { @apply flex flex-wrap items-center gap-2; }
   .review-select { @apply mt-0 w-auto max-w-md py-1 text-base; }
   .review-row .doc-main { @apply grow; }
+  .row-note { @apply text-base; }
   .pick-line { @apply mt-2 flex w-full flex-col gap-1; }
   .pick-select { @apply mt-0 w-full max-w-none py-1 text-base; }
   .event-good { @apply font-semibold text-green-800; }

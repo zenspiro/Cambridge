@@ -189,8 +189,9 @@ try {
   sql(`UPDATE source_site SET enabled = 0 WHERE kind = 'gdrive' AND id <> 'local-drive'`);
   sql(`INSERT OR REPLACE INTO source_site (id, name, base_url, enabled, notes, created_at, kind) VALUES ('local-drive', 'Test Drive', 'https://drive.google.com/e2e-test/', 1, '', 2, 'gdrive')`);
   await page.goto(BASE + "/admin/sources");
-  await page.fill("#links-local-drive", "https://drive.google.com/drive/folders/ROOTFOLDER01?usp=sharing\nhttps://drive.google.com/drive/folders/PRIVATEFOLDR\nnot a link");
-  await page.click("form[action='/admin/sources/folders/add'] button");
+  await page.click("#s-0625 > summary");
+  await page.fill("#links-0625", "https://drive.google.com/drive/folders/ROOTFOLDER01?usp=sharing\nhttps://drive.google.com/drive/folders/PRIVATEFOLDR\nnot a link");
+  await page.click("#s-0625 form[action='/admin/sources/folders/add'] button");
   await page.waitForURL(/e=ok_folders/);
   check((await page.locator("p.muted", { hasText: "Added 2, already listed 0, not a folder link 1" }).count()) === 1, "drive: folder links pasted in bulk");
   // A folder named for another subject is skipped without asking Google (its id does not exist in the fake).
@@ -219,8 +220,9 @@ try {
   check((await page.locator("text=worked out: syllabus from folder").count()) > 0, "drive: run page says how names were worked out");
   const runText = await page.locator("main").innerText();
   check(!runText.includes("PRIVATEFOLDR") && !runText.includes("ROOTFOLDER01"), "drive: run page shows folder names, never folder codes");
-  const failedLine = await page.locator("section", { hasText: "Google Drive folders read" }).locator("li", { hasText: "An unnamed Google Drive folder" }).textContent();
-  check(failedLine?.includes("Could not be read: Google Drive refused access"), "drive: an unreadable folder is named and explained");
+  const failedLine = await page.locator("section", { hasText: "Google Drive folders read" }).locator("li", { hasText: "Could not be read" }).textContent();
+  // Folders added from a subject's card carry its name.
+  check(failedLine?.includes("IGCSE Physics (0625)") && failedLine?.includes("Could not be read: Google Drive refused access"), "drive: an unreadable folder is named and explained");
   // Needs your eye: reject, undo, then accept the unclear file as a missing checklist file.
   sql(`DELETE FROM review_decision`);
   await page.click("#review summary");

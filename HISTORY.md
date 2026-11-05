@@ -2,6 +2,22 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-05: Sources per subject, with what Cambridge offers
+
+**What:** the Sources page is now one card per subject instead of one block for Google Drive and one for Cambridge. Each card shows its Cambridge pages (subject page and past papers page), how many files each offers and which are not in the library yet (with the full list), its Google Drive folders, any linked codes (Pakistan series), forms to add a page or folders for that subject, and links to run the agent or open the library. The websites list (switch on or off, remove, add) sits at the bottom. Cambridge was scanned once from here, following its robots.txt: all 16 subjects have exactly two file pages, all were already saved and live; their 381 file links are stored with each page.
+
+**Why:** owner request: sources per subject, and the Cambridge links for every subject.
+
+**Tested:** 129 unit tests (new: the scan read against the library, folder subjects, all 32 pages seeded); 209 browser checks (new: one card per subject, the Physics card's pages and counts).
+
+## 2026-11-05: Folder upload settles more by itself, in plain words
+
+**What:** (1) a file named with a code the library does not have, inside a library subject's folder (Maths' Pakistan code 1521 in "Maths 0580 / 2021 July (Pakistan only)"), links that code to the subject by itself, then uploads under its own name; examiner reports per paper ("1521_j21_er_32") are valid names. (2) When the first page seems to show a name that another file in the folder already has as its own file name (a misread digit: "ms_33" read as "ms_31"), the file name wins, and an extra copy like "ms_33(1)" is listed as a copy. (3) Every row now says one plain sentence ("Its file name already says what it is.", "A copy of ... Only one is uploaded.", "Part of the Pakistan series (1521), stored with its subject."); the detailed reason stays in the downloaded report.
+
+**Why:** owner's report: 1521 Maths files went to "Subject not in the library" and "Needs your eye", two ms_33 files were read as ms_31, and the row texts were hard to follow.
+
+**Tested:** 126 unit tests (new: the owner's 1521 folder and ms_33 trio, plain notes); 207 browser checks (changed: plain wording; new: a code linked from its folder).
+
 ## 2026-11-04: Folder upload survives server hiccups
 
 **What:** each file whose upload gets something other than the server's own answer (a Cloudflare error page while the Worker starts, a 5xx, a dropped connection) is tried again by itself after 2, 5 and 10 seconds. Real refusals (wrong year, already stored, not a PDF) are not retried. A file that still fails says what happened ("the server did not answer properly (error 503, tried 4 times)"), and the finish summary has "Try the N failed files again", so nothing needs the folder picked again. The upload route now always answers in JSON.
