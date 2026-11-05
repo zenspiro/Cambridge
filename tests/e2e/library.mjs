@@ -157,14 +157,21 @@ for (const width of [DESKTOP]) {
   }
 
   await page.goto(BASE + "/admin/sources");
-  check((await page.locator(".doc-main", { hasText: "Cambridge International (official)" }).count()) === 1, `${width}px sources lists Cambridge`);
+  check((await page.locator("#sites .doc-main", { hasText: "Cambridge International (official)" }).count()) === 1, `${width}px sources lists Cambridge`);
   await noOverflow("sources");
 
   if (width === DESKTOP) {
+    // One card per subject, with its Cambridge pages and what they offer (from the scan).
+    await page.click("#s-0625 > summary");
+    const physics = await page.locator("#s-0625").innerText();
+    check(/Past papers page/.test(physics) && /Subject page/.test(physics) && /files on this page \(checked 5 Nov 2026\)/.test(physics), "sources: Physics card lists its Cambridge pages and what each offers");
+    check((await page.locator("details.card[id^='s-']").count()) === 16, `sources: one card per subject (${await page.locator("details.card[id^='s-']").count()})`);
+    await page.click("text=Add a website");
     await page.fill("#name", "Test site");
     await page.fill("#url", "https://127.0.0.1/");
     await page.click("text=Add source");
     check((await page.locator("p.alert").textContent())?.includes("https address"), "sources: IP address refused");
+    await page.click("text=Add a website");
     const host = `e2e-${Date.now()}.example.org`;
     await page.fill("#name", "Test site");
     await page.fill("#url", `https://${host}/papers`);
@@ -176,7 +183,7 @@ for (const width of [DESKTOP]) {
     const removeLink = () => page.locator(".list-row", { hasText: host }).getByRole("link", { name: "Remove", exact: true });
     await removeLink().click();
     await page.waitForURL(/remove=/);
-    check((await page.getByText("Remove this source?").count()) === 1, "sources: inline confirm shows");
+    check((await page.getByText("Remove this source and all its pages or folders?").count()) === 1, "sources: inline confirm shows");
     await page.getByRole("link", { name: "Never mind" }).click();
     await page.waitForURL(BASE + "/admin/sources");
     check((await page.locator(".list-row", { hasText: host }).count()) === 1, "sources: Never mind keeps it");
