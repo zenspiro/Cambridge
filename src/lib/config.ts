@@ -123,6 +123,7 @@ export const BRAND = {
   maxShortNameLength: 20,
   maxDescriptionLength: 200,
   maxFooterLength: 400,
+  maxEmailLength: 254,
   maxImageBytes: 1024 * 1024,
   /** Brand saves and uploads per admin per hour share LIBRARY.writesPerHour (adminPost). */
   imageKinds: {
@@ -132,3 +133,27 @@ export const BRAND = {
   },
 } as const;
 export type BrandImageKind = keyof typeof BRAND.imageKinds;
+
+/** Student and parent accounts (Phase 1 step 2). Secrets live in the Worker; these are limits only. */
+export const ACCOUNT = {
+  /** Roles a person can pick on the welcome page. Teachers come later (docs/PLAN.md). */
+  roles: ["student", "parent"] as const,
+  sessionDays: 30,
+  /** A session in use is renewed at most once per this many hours. */
+  renewHours: 24,
+  codeLength: 6,
+  codeMinutes: 10,
+  codeTries: 5,
+  /** Sign-in codes sent, per email address and per network, per hour. */
+  codesPerEmailPerHour: 5,
+  codesPerNetworkPerHour: 20,
+  /** Code checks per email address and per network, per hour (on top of the tries per code). */
+  checksPerEmailPerHour: 15,
+  checksPerNetworkPerHour: 60,
+  /** BETTER_AUTH_SECRET shorter than this switches student and parent sign-in off. */
+  minSecretLength: 32,
+  maxNameLength: 60,
+  maxEmailLength: 254,
+  cookiePrefix: "acct",
+} as const;
+export type AccountRole = (typeof ACCOUNT.roles)[number];

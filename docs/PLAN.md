@@ -156,7 +156,7 @@ passes its quality bar. Admin work and the library already built (Phase 0) stay 
    and parent page frames, shared component classes. Look only: same markup and wording in every theme.
    **Brand settings in admin (owner 5 Nov 2026):** platform name, footer statement, logo, square logo and favicon
    (and every similar brand item) are set in the admin panel, never in code.
-2. **Sign-in.** Email code and Google for students and parents (admin sign-in stays as it is). Roles held per
+2. **Sign-in (built 5 Nov 2026).** Email code and Google for students and parents (admin sign-in stays as it is). Roles held per
    person, so one person can have several.
 3. **Profiles and parent approval.** First and last name, email, birth year, country; parent approval for under 18
    (age limit per country, an admin setting); exam session per subject in the profile; see, export and delete.

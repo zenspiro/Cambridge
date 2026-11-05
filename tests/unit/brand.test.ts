@@ -16,7 +16,7 @@ const SVG = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"><s
 
 test("text fields: needed, one line, length limits, a real theme", () => {
   const ok = checkBrandText({ name: "  Prep  Hub ", shortName: "Prep", description: "", footer: "{name} is independent.", defaultTheme: "b" });
-  assert.deepEqual(ok, { name: "Prep Hub", shortName: "Prep", description: "", footer: "{name} is independent.", defaultTheme: "b" });
+  assert.deepEqual(ok, { name: "Prep Hub", shortName: "Prep", description: "", footer: "{name} is independent.", defaultTheme: "b", emailFrom: "" });
   const base = { name: "A", shortName: "A", description: "", footer: "", defaultTheme: "a" };
   assert.equal(checkBrandText({ ...base, name: "" }), null);
   assert.equal(checkBrandText({ ...base, shortName: "x".repeat(BRAND.maxShortNameLength + 1) }), null);
@@ -69,7 +69,7 @@ test("saving the wording keeps the pictures", async () => {
   const db = testDb();
   const bucket = testBucket();
   await saveBrandImage(db, bucket, "favicon", JPG, "F", "platform-admin");
-  await saveBrandText(db, { name: "Prep Hub", shortName: "Prep", description: "d", footer: "f", defaultTheme: "c" }, "F", "platform-admin");
+  await saveBrandText(db, { name: "Prep Hub", shortName: "Prep", description: "d", footer: "f", defaultTheme: "c", emailFrom: "" }, "F", "platform-admin");
   const b = await getBrand(db, "F");
   assert.equal(b.name, "Prep Hub");
   assert.equal(b.defaultTheme, "c");

@@ -13,12 +13,15 @@ export function StudentFrame({
   theme,
   nav,
   current,
+  actions,
   children,
 }: {
   brand: FrameBrand;
   theme: ThemeId;
   nav: readonly NavItem[];
   current: string;
+  /** Right side of the top bar (for example the sign-out button). */
+  actions?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -35,16 +38,19 @@ export function StudentFrame({
               </>
             )}
           </a>
+          {actions}
         </header>
         <div className="s-body">
-          <nav className="s-nav" aria-label="Main">
-            {nav.map((n) => (
-              <a key={n.href} className="s-nav-link" href={n.href} aria-current={n.href === current ? "page" : undefined}>
-                <Icon name={n.icon} />
-                {n.label}
-              </a>
-            ))}
-          </nav>
+          {nav.length > 1 ? (
+            <nav className="s-nav" aria-label="Main">
+              {nav.map((n) => (
+                <a key={n.href} className="s-nav-link" href={n.href} aria-current={n.href === current ? "page" : undefined}>
+                  <Icon name={n.icon} />
+                  {n.label}
+                </a>
+              ))}
+            </nav>
+          ) : null}
           <main className="s-main">{children}</main>
         </div>
         <footer className="s-footer">{brand.footer}</footer>

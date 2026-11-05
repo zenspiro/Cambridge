@@ -19,7 +19,10 @@ test("production CSP is strict", () => {
   assert.ok(csp.includes("base-uri 'none'"));
   assert.ok(!csp.includes("unsafe-inline"));
   assert.ok(!csp.includes("unsafe-eval"));
-  assert.ok(!/https?:/.test(csp), "no outside hosts unless added on purpose");
+  // The only outside host: Google's sign-in page, as a form target ("Continue with Google").
+  const hosts = [...csp.matchAll(/https?:\/\/[^\s;]+/g)].map((m) => m[0]);
+  assert.deepEqual(hosts, ["https://accounts.google.com"], "no outside hosts unless added on purpose");
+  assert.match(csp, /form-action 'self' https:\/\/accounts\.google\.com(;|$)/);
 });
 
 test("upgrade-insecure-requests is on for https and off only on plain http", () => {

@@ -13,6 +13,8 @@ export type Brand = {
   /** Footer statement; "{name}" is replaced with the platform name. */
   footer: string;
   defaultTheme: ThemeId;
+  /** Sender address for sign-in codes (a domain set up in Resend); empty means codes cannot be sent yet. */
+  emailFrom: string;
   images: Partial<Record<BrandImageKind, BrandImage>>;
 };
 
@@ -26,6 +28,7 @@ export function brandDefaults(fallbackName: string): Brand {
     description: "Practice, marking and progress for Cambridge exam students.",
     footer: "{name} is independent and is not affiliated with or endorsed by Cambridge University Press & Assessment.",
     defaultTheme: THEMES[0].id,
+    emailFrom: "",
     images: {},
   };
 }
@@ -47,6 +50,9 @@ export function imageType(bytes: Uint8Array): { type: string; ext: string } | nu
   const t = IMAGE_TYPES.find((x) => x.test(bytes));
   return t ? { type: t.type, ext: t.ext } : null;
 }
+
+/** A plain address (name@domain.tld), no display name: the platform name is added when sending. */
+export const EMAIL_RE = /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i;
 
 const FILE_RE = /^(logo|square|favicon)-[0-9a-f]{16}\.(png|jpg|webp)$/;
 
@@ -81,8 +87,10 @@ export function checkBrandText(v: unknown): Omit<Brand, "images"> | null {
   const description = line(o.description, BRAND.maxDescriptionLength);
   const footer = line(o.footer, BRAND.maxFooterLength);
   const theme = THEMES.find((t) => t.id === o.defaultTheme)?.id;
-  if (!name || !shortName || description === null || footer === null || !theme) return null;
-  return { name, shortName, description, footer, defaultTheme: theme };
+  const emailFrom = line(o.emailFrom ?? "", BRAND.maxEmailLength);
+  if (!name || !shortName || description === null || footer === null || !theme || emailFrom === null) return null;
+  if (emailFrom && !EMAIL_RE.test(emailFrom)) return null;
+  return { name, shortName, description, footer, defaultTheme: theme, emailFrom: emailFrom.toLowerCase() };
 }
 
 /** A whole stored value read safely: bad parts fall back to the defaults one by one. */

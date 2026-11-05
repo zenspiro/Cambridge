@@ -14,7 +14,7 @@ function routes(dir: string): string[] {
   });
 }
 
-test("every page and route is public on purpose or checks the admin session", () => {
+test("every page and route is public on purpose or checks the admin or account session", () => {
   const found = routes(appDir);
   assert.ok(found.length >= 5);
   for (const r of found) {
@@ -22,7 +22,7 @@ test("every page and route is public on purpose or checks the admin session", ()
     const src = readFileSync(join(appDir, r), "utf8");
     // Guards: requireAdmin() for pages, adminSession() for handlers, adminPost() wraps adminSession().
     const code = src.replace(/\/\/.*$/gm, "");
-    assert.match(code, /\b(requireAdmin\(\)|adminSession\(\)|adminPost\(|addFilePost\()/, `${r} has no auth check and is not in PUBLIC_ROUTES`);
+    assert.match(code, /\b(requireAdmin\(\)|adminSession\(\)|adminPost\(|addFilePost\(|requireAccount\(\)|requireRole\(|accountSession\(\))/, `${r} has no auth check and is not in PUBLIC_ROUTES`);
   }
 });
 
@@ -35,8 +35,15 @@ test("agent endpoints are public only behind a signed request", () => {
     assert.match(code, /\bagentRequest\(request/, `${r} must verify the signature with agentRequest()`);
   }
   for (const r of routes(appDir).filter((x) => x.startsWith("api/") && !x.startsWith("api/agent/"))) {
+    if (r === "api/auth/[...all]/route.ts") continue;
     assert.fail(`${r}: new api routes need their own rule here`);
   }
+});
+
+test("Better Auth's catch-all answers only the Google callback, and only GET", () => {
+  const code = readFileSync(join(appDir, "api/auth/[...all]/route.ts"), "utf8");
+  assert.match(code, /new Set\(\["\/api\/auth\/callback\/google"\]\)/);
+  assert.doesNotMatch(code, /export async function (POST|PUT|PATCH|DELETE)/);
 });
 
 test("the public list has no stale entries and nothing under admin except sign-in", () => {

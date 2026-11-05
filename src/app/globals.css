@@ -197,6 +197,7 @@
   .brand-file { @apply mt-0 w-72 py-1; }
   .brand-footer-input { @apply min-h-20; }
   .brand-theme-field { @apply max-w-xs; }
+  .brand-email-input { @apply max-w-md; }
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -418,6 +419,29 @@
   .s-switch { display: inline-flex; gap: 4px; padding: 4px; border-radius: 999px; background: var(--t-surface); border: var(--t-border) solid var(--t-line); }
   .s-switch-btn { min-height: 40px; padding: 0 14px; border: 0; border-radius: 999px; background: transparent; color: var(--t-muted); font: inherit; font-weight: 700; cursor: pointer; }
   .s-switch-btn[aria-pressed="true"] { background: var(--t-accent); color: var(--t-accent-ink); }
+
+  /* Sign-in, welcome and forms on student and parent pages. */
+  .s-auth { width: 100%; max-width: 440px; margin: 8px auto 0; box-sizing: border-box; }
+  .s-form { display: flex; flex-direction: column; gap: 14px; margin: 0; }
+  .s-field { display: flex; flex-direction: column; gap: 6px; }
+  .s-label { font-weight: 700; font-size: 16px; }
+  .s-input { min-height: 48px; padding: 0 14px; border-radius: var(--t-radius); border: max(1px, var(--t-border)) solid var(--t-line); background: var(--t-surface); color: var(--t-ink); font: inherit; font-size: 16px; box-sizing: border-box; width: 100%; }
+  [data-theme="a"] .s-input { background: var(--t-surface-2); }
+  .s-input:focus-visible { outline: 3px solid var(--t-accent); outline-offset: 1px; }
+  .s-input-code { font-size: 24px; letter-spacing: 0.3em; font-family: var(--t-font-display); font-weight: var(--t-display-weight); }
+  .s-note { margin: 0; padding: 10px 14px; border-radius: var(--t-radius); border: var(--t-border) solid; font-size: 15px; }
+  .s-note-good { background: var(--t-good-wash); border-color: var(--t-good); color: var(--t-ink); }
+  .s-note-bad { background: var(--t-bad-wash); border-color: var(--t-bad); color: var(--t-ink); }
+  .s-link-btn { min-height: 44px; padding: 0; border: 0; background: transparent; color: var(--t-accent-text); font: inherit; font-size: 15px; font-weight: 700; text-decoration: underline; cursor: pointer; }
+  .s-btn-small { min-height: 40px; padding: 0 14px; font-size: 15px; }
+  .s-or { display: flex; align-items: center; gap: 12px; color: var(--t-muted); font-size: 14px; }
+  .s-or::before, .s-or::after { content: ""; flex: 1; border-top: 1px solid var(--t-line); }
+  .s-choices { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; border: 0; }
+  .s-choice { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: var(--t-radius); border: max(2px, var(--t-border)) solid var(--t-line); background: var(--t-surface); cursor: pointer; }
+  .s-choice:has(input:checked) { border-color: var(--t-accent); background: var(--t-hint-wash); }
+  .s-choice input { width: 20px; height: 20px; accent-color: var(--t-accent); flex-shrink: 0; }
+  .s-choice-main { display: flex; flex-direction: column; }
+  .s-btn:disabled, .s-link-btn:disabled { opacity: 0.6; cursor: wait; }
 
   /* Theme gallery (admin): the student frame inside a phone-sized box. */
   .gallery-phone { width: 390px; max-width: 100%; height: 844px; overflow: auto; border-radius: 28px; border: 1px solid var(--color-line); box-shadow: 0 10px 30px rgb(15 23 42 / 0.12); }

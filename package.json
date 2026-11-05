@@ -18,11 +18,12 @@
     "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
     "db:migrate:local": "wrangler d1 migrations apply cambridge --local",
     "db:migrate:remote": "wrangler d1 migrations apply cambridge --remote",
-    "test:e2e": "node tests/e2e/smoke.mjs && node tests/e2e/admin.mjs && node tests/e2e/library.mjs && node tests/e2e/folder.mjs && node tests/e2e/agent.mjs && node tests/e2e/themes.mjs",
+    "test:e2e": "node tests/e2e/smoke.mjs && node tests/e2e/admin.mjs && node tests/e2e/library.mjs && node tests/e2e/folder.mjs && node tests/e2e/agent.mjs && node tests/e2e/themes.mjs && node tests/e2e/accounts.mjs",
     "build:worker": "opennextjs-cloudflare build"
   },
   "dependencies": {
     "@opennextjs/cloudflare": "1.20.15",
+    "better-auth": "1.7.12",
     "next": "16.4.3",
     "react": "19.3.1",
     "react-dom": "19.3.1"

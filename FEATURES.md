@@ -22,9 +22,9 @@ A plain list of what the platform does today, for non-developers.
 - After a run: what changed in the library, session by session, with how many of the files were essential.
 - Settings: library years, the latest public exam session, and which variants count as essential.
 - Brand (admin): the platform name, short name, description, footer statement, the theme new students start in, and the logo, square logo and favicon. Changes show on every page at once.
+- Student and parent sign-in at /signin: an emailed 6-digit code or Google. The first time, people choose student or parent and give their first and last name. Students and parents each get their own (still empty) home page, and can sign out.
 - Student themes: Bold, Playful and Clean. Same pages and words, three looks. The Themes page in admin shows every part of the student pages in each theme, in a phone-sized box, with a switch.
 
 ## Coming next
-- Student sign-in with an email code or Google.
 - Upload a folder (Library > Upload): pick an unzipped Google Drive folder. Every PDF is worked out from its folder names, its first page and the AI, you check the preview, then the files are uploaded one at a time. Files already stored are skipped, so you can pick the same folder again later. Pre-release material (Computer Science), listening transcripts and teachers' notes (French) are recognised and stored; Every real Cambridge file of a library subject comes in, even kinds or papers the checklist does not ask for (like ICT source files), and shows as an extra. Where the AI has a guess for an unclear file it is already chosen for you. "Download report" saves a spreadsheet of every file and what happened to it. Papers Cambridge set under another code for a country series (Physics 1524, Pakistan 2021) are stored with their subject and shown in that session as their own series; a new such code is linked from the first page by itself. If a file's cover names a paper differently from the library, the page lists it.
 - AI meter: the top of every admin page shows how many AI questions were asked today and about how much of the free daily allowance they used.

@@ -1,2 +1,4 @@
 ADMIN_PASS=local-dev-password-only
 AGENT_SECRET=local-dev-agent-secret-0123456789abcdef
+BETTER_AUTH_SECRET=local-dev-auth-secret-0123456789abcdefghij
+EMAIL_TRANSPORT=local

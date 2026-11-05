@@ -11,7 +11,7 @@ export const metadata: Metadata = { title: "Brand" };
 
 const TEXT_MESSAGES = {
   ok_saved: "Saved. Every page uses the new wording now.",
-  bad_text: `Check the fields: the name (up to ${BRAND.maxNameLength} characters) and short name (up to ${BRAND.maxShortNameLength}) are needed, on one line each.`,
+  bad_text: `Check the fields: the name (up to ${BRAND.maxNameLength} characters) and short name (up to ${BRAND.maxShortNameLength}) are needed, on one line each. The email sender must be a plain address like noreply@example.com.`,
   busy: "Too many changes this hour. Please wait a little.",
 };
 
@@ -55,6 +55,11 @@ export default async function BrandPage() {
           <span className="label-inline">Footer statement</span>
           <textarea className="input brand-footer-input" name="footer" maxLength={BRAND.maxFooterLength} defaultValue={brand.footer} />
           <span className="muted">Write {"{name}"} where the platform name should go. It reads now: {footerText(brand)}</span>
+        </label>
+        <label className="field">
+          <span className="label-inline">Email sender (sign-in codes come from this address)</span>
+          <input className="input brand-email-input" name="emailFrom" type="email" maxLength={BRAND.maxEmailLength} defaultValue={brand.emailFrom} placeholder="noreply@example.com" />
+          <span className="muted">Its domain must be set up in Resend. Emails show as coming from {brand.name}. Empty: no sign-in codes can be sent.</span>
         </label>
         <label className="field brand-theme-field">
           <span className="label-inline">Theme for new students</span>

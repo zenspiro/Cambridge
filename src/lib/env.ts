@@ -12,6 +12,15 @@ export type AppEnv = CloudflareEnv & {
   GITHUB_REPO?: string;
   AGENT_WORKFLOW?: string;
   AGENT_REF?: string;
+  /** Signs student and parent sessions (32+ characters). */
+  BETTER_AUTH_SECRET?: string;
+  /** Resend API key for sign-in code emails. */
+  RESEND?: string;
+  /** Google sign-in (OAuth client from Google Cloud); the button shows only when both are set. */
+  OAUTH_CLIENT_ID?: string;
+  OAUTH_CLIENT_SECRET?: string;
+  /** "local" (only in .dev.vars) puts emails in the local test mailbox instead of sending them. */
+  EMAIL_TRANSPORT?: string;
 };
 
 /** Cloudflare bindings and vars (D1, R2, settings). Server only. */
