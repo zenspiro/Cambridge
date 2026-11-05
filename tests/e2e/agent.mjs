@@ -90,8 +90,11 @@ try {
   await page.waitForURL(/\/admin\/agent\?code=0478/);
   check((await page.locator("#run-code").inputValue()) === "0478", "a subject's run link picks that subject");
   await page.click("form[action='/admin/agent/start'] button[type=submit]");
-  await page.waitForURL(/e=bad/);
-  check(true, "run with nothing ticked is refused");
+  await page.waitForURL(/\/admin\/agent\/runs\//);
+  const allRun = page.url().split("/runs/")[1].split(/[?#]/)[0];
+  const allParams = JSON.parse(rows(`SELECT params FROM job WHERE id = '${allRun}'`)[0].params);
+  check(allParams.code === "0478" && allParams.sessions.join(",") === "m,s,w,y" && allParams.years.length >= 3, "a run with nothing ticked covers every year and session");
+  sql(`UPDATE job SET status = 'failed', finished_at = 1 WHERE id = '${allRun}'`);
 
   // 2. Dry run by the agent itself.
   const dry = newRun("dry");
@@ -192,8 +195,8 @@ try {
   await page.click("#s-0625 > summary");
   await page.fill("#links-0625", "https://drive.google.com/drive/folders/ROOTFOLDER01?usp=sharing\nhttps://drive.google.com/drive/folders/PRIVATEFOLDR\nnot a link");
   await page.click("#s-0625 form[action='/admin/sources/folders/add'] button");
-  await page.waitForURL(/e=ok_folders/);
-  check((await page.locator("p.muted", { hasText: "Added 2, already listed 0, not a folder link 1" }).count()) === 1, "drive: folder links pasted in bulk");
+  await page.locator(".action-note", { hasText: "Added 2, already listed 0, not a folder link 1" }).waitFor();
+  check(page.url() === BASE + "/admin/sources", "drive: folder links pasted in bulk, without leaving or reloading the page");
   // A folder named for another subject is skipped without asking Google (its id does not exist in the fake).
   sql(`INSERT OR REPLACE INTO source_drive_folder (id, site_id, folder_id, label, created_by, created_at) VALUES ('e2e-other', 'local-drive', 'OTHERSUBJECT01', 'IGCSE Chemistry (0620)', 'platform-admin', 3)`);
   const driveEnv = { GOOGLE_DRIVE_API: "test-drive-key", DRIVE_API_BASE: fake.base + "drive/v3" };
@@ -229,14 +232,14 @@ try {
   const notesRow = () => page.locator("#review li", { hasText: "Revision notes.pdf" });
   check((await notesRow().locator("text=The rules say: could not tell the document type").count()) === 1, "review: the reason is shown in words");
   await notesRow().locator("button", { hasText: "Reject" }).click();
-  await page.waitForURL(/r=ok_rejected/);
-  check((await notesRow().locator("text=Rejected: later runs skip it.").count()) === 1, "review: a file can be rejected");
+  await notesRow().locator("text=Rejected: later runs skip it.").waitFor();
+  check(!page.url().includes("r="), "review: a file can be rejected, without a page reload");
   await notesRow().locator("button", { hasText: "Undo" }).click();
-  await page.waitForURL(/r=ok_undone/);
+  await notesRow().locator("button", { hasText: "Accept" }).waitFor();
   const chosen = await notesRow().locator("select option:not([disabled])").first().getAttribute("value");
   await notesRow().locator("select").selectOption(chosen);
   await notesRow().locator("button", { hasText: "Accept" }).click();
-  await page.waitForURL(/r=ok_accepted/);
+  await notesRow().locator("text=fetched by the next download").waitFor();
   check((await notesRow().locator("text=fetched by the next download").count()) === 1 && (await page.locator("button", { hasText: "Download accepted files" }).count()) === 1,
     `review: accepted as ${chosen}, with a button to fetch it`);
   check(rows(`SELECT COUNT(*) AS n FROM audit_log WHERE action LIKE 'review.%'`)[0].n >= 3, "review: decisions are audited");
@@ -262,9 +265,9 @@ try {
   await page.click("#review summary");
   check((await notesRow().locator("text=now in the library").count()) === 1, "review: the run page shows the accepted file is in the library");
   await notesRow().locator("button", { hasText: "Undo" }).click();
-  await page.waitForURL(/r=ok_undone/);
+  await notesRow().locator("button", { hasText: "Reject" }).waitFor();
   await notesRow().locator("button", { hasText: "Reject" }).click();
-  await page.waitForURL(/r=ok_rejected/);
+  await notesRow().locator("text=Rejected: later runs skip it.").waitFor();
   const dd2 = newRun("dry");
   const r7 = await runAgent(dd2, 20, driveEnv);
   const rrep = JSON.parse(rows(`SELECT result FROM job WHERE id = '${dd2}'`)[0].result);
@@ -304,7 +307,7 @@ try {
   const wrongRow = page.locator("#check li", { hasText: "0625_s24_qp_42.pdf" });
   check((await wrongRow.locator("text=Its first page says").count()) === 1, "check: the run page explains the mismatch in words");
   await wrongRow.locator("button", { hasText: "Rename to 0625_s24_ms_43.pdf" }).click();
-  await page.waitForURL(/f=ok_renamed/);
+  await page.locator("#check li", { hasText: "Renamed to 0625_s24_ms_43.pdf" }).waitFor();
   check((await page.locator("#check li", { hasText: "Renamed to 0625_s24_ms_43.pdf" }).count()) === 1 && rows(`SELECT COUNT(*) AS n FROM source_document WHERE file_name = '0625_s24_ms_43.pdf'`)[0].n === 1,
     "check: a mismatched file is renamed to what its first page says");
   sql(`DELETE FROM source_document WHERE file_name = '0625_s24_ms_43.pdf'`);

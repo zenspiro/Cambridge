@@ -3,6 +3,7 @@
 // a time. Reading names and first pages happens here, on this computer; only the AI questions
 // and the files themselves go to the server.
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { KnownSubject } from "@/lib/agent/classify";
 import { readCover } from "@/lib/library/cover";
 import { applyAi, applyCover, finalise, isPdf, noteFor, paperTitleChecks, planFromNames, STATUS_WORDS, type PlanItem, type PlanStatus } from "@/lib/library/folderPlan";
@@ -52,6 +53,27 @@ async function inflate(data: Uint8Array): Promise<Uint8Array> {
 type PaperName = { syllabus_id: string; paper: number; name: string };
 type Version = { id: string; code: string; valid_from_year: number; valid_to_year: number };
 
+/** Every file inside a dropped folder, with its path from the dropped folder down. */
+async function filesFromDrop(items: DataTransferItemList): Promise<{ file: File; path: string }[]> {
+  const out: { file: File; path: string }[] = [];
+  const walk = async (entry: FileSystemEntry): Promise<void> => {
+    if (entry.isFile) {
+      const file = await new Promise<File | null>((ok) => (entry as FileSystemFileEntry).file(ok, () => ok(null)));
+      if (file) out.push({ file, path: entry.fullPath.replace(/^\//, "") });
+      return;
+    }
+    const reader = (entry as FileSystemDirectoryEntry).createReader();
+    for (;;) {
+      const batch = await new Promise<FileSystemEntry[]>((ok) => reader.readEntries(ok, () => ok([])));
+      if (!batch.length) break;
+      for (const e of batch) await walk(e);
+    }
+  };
+  const roots = [...items].map((i) => i.webkitGetAsEntry?.()).filter((e): e is FileSystemEntry => !!e);
+  for (const r of roots) await walk(r);
+  return out;
+}
+
 async function postJson(url: string, body: unknown): Promise<{ status: number; data: Record<string, unknown> | null }> {
   try {
     const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -70,6 +92,8 @@ export function FolderUpload(props: {
   toYear: number;
   maxFileBytes: number;
   choices: { name: string; text: string }[];
+  /** Every subject, for the picker at the top of the card ("IGCSE Physics (0625)"). */
+  subjectOptions: { code: string; label: string; qualification: string }[];
   /** Paper names and syllabus versions of every subject, so files read "Paper 2 Theory", not "Paper 2". */
   papers: PaperName[];
   versions: Version[];
@@ -91,6 +115,10 @@ export function FolderUpload(props: {
     const label = main === props.code ? props.subjectLabel : subj ? `${subj.qualification} ${subj.name} (${main})` : p.code;
     return `${label} / ${p.year} / ${SESSION_FOLDERS[p.session]} / ${p.fileName}`;
   };
+  const router = useRouter();
+  const [dragging, setDragging] = useState(false);
+  // A dropped folder's files carry their paths here (a picked folder's files carry their own).
+  const paths = useRef(new WeakMap<File, string>());
   const input = useRef<HTMLInputElement>(null);
   const files = useRef<File[]>([]);
   const stop = useRef(false);
@@ -174,7 +202,7 @@ export function FolderUpload(props: {
     setTotal(pdfs.length);
     setStep("Reading names");
     const years = { fromYear: props.fromYear, toYear: props.toYear };
-    const plan = pdfs.map((f, i) => planFromNames(i, f.webkitRelativePath || f.name, f.size, props.subjects, props.maxFileBytes, years));
+    const plan = pdfs.map((f, i) => planFromNames(i, paths.current.get(f) ?? (f.webkitRelativePath || f.name), f.size, props.subjects, props.maxFileBytes, years));
     const notes: string[] = [];
 
     // Files named with a code the library does not have, inside a library subject's folder
@@ -339,11 +367,37 @@ export function FolderUpload(props: {
 
   return (
     <>
-      <section className="card stack">
-        <label className="label" htmlFor="folder">Folder</label>
+      <section
+        className={dragging ? "card stack drop-zone drop-zone-on" : "card stack drop-zone"}
+        id="folder-card"
+        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={async (e) => {
+          e.preventDefault();
+          setDragging(false);
+          if (phase === "reading" || phase === "uploading") return;
+          const found = await filesFromDrop(e.dataTransfer.items);
+          for (const f of found) paths.current.set(f.file, f.path);
+          if (found.length) void analyse(found.map((f) => f.file));
+        }}
+      >
+        <label className="label-inline" htmlFor="folder-code">Main subject of the folder</label>
+        <select className="input review-select" id="folder-code" value={props.code} disabled={phase === "reading" || phase === "uploading"}
+          onChange={(e) => router.replace(`/admin/library/folder?code=${encodeURIComponent(e.target.value)}`, { scroll: false })}>
+          {[...new Set(props.subjectOptions.map((s) => s.qualification))].map((ql) => (
+            <optgroup label={ql} key={ql}>
+              {props.subjectOptions.filter((s) => s.qualification === ql).map((s) => <option key={s.code} value={s.code}>{s.label}</option>)}
+            </optgroup>
+          ))}
+        </select>
+        <label className="label-inline" htmlFor="folder">Folder</label>
         <input ref={input} className="input" id="folder" type="file" multiple disabled={phase === "reading" || phase === "uploading"}
           onChange={(e) => e.target.files && e.target.files.length > 0 && analyse([...e.target.files])} />
-        <p className="muted">Choose the unzipped folder (for example the one for {props.subjectLabel}). Nothing is uploaded until you press Upload.</p>
+        <p className="muted">
+          Drag the unzipped folder onto this box, or choose it above. Dragging skips the browser&apos;s own &quot;Upload files to this
+          site?&quot; question, which a site cannot switch off. Files of other subjects are still recognised and stored. Nothing is
+          uploaded until you press Upload.
+        </p>
       </section>
 
       {phase === "reading" || phase === "uploading" ? (

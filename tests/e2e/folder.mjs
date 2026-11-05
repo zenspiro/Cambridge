@@ -59,6 +59,14 @@ await page.waitForURL(BASE + "/admin");
 await page.goto(BASE + "/admin/library/upload");
 check((await page.locator("a[href='/admin/library/folder']").count()) === 1, "folder: linked from the upload page");
 await page.goto(BASE + "/admin/library/folder?code=0625");
+// One card: the subject picker and the folder together; changing the subject needs no button.
+check((await page.locator("#folder-card #folder-code").count()) === 1 && (await page.locator("#folder-card #folder").count()) === 1 && (await page.locator("form[action='/admin/library/folder']").count()) === 0,
+  "folder: subject and folder are picked in one card");
+await page.selectOption("#folder-code", "0620");
+await page.waitForURL(/code=0620/);
+await page.selectOption("#folder-code", "0625");
+await page.waitForURL(/code=0625/);
+check(await page.locator("#folder-code").inputValue() === "0625", "folder: choosing a subject switches straight away");
 await page.setInputFiles("#folder", root);
 await page.waitForSelector("#folder-plan", { timeout: 30_000 });
 const text = await page.locator("main").innerText();

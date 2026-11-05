@@ -130,9 +130,11 @@ test("run choices are checked against the library years", () => {
   });
   // Any subject in the library can be run, not only Physics.
   assert.equal(checkRunParams({ code: "0478", years: ["2024"], sessions: ["s"], mode: "dry" }, lib, CODES)?.code, "0478");
+  // Nothing ticked means everything: every library year, every session.
+  const all = checkRunParams({ code: "0625", years: [], sessions: [], mode: "dry" }, lib, CODES)!;
+  assert.deepEqual([all.years[0], all.years.at(-1), all.sessions], [lib.toYear, lib.fromYear, ["m", "s", "w", "y"]]);
+  assert.deepEqual(checkRunParams({ code: "0625", years: ["2024"], sessions: [], mode: "dry" }, lib, CODES)?.years, [2024]);
   for (const bad of [
-    { code: "0625", years: [], sessions: ["s"], mode: "dry" },
-    { code: "0625", years: ["2024"], sessions: [], mode: "dry" },
     { code: "0625", years: ["2019"], sessions: ["s"], mode: "dry" },
     { code: "0625", years: ["2024", "2019"], sessions: ["s"], mode: "dry" },
     { code: "0625", years: ["2024"], sessions: ["s", "q"], mode: "dry" },

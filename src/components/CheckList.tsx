@@ -1,4 +1,5 @@
 import { Notice } from "@/components/AdminShell";
+import { ActionForm } from "@/components/ActionForm";
 import type { CheckItem } from "@/lib/agent/labels";
 
 const MESSAGES: Record<string, string> = {
@@ -33,12 +34,12 @@ export function CheckList({
         {items.map((it, i) => {
           const current = now.get(it.id);
           const form = (action: string, label: string, danger = false) => (
-            <form method="post" action="/admin/agent/fix">
+            <ActionForm action="/admin/agent/fix" messages={MESSAGES} confirm={danger ? "Remove this file from the library?" : undefined}>
               <input type="hidden" name="id" value={runId} />
               <input type="hidden" name="i" value={i} />
               <input type="hidden" name="action" value={action} />
               <button className={danger ? "btn btn-small btn-danger" : "btn btn-small btn-primary"} type="submit">{label}</button>
-            </form>
+            </ActionForm>
           );
           return (
             <li className="list-row review-row" key={it.id}>

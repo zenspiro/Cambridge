@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-05: No reloads for small actions, agent "nothing ticked means all", one-card folder upload
+
+**What:** (1) Run the agent: with no year or session ticked, it covers every library year and every session; anything ticked limits it to that. (2) Switching a source on or off, removing a source, page or folder, adding pages, folders or websites, and Accept, Reject, Undo, Rename and Remove on run pages now happen in place: no page reload, no jump to the top, folded cards stay open; the confirm is a Yes / Never mind beside the button, never a browser popup. (3) Upload a folder is one card: choose the subject (it switches straight away, the Choose button is gone) and the folder. A folder can also be dragged onto the card, which skips Chrome's own "Upload files to this site?" question.
+
+**Why:** owner: an empty agent form should mean everything; removing or switching off a source kept sending the page back to the top; two cards and a Choose button that did not work; no system popups.
+
+**Tested:** 129 unit tests (new: nothing ticked means all); 211 browser checks (new: switch off keeps the scroll position, inline confirm without popups, remove without reload, folder links added in place, run page decisions without reload, subject switches in one card, a run with nothing ticked covers every year and session).
+
 ## 2026-11-05: Sources per subject, with what Cambridge offers
 
 **What:** the Sources page is now one card per subject instead of one block for Google Drive and one for Cambridge. Each card shows its Cambridge pages (subject page and past papers page), how many files each offers and which are not in the library yet (with the full list), its Google Drive folders, any linked codes (Pakistan series), forms to add a page or folders for that subject, and links to run the agent or open the library. The websites list (switch on or off, remove, add) sits at the bottom. Cambridge was scanned once from here, following its robots.txt: all 16 subjects have exactly two file pages, all were already saved and live; their 381 file links are stored with each page.

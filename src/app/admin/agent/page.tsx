@@ -54,7 +54,7 @@ export default async function AgentPage({ searchParams }: { searchParams: Promis
           <p className="muted">The agent reads only this subject&apos;s start pages and Google Drive folders.</p>
         </div>
         <fieldset className="fieldset">
-          <legend className="label-inline">Years</legend>
+          <legend className="label-inline">Years <span className="muted">(none ticked: all {lib.fromYear} to {lib.toYear})</span></legend>
           <div className="checks">
             {libraryYears(lib).map((y) => (
               <label className="check" key={y}>
@@ -64,7 +64,7 @@ export default async function AgentPage({ searchParams }: { searchParams: Promis
           </div>
         </fieldset>
         <fieldset className="fieldset">
-          <legend className="label-inline">Sessions</legend>
+          <legend className="label-inline">Sessions <span className="muted">(none ticked: all)</span></legend>
           <div className="checks">
             {(["m", "s", "w", "y"] as const).map((s) => (
               <label className="check" key={s}>

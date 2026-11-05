@@ -82,6 +82,11 @@
   .stats { @apply grid grid-cols-2 gap-2 text-base sm:grid-cols-5; }
   .stats li { @apply rounded-lg bg-wash p-2; }
   .stack-tight { @apply flex flex-col gap-2; }
+  /* ActionForm: its fieldset lays its fields out as if they sat in the form itself. */
+  .action-fields { @apply contents; }
+  .action-note { @apply text-base; }
+  .drop-zone { @apply border-2 border-dashed border-transparent; }
+  .drop-zone-on { @apply border-current; }
   .file-group { @apply mt-3; }
   .event-row { @apply items-start; }
   .review-row { @apply items-center; }
