@@ -160,8 +160,12 @@ passes its quality bar. Admin work and the library already built (Phase 0) stay 
    person, so one person can have several.
 3. **Profiles and parent approval (built 5 Nov 2026).** First and last name, email, birth year, country; parent approval for under 18
    (age limit per country, an admin setting); exam session per subject in the profile; see, export and delete.
-4. **Families.** A parent creates a family, adds children (invite code or creates the account), invites a second
-   guardian.
+4. **Families (decided 5 Nov 2026, not built yet).** One family per parent; a child belongs to one family; no second
+   guardian (owner). A parent adds an existing child with a family code the child types on Me (7 days), and a child
+   they approved by email links by itself when the parent signs in with that email. Children need their own email
+   (parent-made child accounts need one too and count as approved). Parent home: children, their details, exam
+   sessions and status, approve from home, download a child's data, remove from the family, delete the child's
+   account. A child can leave the family only once over the age limit. Built so a family plan can attach later.
 5. **Access grants, teacher-ready.** Every right to use the app comes from one grant table (free tier, own plan,
    family plan, later a teacher seat), so seats plug in later without rebuilding.
 
