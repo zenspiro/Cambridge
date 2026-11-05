@@ -5,6 +5,7 @@ import { requireRole } from "@/lib/account/server";
 import { PARENT_THEME } from "@/lib/config";
 import { StudentFrame } from "@/components/student/StudentFrame";
 import { SignOut } from "@/components/student/SignOut";
+import { PARENT_NAV } from "@/components/student/nav";
 
 export const metadata: Metadata = { title: "Family" };
 
@@ -13,7 +14,7 @@ export default async function ParentHome() {
   const s = await requireRole("parent");
   const brand = await currentBrand();
   return (
-    <StudentFrame brand={frameBrand(brand)} theme={PARENT_THEME} nav={[{ href: "/parent", label: "Family", icon: "home" }]} current="/parent" actions={<SignOut />}>
+    <StudentFrame brand={frameBrand(brand)} theme={PARENT_THEME} nav={PARENT_NAV} current="/parent" actions={<SignOut />}>
       <h1 className="s-h1">Hi, {s.firstName}</h1>
       <section className="s-card">
         <h2 className="s-h2">Your family shows here</h2>

@@ -28,6 +28,7 @@ Node's built-in test runner, TypeScript loaded directly. Files must not import N
 | `run-summary.test.ts` | Run summary facts by rules, real limits only, the AI rewording kept only when every number matches and no limit is invented |
 | `brand.test.ts` | Brand settings: text checks, damaged values fall back, pictures recognised by their bytes (SVG refused), upload, replace and remove with old files deleted and audited, only current files served |
 | `accounts.test.ts` | Sign-in checks (email, code, names, roles), the code email, local mailbox and Resend sending, the real Better Auth on SQLite (code hashed, wrong and right codes, tries per code, cookie rules, no IP, audits), roles and cascade on delete |
+| `profile.test.ts` | Countries, age limits and the safe birth-year rule, standing (details, pending, ok, country limits), parent approval links (hashed, single use, replaced, expired), approve and decline (cascade delete, audit kept), exam plans, export without tokens, delete, the approval email |
 | `themes.test.ts` | Every theme in config has a token block with the same tokens, WCAG AA contrast for every text pair and subject colour, nothing below 14 px, fonts only from `/fonts/` |
 | `check-inline.test.ts` | The inline code scanner catches each banned pattern and passes normal React code |
 
@@ -54,3 +55,7 @@ Signs in with the local password. On `/admin/brand` (1400 px): saving the name h
 ## Sign-in test (`tests/e2e/accounts.mjs`, part of `npm run test:e2e`)
 
 Needs `BETTER_AUTH_SECRET` and `EMAIL_TRANSPORT=local` in `.dev.vars` (CI copies `.dev.vars.example`). At 375 px: a student and a parent sign up with an email code read from the local test mailbox (`wrangler r2 object get --local`), a wrong code is refused, the welcome step shows once, each lands on their own home (student in the default theme, parent in Clean), the cookie is HttpOnly, Secure and SameSite=Lax, a student cannot open the parent home, sign-out closes the home and signing in again goes straight home. Then attacks: a code request from another site, Better Auth's own endpoints (not exposed), the same answer for new and registered emails, and the per-email code limit. It never sends real email.
+
+## Profile and parent approval test (`tests/e2e/profile.mjs`, part of `npm run test:e2e`)
+
+At 375 px: a 14-year-old student waits on the approval page (home and Me closed), their own email is refused as the parent's, the parent's email (local test mailbox) opens the approval page in the calm look, Approve works once, the student home opens; the exam question can be skipped; on Me an exam session is added, the theme changes without a reload and is remembered, the birth year is locked, Download my data has their data and no tokens, Delete signs out and closes the account. A second student's parent declines and the account is gone. At 1400 px an admin adds a country limit (Saudi Arabia, 16) and a 17-year-old there gets straight in; the limit is removed again.

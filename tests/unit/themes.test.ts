@@ -39,7 +39,7 @@ const TEXT_PAIRS = [
   ["--t-muted", "--t-ground"], ["--t-muted", "--t-surface"], ["--t-muted", "--t-surface-2"],
   ["--t-accent-ink", "--t-accent"], ["--t-feature-ink", "--t-feature"],
   ["--t-good-ink", "--t-good-wash"], ["--t-ink", "--t-good-wash"],
-  ["--t-bad-ink", "--t-bad-wash"], ["--t-ink", "--t-bad-wash"],
+  ["--t-bad-ink", "--t-bad-wash"], ["--t-ink", "--t-bad-wash"], ["--t-bad-ink", "--t-surface"],
   ["--t-hint-ink", "--t-hint-wash"], ["--t-accent-text", "--t-surface"], ["--t-accent-text", "--t-ground"],
 ] as const;
 

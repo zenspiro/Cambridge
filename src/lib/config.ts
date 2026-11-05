@@ -157,3 +157,23 @@ export const ACCOUNT = {
   cookiePrefix: "acct",
 } as const;
 export type AccountRole = (typeof ACCOUNT.roles)[number];
+
+/** Parent approval and profiles (Phase 1 step 3). The age limits themselves are a database setting (admin Settings). */
+export const CONSENT = {
+  /** Used when the setting is missing. Owner decision 5 Nov 2026: a parent approves every student under 18. */
+  defaultAge: 18,
+  minAge: 10,
+  maxAge: 21,
+  linkDays: 7,
+  sendsPerStudentPerDay: 3,
+  sendsPerParentEmailPerDay: 5,
+  /** Birth years offered: from this many years ago up to this many years ago. */
+  oldestAge: 100,
+  youngestAge: 8,
+  /** Exam sessions a student can plan: this year and the next few. */
+  examYearsAhead: 4,
+  /** Countries shown first in pickers (launch markets). */
+  topCountries: ["PK", "AE", "SA", "GB", "US"],
+} as const;
+/** Profile changes (names, theme, exam sessions) per person per hour. */
+export const ACCOUNT_WRITES_PER_HOUR = 120;

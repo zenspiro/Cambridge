@@ -12,6 +12,10 @@ export const PUBLIC_ROUTES: readonly string[] = [
   "account/code/route.ts",
   "account/verify/route.ts",
   "account/google/route.ts",
+  // Parent approval: the emailed link's token is the key (stored hashed, single use, expires); answers need a button.
+  "consent/[token]/page.tsx",
+  "consent/[token]/answer/route.ts",
+  "consent/done/page.tsx",
   // Better Auth: only the Google callback is answered (checked in tests/unit/access.test.ts).
   "api/auth/[...all]/route.ts",
   "admin/session/route.ts", // sign-in POST: rate limited and audited

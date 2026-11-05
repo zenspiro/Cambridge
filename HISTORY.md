@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-05: Profiles, parent approval and your data (Phase 1, step 3)
+
+**What:** the welcome step asks country (everyone) and birth year (students). A student who could be under the age limit (18 by default, a different limit per country in Admin > Settings > Parent approval) only sees "Ask a parent to approve" until a parent says yes: the parent gets an email with a link to a page with Approve and Decline (decline asks first and deletes the student's account). Links work once, for 7 days, and are stored scrambled. A new "Me" page: name, country, birth year (locked once approved), theme (changes without a reload and is remembered), exam sessions per subject (the student home asks once, with Skip, and lists them), Download my data and Delete my account.
+
+**Why:** owner decisions A, A, A (waiting page only, one-tap approval without an account, decline deletes).
+
+**Tested:** 155 unit tests (new: countries, age limits and the safe birth-year rule, standing, hashed single-use links replaced by new ones, approve and decline (cascade delete, audit kept), exam plan checks, export without tokens, delete with unused codes, the approval email; the danger button's contrast); 32 new browser checks (a 14-year-old waits, own email refused, parent approves once, home and Me open, exam session added, theme without reload and remembered, birth year locked, download, delete; a decline deletes the account; an admin country limit lets a 17-year-old in), full suite from a fresh database: 313 browser checks.
+
 ## 2026-11-05: CI fix: the admin top bar wraps
 
 **What:** the admin menu (now with Brand and Themes) and the AI meter were wider than the top bar. Locally the extra spilled into the margin; on CI's Linux fonts it made the page scroll sideways, the admin browser test failed, and the last two merges (themes, sign-in) were not deployed. The menu now wraps onto a second line when needed.
