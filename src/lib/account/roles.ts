@@ -7,9 +7,12 @@ export async function getRoles(db: Db, userId: string): Promise<AccountRole[]> {
   return results.map((r) => r.role).filter((r): r is AccountRole => (ACCOUNT.roles as readonly string[]).includes(r));
 }
 
-/** Where a signed-in person goes: the welcome step until they have a role, then their first role's home. */
-export function homeFor(roles: readonly AccountRole[]): string {
-  if (roles.includes("student")) return "/student";
+/**
+ * Where a signed-in person goes: the welcome step until they have a role, then their first role's home. A student
+ * whose details are missing or who waits for a parent goes to the approval page ("details" or "pending").
+ */
+export function homeFor(roles: readonly AccountRole[], standing: "ok" | "details" | "pending" = "ok"): string {
+  if (roles.includes("student")) return standing === "ok" ? "/student" : "/student/approval";
   if (roles.includes("parent")) return "/parent";
   return "/welcome";
 }
@@ -31,12 +34,22 @@ export function checkWelcome(v: { role: unknown; firstName: unknown; lastName: u
   return role && firstName && lastName ? { role, firstName, lastName } : null;
 }
 
-/** Saves the welcome step: names on the account, the role added (a second role later is just another row). */
-export async function saveWelcome(db: Db, userId: string, w: Welcome, now = Date.now()): Promise<void> {
+export function checkNames(v: { firstName: unknown; lastName: unknown }): { firstName: string; lastName: string } | null {
+  const firstName = namePart(v.firstName);
+  const lastName = namePart(v.lastName);
+  return firstName && lastName ? { firstName, lastName } : null;
+}
+
+export async function saveNames(db: Db, userId: string, n: { firstName: string; lastName: string }): Promise<void> {
   await db
     .prepare(`UPDATE "auth_user" SET "firstName" = ?1, "lastName" = ?2, "name" = ?3 WHERE "id" = ?4`)
-    .bind(w.firstName, w.lastName, `${w.firstName} ${w.lastName}`, userId)
+    .bind(n.firstName, n.lastName, `${n.firstName} ${n.lastName}`, userId)
     .run();
+}
+
+/** Saves the welcome step: names on the account, the role added (a second role later is just another row). */
+export async function saveWelcome(db: Db, userId: string, w: Welcome, now = Date.now()): Promise<void> {
+  await saveNames(db, userId, w);
   await db.prepare(`INSERT OR IGNORE INTO user_role (user_id, role, created_at) VALUES (?1, ?2, ?3)`).bind(userId, w.role, now).run();
 }
 

@@ -158,7 +158,7 @@ passes its quality bar. Admin work and the library already built (Phase 0) stay 
    (and every similar brand item) are set in the admin panel, never in code.
 2. **Sign-in (built 5 Nov 2026).** Email code and Google for students and parents (admin sign-in stays as it is). Roles held per
    person, so one person can have several.
-3. **Profiles and parent approval.** First and last name, email, birth year, country; parent approval for under 18
+3. **Profiles and parent approval (built 5 Nov 2026).** First and last name, email, birth year, country; parent approval for under 18
    (age limit per country, an admin setting); exam session per subject in the profile; see, export and delete.
 4. **Families.** A parent creates a family, adds children (invite code or creates the account), invites a second
    guardian.

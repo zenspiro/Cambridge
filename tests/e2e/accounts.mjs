@@ -57,6 +57,10 @@ async function signUp(role, first, last) {
   await page.getByLabel(role === "student" ? "I'm a student" : "I'm a parent").check();
   await page.fill("input[name=firstName]", first);
   await page.fill("input[name=lastName]", last);
+  await page.selectOption("select[name=country]", "GB");
+  // An adult student (born 2000) needs no parent; the parent flow is in profile.mjs.
+  if (role === "student") await page.selectOption("select[name=birthYear]", "2000");
+  else check(!(await page.locator("select[name=birthYear]").isVisible()), "parent: no birth year is asked");
   await page.getByRole("button", { name: "Continue" }).click();
   await page.waitForURL(new RegExp(`/${role}$`));
   check((await page.locator("h1").textContent()) === `Hi, ${first}`, `${role}: lands on the ${role} home with their name`);

@@ -78,3 +78,6 @@ Admin > Brand sets what every student, parent and teacher page shows:
 
 ## Themes
 Admin > Themes shows every part of the student pages with sample words, in a phone-sized box. Use the switch at the top of the phone to see Bold, Playful and Clean; pick an answer to see the feedback. "Open as a full page" shows it as a student would see it. Parent pages always use the calm Clean look.
+
+## Parent approval
+Admin > Settings > Parent approval sets who needs a parent's yes: students under the age shown (18 now). Add a country with a different age if a country's rules differ, or take it back to the default. Only the birth year is known, so a student who could still be under the age is asked. Parents approve or decline from an email link; a decline deletes the student's account.

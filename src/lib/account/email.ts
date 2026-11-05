@@ -44,3 +44,17 @@ export async function sendEmail(
   });
   return res.ok ? "sent" : "failed";
 }
+
+/** The parent approval email: who asked, the one-tap link, how long it works. */
+export function consentEmail(platform: string, to: string, child: string, link: string, days: number): Email {
+  const text = [
+    `${child} wants to use ${platform}, a study app for Cambridge exams, and gave your email as their parent or guardian.`,
+    "",
+    `Please approve or decline here: ${link}`,
+    "",
+    `The link works for ${days} days. If you decline, their account and everything in it is deleted.`,
+    "If you do not know who this is, you can ignore this email.",
+  ].join("\n");
+  const html = `<p>${esc(child)} wants to use ${esc(platform)}, a study app for Cambridge exams, and gave your email as their parent or guardian.</p><p><a href="${esc(link)}">Approve or decline</a></p><p>The link works for ${days} days. If you decline, their account and everything in it is deleted.</p><p>If you do not know who this is, you can ignore this email.</p>`;
+  return { to, subject: `Please approve ${child}'s ${platform} account`, text, html };
+}

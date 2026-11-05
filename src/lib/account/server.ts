@@ -3,13 +3,14 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
-import { ACCOUNT, type AccountRole } from "@/lib/config";
+import { ACCOUNT, type AccountRole, type ThemeId } from "@/lib/config";
 import { currentBrand, getEnv } from "@/lib/env";
 import { audit } from "@/lib/auth/session";
 import { reportError } from "@/lib/errors";
 import { makeAuth, type Auth } from "./auth.ts";
 import { codeEmail, sendEmail } from "./email.ts";
 import { getRoles, homeFor } from "./roles.ts";
+import { getProfile, standing, type Standing } from "./profile.ts";
 
 /** The site's own address, from the request (http only for a local test server). */
 export function originOf(h: Headers): string {
@@ -59,7 +60,17 @@ export async function getAuth(h?: Headers): Promise<Auth | null> {
   });
 }
 
-export type AccountSession = { userId: string; email: string; firstName: string; lastName: string; roles: AccountRole[] };
+export type AccountSession = {
+  userId: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  roles: AccountRole[];
+  /** Students: "details" or "pending" until their details are in and a parent approved (when needed). */
+  standing: Standing;
+  /** The theme the person picked, or null (the Brand page's default then applies). */
+  theme: ThemeId | null;
+};
 
 /** The signed-in student or parent, or null. */
 export async function accountSession(): Promise<AccountSession | null> {
@@ -70,7 +81,10 @@ export async function accountSession(): Promise<AccountSession | null> {
     const s = await auth.api.getSession({ headers: h });
     if (!s) return null;
     const u = s.user as typeof s.user & { firstName?: string | null; lastName?: string | null };
-    return { userId: u.id, email: u.email, firstName: u.firstName ?? "", lastName: u.lastName ?? "", roles: await getRoles((await getEnv()).DB, u.id) };
+    const db = (await getEnv()).DB;
+    const roles = await getRoles(db, u.id);
+    const [st, p] = await Promise.all([standing(db, u.id, roles), getProfile(db, u.id)]);
+    return { userId: u.id, email: u.email, firstName: u.firstName ?? "", lastName: u.lastName ?? "", roles, standing: st, theme: p.theme };
   } catch (err) {
     reportError("account.session", err);
     return null;
@@ -84,9 +98,13 @@ export async function requireAccount(): Promise<AccountSession> {
   return s;
 }
 
-/** Call first in a role's pages. Without that role: to the person's own home (or the welcome step). */
-export async function requireRole(role: AccountRole): Promise<AccountSession> {
+/**
+ * Call first in a role's pages. Without that role: to the person's own home (or the welcome step). A student who is
+ * still waiting (details missing or a parent's approval) only reaches pages that pass `waiting: true`.
+ */
+export async function requireRole(role: AccountRole, opts: { waiting?: boolean } = {}): Promise<AccountSession> {
   const s = await requireAccount();
-  if (!s.roles.includes(role)) redirect(homeFor(s.roles));
+  if (!s.roles.includes(role)) redirect(homeFor(s.roles, s.standing));
+  if (role === "student" && s.standing !== "ok" && !opts.waiting) redirect(homeFor(s.roles, s.standing));
   return s;
 }

@@ -5,6 +5,9 @@ import { frameBrand } from "@/lib/brand";
 import { requireAccount } from "@/lib/account/server";
 import { homeFor } from "@/lib/account/roles";
 import { ACCOUNT } from "@/lib/config";
+import { countryOptions } from "@/lib/countries";
+import { birthYears } from "@/lib/account/profile";
+import { DetailsFields } from "@/components/student/DetailsFields";
 import { StudentFrame } from "@/components/student/StudentFrame";
 
 export const metadata: Metadata = { title: "Welcome" };
@@ -17,15 +20,15 @@ const ROLE_WORDS = {
 /** First sign-in only: student or parent, and the person's name. */
 export default async function WelcomePage({ searchParams }: { searchParams: Promise<{ e?: string; ref?: string }> }) {
   const s = await requireAccount();
-  if (s.roles.length) redirect(homeFor(s.roles));
+  if (s.roles.length) redirect(homeFor(s.roles, s.standing));
   const q = await searchParams;
   const brand = await currentBrand();
   return (
     <StudentFrame brand={frameBrand(brand)} theme={brand.defaultTheme} nav={[]} current="">
       <section className="s-card s-auth" aria-label="Welcome">
         <h1 className="s-h1">Welcome to {brand.name}</h1>
-        <p className="s-muted">Two quick questions and you are in.</p>
-        {q.e === "bad" ? <p className="s-note s-note-bad" role="alert">Please choose student or parent and type your first and last name (letters only).</p> : null}
+        <p className="s-muted">A few quick questions and you are in.</p>
+        {q.e === "bad" ? <p className="s-note s-note-bad" role="alert">Please choose student or parent, type your first and last name (letters only), and pick your country (and birth year, for students).</p> : null}
         {q.ref && /^[A-HJKMNP-TV-Z2-9]{4}-[A-HJKMNP-TV-Z2-9]{4}$/.test(q.ref) ? <p className="s-note s-note-bad" role="alert">Something went wrong. Reference: {q.ref}</p> : null}
         <form className="s-form" method="post" action="/account/welcome">
           <fieldset className="s-choices">
@@ -48,6 +51,7 @@ export default async function WelcomePage({ searchParams }: { searchParams: Prom
             <span className="s-label">Last name</span>
             <input className="s-input" name="lastName" autoComplete="family-name" required maxLength={ACCOUNT.maxNameLength} defaultValue={s.lastName} />
           </label>
+          <DetailsFields countries={countryOptions()} years={birthYears(new Date().getUTCFullYear())} country={null} birthYear={null} studentNote />
           <button className="s-btn s-btn-primary s-btn-block" type="submit">Continue</button>
         </form>
       </section>

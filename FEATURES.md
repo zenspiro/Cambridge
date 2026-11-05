@@ -23,6 +23,8 @@ A plain list of what the platform does today, for non-developers.
 - Settings: library years, the latest public exam session, and which variants count as essential.
 - Brand (admin): the platform name, short name, description, footer statement, the theme new students start in, and the logo, square logo and favicon. Changes show on every page at once.
 - Student and parent sign-in at /signin: an emailed 6-digit code or Google. The first time, people choose student or parent and give their first and last name. Students and parents each get their own (still empty) home page, and can sign out.
+- Parent approval: students who could be under 18 (or the age set for their country in Admin > Settings) wait until a parent approves by email with one tap. If the parent declines, the student's account is deleted.
+- Me page: change your name and country, pick your theme, add your exam sessions (the home page asks once), download all your data or delete your account.
 - Student themes: Bold, Playful and Clean. Same pages and words, three looks. The Themes page in admin shows every part of the student pages in each theme, in a phone-sized box, with a switch.
 
 ## Coming next

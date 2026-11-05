@@ -11,6 +11,7 @@ export const metadata: Metadata = { title: "Sign in" };
 
 const NOTICES: Readonly<Record<string, { good: boolean; text: string }>> = {
   ok_out: { good: true, text: "You are signed out." },
+  ok_deleted: { good: true, text: "Your account and everything in it has been deleted." },
   google: { good: false, text: "Google sign-in did not finish. Please try again, or use an email code." },
   google_off: { good: false, text: "Google sign-in is not open yet. Please use an email code." },
 };
@@ -18,7 +19,7 @@ const NOTICES: Readonly<Record<string, { good: boolean; text: string }>> = {
 /** Sign-in for students and parents (public). Already signed in: straight to their home. */
 export default async function SignInPage({ searchParams }: { searchParams: Promise<{ e?: string }> }) {
   const s = await accountSession();
-  if (s) redirect(homeFor(s.roles));
+  if (s) redirect(homeFor(s.roles, s.standing));
   const brand = await currentBrand();
   const e = (await searchParams).e;
   const notice = e && Object.hasOwn(NOTICES, e) ? NOTICES[e] : null;
