@@ -42,6 +42,9 @@ for (const width of [1400]) {
 
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
   check(!overflow, `${width}px no sideways scroll`);
+  // The top bar must fit its own box: with other fonts (CI's Linux fonts are wider) spill-over becomes page scroll.
+  const barFits = await page.evaluate(() => { const b = document.querySelector(".topbar"); return b ? b.scrollWidth <= b.clientWidth : false; });
+  check(barFits, `${width}px the admin top bar fits (menu wraps instead of spilling over)`);
 
   await page.click("text=Sign out");
   await page.waitForURL(/\/admin\/login$/);
