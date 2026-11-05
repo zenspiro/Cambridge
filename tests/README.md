@@ -31,6 +31,7 @@ Node's built-in test runner, TypeScript loaded directly. Files must not import N
 | `brand.test.ts` | Brand settings: text checks, damaged values fall back, pictures recognised by their bytes (SVG refused), upload, replace and remove with old files deleted and audited, only current files served |
 | `accounts.test.ts` | Sign-in checks (email, code, names, roles), the code email, local mailbox and Resend sending, the real Better Auth on SQLite (code hashed, wrong and right codes, tries per code, cookie rules, no IP, audits), roles and cascade on delete |
 | `profile.test.ts` | Countries, age limits and the safe birth-year rule, standing (details, pending, ok, country limits), parent approval links (hashed, single use, replaced, expired), approve and decline (cascade delete, audit kept), exam plans, export without tokens, delete, the approval email |
+| `family.test.ts` | Family codes (loose typing, replaced, expiring), joining (students only, one family, limit), linking by approval once, approving from home, parent-made child accounts (no takeover, Better Auth dates), remove, leave (adults), cascades |
 | `themes.test.ts` | Every theme in config has a token block with the same tokens, WCAG AA contrast for every text pair and subject colour, nothing below 14 px, fonts only from `/fonts/` |
 | `check-inline.test.ts` | The inline code scanner catches each banned pattern and passes normal React code |
 
@@ -61,3 +62,7 @@ Needs `BETTER_AUTH_SECRET` and `EMAIL_TRANSPORT=local` in `.dev.vars` (CI copies
 ## Profile and parent approval test (`tests/e2e/profile.mjs`, part of `npm run test:e2e`)
 
 At 375 px: a 14-year-old student waits on the approval page (home and Me closed), their own email is refused as the parent's, the parent's email (local test mailbox) opens the approval page in the calm look, Approve works once, the student home opens; the exam question can be skipped; on Me an exam session is added, the theme changes without a reload and is remembered, the birth year is locked, Download my data has their data and no tokens, Delete signs out and closes the account. A second student's parent declines and the account is gone. At 1400 px an admin adds a country limit (Saudi Arabia, 16) and a 17-year-old there gets straight in; the limit is removed again.
+
+## Family test (`tests/e2e/family.mjs`, part of `npm run test:e2e`)
+
+At 375 px: a parent starts with an empty family, makes a family code, makes a child's account (the child signs in straight to the home and sees the family on Me, with no leave button); an adult student is refused a wrong code, joins with the right one and leaves (inline confirm); a minor asks this parent, who approves from the home, and the child is added and let in; the parent downloads a child's data (and gets nothing for someone outside the family), removes one child (not added back) and deletes another (their account closes).

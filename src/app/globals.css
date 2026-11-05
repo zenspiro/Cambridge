@@ -452,6 +452,9 @@
   .s-inline { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
   .s-inline .s-field { flex: 1 1 140px; min-width: 0; }
   .s-btn-danger { border-color: var(--t-bad); color: var(--t-bad-ink); background: var(--t-surface); }
+  .s-code { font-family: var(--t-font-display); font-size: 22px; letter-spacing: 0.08em; }
+  .s-fold { gap: 12px; }
+  .s-summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; }
   .s-link { color: var(--t-accent-text); font-weight: 700; }
   .s-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-weight: 600; }
   .s-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
