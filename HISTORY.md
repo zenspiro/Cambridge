@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-05: CI fix: the admin top bar wraps
+
+**What:** the admin menu (now with Brand and Themes) and the AI meter were wider than the top bar. Locally the extra spilled into the margin; on CI's Linux fonts it made the page scroll sideways, the admin browser test failed, and the last two merges (themes, sign-in) were not deployed. The menu now wraps onto a second line when needed.
+
+**Why:** owner noticed the merges failing.
+
+**Tested:** new browser check that the top bar fits its own box (catches this with any font); full suite from a fresh local database with CI's settings file: 147 unit tests, 281 browser checks.
+
 ## 2026-11-05: Student and parent sign-in (Phase 1, step 2)
 
 **What:** students and parents sign in at `/signin` with a 6-digit email code (the code step appears in place) or with Google. A first sign-in creates the account and asks once: student or parent, first and last name. Students land on an empty student home, parents on an empty family home (always the calm look). Sign out on both. Codes work for 10 minutes, 5 tries, stored scrambled; code emails are limited per address and per network; the answer is the same for new and registered emails. Admin > Brand has a new "Email sender" field. Built on Better Auth (approved), with only the Google callback of its own endpoints exposed. Admin sign-in is unchanged.
