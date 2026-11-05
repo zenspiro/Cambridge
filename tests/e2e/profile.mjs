@@ -14,6 +14,8 @@ const check = (ok, label) => {
 };
 const net = () => `203.0.113.${Math.floor(Math.random() * 250) + 1}`;
 const run = Date.now().toString(36);
+/** True once the locator shows (the list redraws just after the saved message), false after 10 s. */
+const appears = (locator) => locator.first().waitFor({ state: "visible", timeout: 10_000 }).then(() => true, () => false);
 const noScroll = (page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
 
 /** The newest email to an address in the local test mailbox (FILES bucket), as text. */
@@ -76,7 +78,7 @@ check(true, "minor: their own email is refused as the parent's");
 const parentEmail = `e2e-mum-${run}@example.com`;
 const link = await askParent(kid.page, parentEmail);
 check(link.includes("/consent/"), "minor: the parent's email has a one-tap link");
-check(await kid.page.getByText(`We emailed ${parentEmail}`).isVisible(), "minor: the page shows who was emailed, without a reload");
+check(await appears(kid.page.getByText(`We emailed ${parentEmail}`)), "minor: the page shows who was emailed, without a reload");
 
 const mum = await phone();
 const mp = await mum.newPage();
@@ -107,14 +109,14 @@ await kid.page.selectOption("select[name=session]", "s");
 await kid.page.selectOption("select[name=year]", String(new Date().getUTCFullYear() + 1));
 await kid.page.getByRole("button", { name: "Add exam" }).click();
 await kid.page.waitForSelector("text=Exam session saved.");
-check(await kid.page.getByText(/Physics \(0625\): June/).isVisible(), "me: an exam session is added in place");
+check(await appears(kid.page.getByText(/Physics \(0625\): June/)), "me: an exam session is added in place");
 await kid.page.evaluate(() => { window.__noReload = true; });
 await kid.page.getByRole("button", { name: "Playful" }).click();
 await kid.page.waitForFunction(() => document.querySelector(".s-app")?.getAttribute("data-theme") === "b");
 check(await kid.page.evaluate(() => window.__noReload === true), "me: the theme changes without a reload");
 await kid.page.goto(BASE + "/student");
 check((await kid.page.locator(".s-app").getAttribute("data-theme")) === "b", "me: the theme is remembered");
-check(await kid.page.getByText(/June \d{4}/).isVisible(), "home: shows the exam session");
+check(await appears(kid.page.getByText(/June \d{4}/)), "home: shows the exam session");
 await kid.page.goto(BASE + "/me");
 await kid.page.fill("input[name=firstName]", "Zaraa");
 await kid.page.getByRole("button", { name: "Save" }).click();
