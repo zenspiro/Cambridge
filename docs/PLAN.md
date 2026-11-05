@@ -10,7 +10,7 @@ education industry, so recommendations come from the builder; the owner decides.
 2. Teacher portal second, but the database must be ready for teachers, seats and classrooms from day one, so nothing
    is rebuilt later.
 3. Topics agreed one at a time: 1 AI engine, 2 accounts, 3 pricing, 4 payments, 5 student interface (three switchable
-   themes), 6 child safety and parental consent (not discussed yet).
+   themes), 6 child safety and parental consent (agreed).
 
 ## 1. AI engine (the USP; quality decides whether the product lives)
 
@@ -117,7 +117,25 @@ education industry, so recommendations come from the builder; the owner decides.
   - Built from shared style settings (tokens), so another theme later is cheap.
   - Every student screen is tested in all three themes at 375 px.
 
-## 6. Database and scale (answered 5 Nov 2026)
+## 6. Child safety and parental consent (owner 5 Nov 2026)
+
+- Not legal advice: a lawyer checks this before launch, with the copyright question.
+- **Parent approval, option B, configurable in admin:** a parent approves every student under 18 (one-tap link at
+  sign-up, WhatsApp later). The age limit is a setting per country in the admin panel, not code.
+- **Sign-up collects:** first name, last name, email, birth year, country. No nickname, no school, no phone, no face
+  photos.
+- **Exam session is not asked at sign-up.** A session pass picks its session at checkout. For the exam countdown, the
+  student sets the exam session per subject in their profile (asked once, gently, after the first login; changeable).
+  Monthly plans do not need it.
+- **Leaderboards** (friends or class only) show first name and last initial, since there are no nicknames.
+- **Safe by design:** no messaging between students at the start; no public profiles; no ads or tracking on student
+  pages; student data never sold.
+- **AI safety:** stays on subject; on worrying messages (self-harm, abuse) it stops, shows a local helpline and flags
+  the conversation. Photos of handwritten work are deleted automatically after marking (for example 30 days).
+- **Parents** can see, export or delete their child's account and data.
+- **For the lawyer:** privacy policy and terms, Saudi rules on storing data abroad, the copyright approach.
+
+## 7. Database and scale (answered 5 Nov 2026)
 
 - D1 handles 1,000 students at peak (roughly 30 to 50 saves a second) on Workers Paid ($5 a month: 10 GB per
   database, no daily read cap). It is needed at launch anyway.
@@ -129,6 +147,5 @@ education industry, so recommendations come from the builder; the owner decides.
 
 ## Still open
 
-- Topic 6: child safety and parental consent.
 - Brand name and domain (brief, section 14).
 - Then a phased build plan replacing brief section 13 (student and parent first).
