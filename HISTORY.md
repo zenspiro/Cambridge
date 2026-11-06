@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-06: CI fix: a comment read as a browser popup
+
+**What:** merges #32 (topic tree) and #33 (step 2a) failed CI at the inline check, so neither was deployed. A code comment in `src/lib/brain/topics.ts` said "retry prompt (", which the check reads as a call to the browser's `prompt(` popup. The comment is reworded; nothing else changed. The local run had passed its tests, but the check's exit code was hidden by filtering the log; the dev checklist now says to read it.
+
+**Why:** owner reported the failed merge.
+
+**Tested:** `npm run check` exits 0 (typecheck, 175 unit tests, inline check). The browser suite (403 checks from a fresh database) passed before this one-line comment change.
+
 ## 2026-11-06: Admin sidebar, review screen, AI setup (Phase 2, step 2a)
 
 **What:** the admin menu is a sidebar in groups and pages use the whole width. Parent approval has its own page (Students and parents > Parent approval); Settings is now Library settings. Topic trees lists every subject's trees on one page. Every green tick in the library opens the new review screen: the PDF as stored on the left, what we hold on the right, with the same paper's question paper, mark scheme and insert as a switch, the session's examiner report and thresholds, and Download; the paper rebuilt from the database with flags comes in 2b. AI setup shows the models in use and a "Check AI setup" button: on GitHub, with the owner's keys, it lists the Gemini models the key can use, tries each once (works, busy, not on your plan, unknown, key refused), tries Claude, and lets the admin choose a working Gemini model without a code change. Topic tree runs now wait when Gemini is busy instead of failing.

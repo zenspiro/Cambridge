@@ -21,7 +21,7 @@ Update this file whenever the process changes.
 - [ ] No em dash characters anywhere.
 
 ## Before every push
-- [ ] `npm run check` (typecheck, unit tests, inline check)
+- [ ] `npm run check` (typecheck, unit tests, inline check), and read its exit code: a filtered log can hide a failed inline check (merges #32 and #33 failed CI that way)
 - [ ] `npm run build:worker`
 - [ ] `npm run db:migrate:local`
 - [ ] `.dev.vars` exists (copy `.dev.vars.example`)
