@@ -78,7 +78,7 @@ export function PaperTable({ rows, types, papers, caption }: { rows: PaperRow[];
 export function Legend() {
   return (
     <ul className="legend muted" aria-label="Key">
-      <li className="legend-item"><span className="cell cell-have" aria-hidden="true">✓</span> Stored (click to download)</li>
+      <li className="legend-item"><span className="cell cell-have" aria-hidden="true">✓</span> Stored (click to review it beside the PDF, or download)</li>
       <li className="legend-item"><span className="cell cell-miss" aria-hidden="true">✕</span> Essential, missing</li>
       <li className="legend-item"><span className="cell cell-extra" aria-hidden="true">+</span> Extra, not stored</li>
       <li className="legend-item">Click a missing file to add it.</li>

@@ -7,6 +7,16 @@
 
 The password is the `ADMIN_PASS` secret in the Cloudflare dashboard (Worker `cambridge`, Settings, Variables and Secrets). To change it, edit the secret there. It must be at least 12 characters, or sign-in switches off.
 
+## Finding your way
+The menu is on the left, in groups: **Library** (library, upload, sources, agent), **Subject brain** (topic trees),
+**Students and parents** (parent approval) and **Settings** (library settings, AI setup, brand, themes).
+
+## Reviewing a stored file
+Click any green tick in the library. The PDF opens on the left, and what we hold about it on the right. The buttons
+at the top switch between the same paper's question paper, mark scheme and insert. **Download** and **Open the PDF in
+a new tab** are there too. Soon the right side will show the paper rebuilt from our database, with any differences
+flagged.
+
 ## If sign-in is locked
 After 5 wrong tries from one network, sign-in pauses for 15 minutes from the first try. Other networks are not affected.
 
@@ -60,7 +70,7 @@ Each source lists the pages the agent reads (under "Start pages" on the Sources 
 
 Only one run can go at a time. To stop one, press **Cancel run**, then **Yes, cancel**. If GitHub has not started a run after 5 minutes, the page warns you; a run that stays silent for 15 minutes closes itself and says why. The usual cause of a run that never starts: `AGENT_SECRET` missing from GitHub's **Actions** secrets (not the "Agents" section). First-time setup: `agent-setup.md`.
 
-## Settings
+## Library settings
 - **From year / To year:** the years the library keeps (at most 15 years apart).
 - **Latest public session:** the newest exam session whose papers are public. The library does not ask for later sessions.
 - **Default essential variants:** used only for a subject without its own setting (each subject sets its own on its overview). Currently variant 2.
@@ -80,4 +90,4 @@ Admin > Brand sets what every student, parent and teacher page shows:
 Admin > Themes shows every part of the student pages with sample words, in a phone-sized box. Use the switch at the top of the phone to see Bold, Playful and Clean; pick an answer to see the feedback. "Open as a full page" shows it as a student would see it. Parent pages always use the calm Clean look.
 
 ## Parent approval
-Admin > Settings > Parent approval sets who needs a parent's yes: students under the age shown (18 now). Add a country with a different age if a country's rules differ, or take it back to the default. Only the birth year is known, so a student who could still be under the age is asked. Parents approve or decline from an email link; a decline deletes the student's account.
+Admin > Students and parents > Parent approval sets who needs a parent's yes: students under the age shown (18 now). Add a country with a different age if a country's rules differ, or take it back to the default. Only the birth year is known, so a student who could still be under the age is asked. Parents approve or decline from an email link; a decline deletes the student's account.

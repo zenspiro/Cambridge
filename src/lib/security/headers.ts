@@ -29,7 +29,7 @@ export function makeNonce(): string {
  * Any outside host must be added here explicitly (brief 15.4).
  * Dev mode allows eval and inline styles because React dev tools and hot reload need them.
  */
-export function buildCsp(nonce: string, opts: { dev?: boolean; plainHttp?: boolean } = {}): string {
+export function buildCsp(nonce: string, opts: { dev?: boolean; plainHttp?: boolean; framesSelf?: boolean } = {}): string {
   if (!NONCE_RE.test(nonce)) throw new Error("invalid CSP nonce");
   const dev = opts.dev === true;
   const directives: Record<string, string[]> = {
@@ -41,7 +41,8 @@ export function buildCsp(nonce: string, opts: { dev?: boolean; plainHttp?: boole
     "connect-src": ["'self'", ...(dev ? ["ws:"] : [])],
     "media-src": ["'self'"],
     "object-src": ["'none'"],
-    "frame-src": ["'none'"],
+    // Only the admin review screen frames our own PDF (owner, 6 Nov 2026); every other page frames nothing.
+    "frame-src": opts.framesSelf ? ["'self'"] : ["'none'"],
     "worker-src": ["'self'"],
     "manifest-src": ["'self'"],
     "base-uri": ["'none'"],
@@ -55,3 +56,10 @@ export function buildCsp(nonce: string, opts: { dev?: boolean; plainHttp?: boole
   if (!dev && !opts.plainHttp) parts.push("upgrade-insecure-requests");
   return parts.join("; ");
 }
+
+/** The review screen (frames our own PDF) and the inline PDF it frames: the only exceptions to "no framing". */
+export const REVIEW_PAGE_RE = /^\/admin\/library\/review\/[A-Za-z0-9_-]{10,64}$/;
+export const PDF_VIEW_RE = /^\/admin\/library\/file\/[A-Za-z0-9_-]{10,64}\/view$/;
+
+/** The inline PDF's own policy: it loads nothing, and only our own pages may frame it. */
+export const PDF_VIEW_CSP = "default-src 'none'; frame-ancestors 'self'";

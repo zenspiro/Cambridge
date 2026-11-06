@@ -157,7 +157,7 @@ await ap.goto(BASE + "/admin/login");
 await ap.fill("#password", PASS);
 await ap.click("button[type=submit]");
 await ap.waitForURL(BASE + "/admin");
-await ap.goto(BASE + "/admin/settings");
+await ap.goto(BASE + "/admin/approval");
 const add = ap.locator("form[action='/admin/settings/consent/country']");
 await add.locator("select[name=country]").selectOption("SA");
 await add.locator("input[name=age]").fill("16");

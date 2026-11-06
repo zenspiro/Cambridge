@@ -28,7 +28,6 @@
 
   .shell-narrow { @apply max-w-md; }
   .stack { @apply mt-6 flex flex-col gap-3; }
-  .topbar { @apply flex flex-wrap items-center justify-between gap-x-4 gap-y-2; }
   .subtitle { @apply text-lg font-semibold; }
   .muted { @apply text-base text-muted; }
 
@@ -44,14 +43,20 @@
 
   /* Admin panel */
   /* Admin pages: 80% of the screen (owner request 4 Nov 2026; admin is desktop only). */
-  .shell-wide { @apply w-[80%] max-w-none; }
-  .ai-meter { @apply ml-auto mr-3 flex shrink-0 items-center gap-2 whitespace-nowrap text-base text-muted; }
+  .ai-meter { @apply flex flex-col items-start gap-1 text-sm text-muted; }
   .ai-meter-high { @apply font-semibold text-red-700; }
-  .ai-meter-bar { @apply h-1.5 w-24; }
-  .page-title { @apply mt-6; }
-  .nav { @apply flex flex-wrap gap-1; }
-  .nav-link { @apply rounded-lg px-3 py-2 text-base font-medium text-muted hover:bg-paper hover:text-ink; }
-  .nav-link[aria-current="page"] { @apply bg-paper text-ink shadow-sm; }
+  .ai-meter-bar { @apply h-1.5 w-full; }
+  .page-title { @apply mt-0; }
+  /* Admin frame (owner, 6 Nov 2026): a sidebar, and pages use the rest of the screen. Desktop only. */
+  .admin { @apply grid min-h-dvh grid-cols-[15rem_minmax(0,1fr)]; }
+  .admin-side { @apply sticky top-0 flex h-dvh flex-col justify-between gap-6 overflow-y-auto border-r border-line bg-paper px-3 py-5; }
+  .side-nav { @apply flex flex-col gap-5; }
+  .side-group { @apply flex flex-col gap-0.5; }
+  .side-heading { @apply px-3 pb-1 text-sm font-semibold uppercase tracking-wide text-muted; }
+  .side-link { @apply rounded-lg px-3 py-2 text-base font-medium text-muted hover:bg-wash hover:text-ink; }
+  .side-link[aria-current="page"] { @apply bg-blue-50 text-ink; }
+  .side-foot { @apply flex flex-col gap-3 px-3; }
+  .admin-main { @apply min-w-0 px-8 py-8; }
   .btn-small { @apply min-h-9 px-3 py-1; }
   .btn-danger { @apply border-red-300 text-red-800 hover:bg-red-50; }
   .notice { @apply mt-4 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-base text-green-800; }
@@ -186,6 +191,20 @@
   .paper-name .tag { @apply ml-0; }
   .tag-core { @apply bg-sky-100 text-sky-900; }
   .tag-extended { @apply bg-violet-100 text-violet-900; }
+  /* Review screen (Phase 2 step 2a): the PDF beside what we hold, each half the width. */
+  .review-bar { @apply mt-4 flex flex-wrap items-center justify-between gap-3; }
+  .review-switch { @apply flex overflow-hidden rounded-lg border border-line bg-paper; }
+  .review-switch-item { @apply border-l border-line px-4 py-2 text-base font-medium text-ink first:border-l-0 hover:bg-wash; }
+  .review-switch-item[aria-current="page"] { @apply bg-brand text-brand-ink hover:bg-brand; }
+  .review { @apply mt-4 grid grid-cols-2 gap-4; }
+  .review-pane { @apply flex min-w-0 flex-col overflow-hidden rounded-xl border border-line bg-paper; }
+  .review-head { @apply border-b border-line bg-wash px-4 py-2 text-base font-semibold; }
+  .review-pdf { @apply h-[calc(100dvh-14rem)] min-h-[32rem] w-full border-0 bg-slate-300; }
+  .review-body { @apply p-4; }
+  .facts { @apply grid grid-cols-[9rem_minmax(0,1fr)] gap-x-4 gap-y-2 text-base; }
+  .facts dt { @apply font-medium text-muted; }
+  .facts dd { @apply m-0 break-words; }
+  .model-detail { @apply mt-1 text-sm; }
   /* Topic tree (Phase 2 step 1) */
   .row-actions { @apply flex flex-wrap items-center gap-3; }
   .list-plain { @apply flex flex-col gap-2 pl-5 list-disc; }

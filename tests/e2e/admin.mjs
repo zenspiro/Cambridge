@@ -42,9 +42,19 @@ for (const width of [1400]) {
 
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
   check(!overflow, `${width}px no sideways scroll`);
-  // The top bar must fit its own box: with other fonts (CI's Linux fonts are wider) spill-over becomes page scroll.
-  const barFits = await page.evaluate(() => { const b = document.querySelector(".topbar"); return b ? b.scrollWidth <= b.clientWidth : false; });
-  check(barFits, `${width}px the admin top bar fits (menu wraps instead of spilling over)`);
+  // The sidebar: grouped, the current page marked, and the page uses the rest of the screen.
+  const side = await page.evaluate(() => {
+    const aside = document.querySelector(".admin-side");
+    const main = document.querySelector(".admin-main");
+    return {
+      groups: [...document.querySelectorAll(".side-heading")].map((h) => h.textContent),
+      current: document.querySelector(".side-link[aria-current=page]")?.textContent,
+      fills: aside && main ? Math.abs(aside.getBoundingClientRect().width + main.getBoundingClientRect().width - window.innerWidth) < 2 : false,
+      fits: aside ? aside.scrollWidth <= aside.clientWidth : false,
+    };
+  });
+  check(side.groups.join("|") === "Library|Subject brain|Students and parents|Settings" && side.current === "Home", `${width}px sidebar in groups with the current page marked`);
+  check(side.fills && side.fits, `${width}px sidebar and page fill the whole width`);
 
   await page.click("text=Sign out");
   await page.waitForURL(/\/admin\/login$/);

@@ -16,9 +16,11 @@ New repository secret. Put them under **Actions**, not "Agents" (the agent's fir
 
 The Worker's `GITHUB_TOKEN` (already set for the agent) starts the runs.
 
-The models are set in `wrangler.jsonc` (`CLAUDE_MODEL`, `GEMINI_MODEL`), not in the code. If Google renames its
-model, the run stops with "Gemini does not know the model", and the GitHub log lists the names Google offers. Change
-`GEMINI_MODEL`, merge, and run again.
+Then open Admin > Settings > **AI setup** and press **Check AI setup**. It runs on GitHub with your keys and shows
+whether Claude works and which Gemini models your key can use: "Works", "Not on your plan" (no free use of that
+model), "Limit reached for now", or "Key refused". Press **Use this model** on a working Gemini model to choose it. Run
+the check again whenever a run says the Gemini model is unknown (Google renames models from time to time).
+Claude's model is set in `wrangler.jsonc` (`CLAUDE_MODEL`).
 
 ## Drafting a tree
 

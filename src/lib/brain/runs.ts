@@ -1,5 +1,5 @@
 // Topic tree runs: rows in `job` (type 'brain', params { task: 'topics', syllabusId }), started from the admin
-// panel, carried out on GitHub Actions (scripts/brain/topics.ts), saved into `topic_tree`. Takes the database as a
+// panel, carried out on GitHub Actions (scripts/brain/run.ts), saved into `topic_tree`. Takes the database as a
 // parameter (unit tested on SQLite). No Next imports.
 import { BRAIN } from "../config.ts";
 import type { Db } from "../db.ts";
@@ -7,7 +7,7 @@ import { randomId } from "../auth/crypto.ts";
 import { audit } from "../auth/session.ts";
 import { checkNumbers, cleanDraft, isReady, type Disagreement, type Draft, type Problem, type TreeReport } from "./topics.ts";
 
-export type BrainParams = { task: "topics"; syllabusId: string };
+export type BrainParams = { task: "topics"; syllabusId: string } | { task: "check" };
 export type TreeStatus = "none" | "ready" | "not_ready";
 export type RunState = { id: string; status: "queued" | "running" | "succeeded" | "failed" | "cancelled"; step: string | null; errorRef: string | null; createdAt: number; finishedAt: number | null };
 
@@ -30,9 +30,9 @@ export async function closeStaleBrainRuns(db: Db, now = Date.now()): Promise<voi
 }
 
 /** Starts a topic tree run unless any brain run is active (checked inside the insert, so two clicks start one). */
-export async function startTreeRun(db: Db, syllabusId: string, actorId: string, now = Date.now()): Promise<string | null> {
+/** Starts a brain run unless one is active (checked inside the insert, so two clicks start one). */
+async function startBrainRun(db: Db, params: BrainParams, actorId: string, now: number): Promise<string | null> {
   await closeStaleBrainRuns(db, now);
-  const params: BrainParams = { task: "topics", syllabusId };
   const row = await db
     .prepare(`INSERT INTO job (id, type, status, params, created_by, created_at)
               SELECT ?1, 'brain', 'queued', ?2, ?3, ?4
@@ -40,7 +40,40 @@ export async function startTreeRun(db: Db, syllabusId: string, actorId: string, 
               RETURNING id`)
     .bind(randomId(), JSON.stringify(params), actorId, now)
     .first<{ id: string }>();
-  if (!row) return null;
+  return row?.id ?? null;
+}
+
+/** "Check AI setup": one brain run that lists and tries the models (aiSetup.ts). */
+export async function startCheckRun(db: Db, actorId: string, now = Date.now()): Promise<string | null> {
+  const id = await startBrainRun(db, { task: "check" }, actorId, now);
+  if (id) await audit(db, { actorId, action: "brain.check_start", entity: "job", entityId: id }, now);
+  return id;
+}
+
+/** The latest AI setup check run, for its page. */
+export async function lastCheckRun(db: Db, now = Date.now()): Promise<RunState | null> {
+  await closeStaleBrainRuns(db, now);
+  const r = await db
+    .prepare(`SELECT id, status, step, error_ref, created_at, finished_at FROM job WHERE type = 'brain' AND json_extract(params, '$.task') = 'check' ORDER BY created_at DESC LIMIT 1`)
+    .bind()
+    .first<{ id: string; status: RunState["status"]; step: string | null; error_ref: string | null; created_at: number; finished_at: number | null }>();
+  return r ? { id: r.id, status: r.status, step: r.step, errorRef: r.error_ref, createdAt: r.created_at, finishedAt: r.finished_at } : null;
+}
+
+/** Finishes a running check run (its result is saved by saveCheck in aiSetup.ts). */
+export async function finishCheckRun(db: Db, id: string, now = Date.now()): Promise<boolean> {
+  const row = await db
+    .prepare(`UPDATE job SET status = 'succeeded', progress = 100, finished_at = ?2, step = NULL
+              WHERE id = ?1 AND type = 'brain' AND status = 'running' AND json_extract(params, '$.task') = 'check' RETURNING id`)
+    .bind(id, now)
+    .first();
+  return !!row;
+}
+
+export async function startTreeRun(db: Db, syllabusId: string, actorId: string, now = Date.now()): Promise<string | null> {
+  const id = await startBrainRun(db, { task: "topics", syllabusId }, actorId, now);
+  if (!id) return null;
+  const row = { id };
   await db
     .prepare(`INSERT INTO topic_tree (syllabus_id, job_id, updated_at) VALUES (?1, ?2, ?3)
               ON CONFLICT (syllabus_id) DO UPDATE SET job_id = ?2, updated_at = ?3`)
@@ -53,7 +86,8 @@ export async function startTreeRun(db: Db, syllabusId: string, actorId: string, 
 const readParams = (s: string): BrainParams | null => {
   try {
     const p = JSON.parse(s) as BrainParams;
-    return p?.task === "topics" && typeof p.syllabusId === "string" ? p : null;
+    if (p?.task === "check") return { task: "check" };
+    return p?.task === "topics" && typeof p.syllabusId === "string" ? { task: "topics", syllabusId: p.syllabusId } : null;
   } catch {
     return null;
   }
@@ -131,7 +165,7 @@ export type SaveResult = "ok_ready" | "ok_not_ready" | "no_run" | "too_big" | "e
  */
 export async function saveTree(db: Db, jobId: string, rawDraft: unknown, rawReport: unknown, now = Date.now()): Promise<SaveResult> {
   const params = await activeBrainRun(db, jobId);
-  if (!params) return "no_run";
+  if (!params || params.task !== "topics") return "no_run";
   const { draft, problems: shape } = cleanDraft(rawDraft);
   if (!draft.topics.length) return "empty";
   const report = cleanReport(rawReport);
@@ -201,6 +235,13 @@ const toRow = (r: Row): TreeRow => ({
 export async function treesForCode(db: Db, code: string, now = Date.now()): Promise<TreeRow[]> {
   await closeStaleBrainRuns(db, now);
   const { results } = await db.prepare(`${SELECT_ROWS} WHERE y.code = ?1 ORDER BY y.valid_from_year DESC`).bind(code).all<Row>();
+  return results.map(toRow);
+}
+
+/** Every syllabus version of every subject, for the Topic trees overview. */
+export async function allTrees(db: Db, now = Date.now()): Promise<TreeRow[]> {
+  await closeStaleBrainRuns(db, now);
+  const { results } = await db.prepare(`${SELECT_ROWS} ORDER BY y.code, y.valid_from_year DESC`).bind().all<Row>();
   return results.map(toRow);
 }
 
