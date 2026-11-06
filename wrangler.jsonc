@@ -42,7 +42,7 @@
     // Subject brain (topic tree): its GitHub workflow, the main model and the checking model from another
     // provider. The API keys are GitHub secrets (CLAUDE_API_KEY, GEMINI_API_KEY), never here.
     "BRAIN_WORKFLOW": "brain.yml",
-    "CLAUDE_MODEL": "claude-opus-5-5",
+    "CLAUDE_MODEL": "claude-sonnet-5-5",
     "GEMINI_MODEL": "gemini-3.5-flash"
   }
 }

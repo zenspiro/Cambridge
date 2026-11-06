@@ -4,8 +4,10 @@ import { reportError } from "@/lib/errors";
 import { allow, limitKey } from "@/lib/ratelimit";
 import { dispatchBrain } from "@/lib/agent/github";
 import { failBrainRun, startTreeRun, syllabusPdf } from "@/lib/brain/runs";
+import { topicsCostCheck } from "@/lib/brain/spend";
 
-// "Draft topic tree" for one syllabus version: starts a brain run on GitHub Actions (one at a time).
+// "Draft topic tree" for one syllabus version: starts a brain run on GitHub Actions (one at a time), inside the
+// monthly spending cap.
 export async function POST(request: Request, { params }: { params: Promise<{ code: string }> }) {
   const { code } = await params;
   const back = /^\d{4}$/.test(code) ? `/admin/library/${code}/topics` : "/admin/library";
@@ -13,7 +15,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     const id = formId(form, "syllabus");
     const y = id ? await db.prepare(`SELECT id FROM syllabus WHERE id = ?1 AND code = ?2`).bind(id, code).first<{ id: string }>() : null;
     if (!y) return "bad";
-    if (!(await syllabusPdf(db, y.id))) return "no_pdf";
+    const pdf = await syllabusPdf(db, y.id);
+    if (!pdf) return "no_pdf";
+    // The monthly cap (AI setup page): a run whose rough cost would take the month past it does not start.
+    const cost = await topicsCostCheck(db, env, pdf.bytes);
+    if (cost.verdict !== "ok") return cost.verdict;
     if (!(await allow(db, await limitKey("brain-run", actorId), BRAIN.runsPerHour, 3_600_000))) return "busy";
     const jobId = await startTreeRun(db, y.id, actorId);
     if (!jobId) return "running";

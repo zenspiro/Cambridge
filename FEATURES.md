@@ -30,7 +30,9 @@ A plain list of what the platform does today, for non-developers.
 - Topic tree (admin, the first part of the subject brain): Library > subject > Topic tree. Press Draft and Claude copies each syllabus's topics and learning goals while Gemini copies it separately; code checks every word against the syllabus PDF. Ready trees are what later steps (question making, marking) are built on. Needs the two AI keys (see `docs/guides/topic-tree-setup.md`).
 - Admin sidebar: the menu sits on the left in groups and pages use the whole screen.
 - Review screen: click any green tick to see the stored PDF beside what we hold about it, switch between the paper's question paper, mark scheme and insert, and download. Next: the paper rebuilt from our database with problem parts flagged.
-- AI setup: check that both AI keys work and which Gemini models your key can use (free or not), and choose the Gemini model.
+- AI setup: check Claude and Gemini separately, see which models each key can use, and pick each AI's model from a dropdown (Claude Sonnet 5.5 by default).
+- AI usage dashboard: spend today and this month, questions, pages, tokens and spend per model and per job, the latest runs; prices per model typed on the page.
+- Monthly spending cap: a run whose rough cost would pass it does not start; the rough cost shows beside each Draft button.
 - Parent approval has its own page under Students and parents.
 
 ## Coming next

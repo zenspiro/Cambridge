@@ -1,7 +1,7 @@
 import { adminPost } from "@/lib/adminPost";
-import { chooseGemini } from "@/lib/brain/aiSetup";
+import { chooseModel } from "@/lib/brain/aiSetup";
 
-// Use this Gemini model: only one the last check found working.
+// Use this model: Claude from Anthropic's list for the key, Gemini only one the last check found working.
 export async function POST(request: Request) {
-  return adminPost(request, "/admin/ai", async ({ db, form, actorId }) => chooseGemini(db, form.get("model"), actorId));
+  return adminPost(request, "/admin/ai", async ({ db, form, actorId }) => chooseModel(db, form.get("provider"), form.get("model"), actorId));
 }

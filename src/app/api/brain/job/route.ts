@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     checkModels: BRAIN.checkModels,
     checkDelayMs: BRAIN.checkDelayMs,
   };
-  if (params.task === "check") return json({ task: "check", models: { claude: models.claude, gemini: models.gemini }, limits });
+  if (params.task === "check") return json({ task: "check", which: params.which, models: { claude: models.claude, gemini: models.gemini }, limits });
   const y = await a.db
     .prepare(`SELECT code, valid_from_year, valid_to_year FROM syllabus WHERE id = ?1`)
     .bind(params.syllabusId)

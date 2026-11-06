@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-06: AI setup: separate checks, model dropdowns, usage dashboard, spending cap
+
+**What:** AI setup shows Claude (main AI) and Gemini (checking AI) side by side. Each has its own check button (Check Claude, Check Gemini), so one no longer costs a run of the other, and a dropdown of models: Claude from Anthropic's list for the key, Gemini only the models that worked in the last check. The choice is saved as a setting, no code change. Claude's default is now Sonnet 5.5 (owner chose it for the trial; Opus 5.5 is one pick away). A new usage dashboard shows spend today and this month, the monthly cap, and questions, pages, tokens and spend per model and per job, plus the latest runs with links; months can be stepped back. Every Claude and Gemini question a run asks is recorded with the tokens the service reported (`ai_spend`, migration 0021). Spend is worked out from prices typed on the page (dollars per million tokens; Claude Sonnet and Opus 5.5 filled in from Anthropic's October 2026 list); a model without a price says so and is left out of totals. A monthly spending cap stops any run whose rough cost would take the month past it; the topic tree page shows the rough cost beside the Draft button (the average of past runs, or a guess from the PDF's size). Audio models (Transcribe) are no longer offered, and Claude's errors show their plain message, folded.
+
+**Why:** owner requests: test on one paper at a time without burning credit, check buttons and dropdowns per AI, a small dashboard of usage and spend per model.
+
+**Tested:** `npm run check` exits 0 (183 unit tests; new: usage reports checked, prices and the cap typed and cleaned, spend from prices with unpriced models named, months, rough cost from history or size, the cap verdicts, a Claude check keeps the last Gemini result, choosing either model). Browser suite from a fresh database: 420 checks, including both checks against fake Anthropic and Google servers (each asks only its own AI), both dropdowns, runs using the chosen models, tokens recorded per run, the dashboard by model and job, a price saved in place, and a run past the cap refused with the reason shown on the topic tree page.
+
 ## 2026-11-06: CI fix: a comment read as a browser popup
 
 **What:** merges #32 (topic tree) and #33 (step 2a) failed CI at the inline check, so neither was deployed. A code comment in `src/lib/brain/topics.ts` said "retry prompt (", which the check reads as a call to the browser's `prompt(` popup. The comment is reworded; nothing else changed. The local run had passed its tests, but the check's exit code was hidden by filtering the log; the dev checklist now says to read it.

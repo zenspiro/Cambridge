@@ -10,6 +10,7 @@ import { TreeStatusLine } from "@/components/TopicTree";
 import { BRAIN } from "@/lib/config";
 import { loadHeader } from "@/lib/library/catalog";
 import { isActive, treesForCode } from "@/lib/brain/runs";
+import { estimateWords, topicsCostCheck, usdWords } from "@/lib/brain/spend";
 
 export const metadata: Metadata = { title: "Topic tree" };
 
@@ -21,6 +22,8 @@ const MESSAGES = {
   not_set_up: "Starting runs is not set up yet (GITHUB_TOKEN).",
   github: "GitHub refused to start the run. Check the GITHUB_TOKEN secret.",
   bad: "That did not work. Please reload the page and try again.",
+  over_cap: "Not started: this run would take this month past your spending cap. Raise the cap on the AI setup page, or wait for next month.",
+  no_price: "Not started: a spending cap is set, but a model in use has no price, so the cost cannot be checked. Add the price on the AI setup page.",
 };
 
 export default async function TopicsPage({ params, searchParams }: { params: Promise<{ code: string }>; searchParams: Promise<{ e?: string; ref?: string }> }) {
@@ -33,6 +36,8 @@ export default async function TopicsPage({ params, searchParams }: { params: Pro
   if (!header || !rows.length) redirect("/admin/library?e=unknown");
   const active = rows.some((r) => isActive(r.run));
   const now = Date.now();
+  // Rough cost per version with a PDF (a handful of reads; the versions of one code are few).
+  const costs = new Map(await Promise.all(rows.filter((r) => r.pdf).map(async (r) => [r.syllabusId, await topicsCostCheck(env.DB, env, r.pdfBytes, now)] as const)));
 
   return (
     <AdminShell current="/admin/library" title={`Topic tree: ${header.subject_name} ${code}`}>
@@ -67,6 +72,7 @@ export default async function TopicsPage({ params, searchParams }: { params: Pro
                     <button className="btn btn-small" type="submit">{r.status === "none" ? "Draft topic tree" : "Redraft"}</button>
                   </ActionForm>
                 ) : null}
+                {!running && costs.get(r.syllabusId) ? <CostLine c={costs.get(r.syllabusId)!} /> : null}
               </div>
             ) : (
               <p className="muted">
@@ -78,5 +84,15 @@ export default async function TopicsPage({ params, searchParams }: { params: Pro
         );
       })}
     </AdminShell>
+  );
+}
+
+function CostLine({ c }: { c: Awaited<ReturnType<typeof topicsCostCheck>> }) {
+  return (
+    <p className={c.verdict === "ok" ? "muted cost-line" : "alert cost-line"}>
+      {estimateWords(c.estimate)}
+      {c.cap > 0 ? ` This month: ${usdWords(c.spent)} of your ${usdWords(c.cap)} cap.` : ""}
+      {c.verdict === "over_cap" ? " This run would go past the cap, so it will not start." : c.verdict === "no_price" ? " With a cap set, runs need a price for every model in use." : ""}
+    </p>
   );
 }

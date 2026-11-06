@@ -7,7 +7,7 @@ import { randomId } from "../auth/crypto.ts";
 import { audit } from "../auth/session.ts";
 import { checkNumbers, cleanDraft, isReady, type Disagreement, type Draft, type Problem, type TreeReport } from "./topics.ts";
 
-export type BrainParams = { task: "topics"; syllabusId: string } | { task: "check" };
+export type BrainParams = { task: "topics"; syllabusId: string } | { task: "check"; which: "claude" | "gemini" | null };
 export type TreeStatus = "none" | "ready" | "not_ready";
 export type RunState = { id: string; status: "queued" | "running" | "succeeded" | "failed" | "cancelled"; step: string | null; errorRef: string | null; createdAt: number; finishedAt: number | null };
 
@@ -29,7 +29,6 @@ export async function closeStaleBrainRuns(db: Db, now = Date.now()): Promise<voi
     .run();
 }
 
-/** Starts a topic tree run unless any brain run is active (checked inside the insert, so two clicks start one). */
 /** Starts a brain run unless one is active (checked inside the insert, so two clicks start one). */
 async function startBrainRun(db: Db, params: BrainParams, actorId: string, now: number): Promise<string | null> {
   await closeStaleBrainRuns(db, now);
@@ -43,10 +42,10 @@ async function startBrainRun(db: Db, params: BrainParams, actorId: string, now: 
   return row?.id ?? null;
 }
 
-/** "Check AI setup": one brain run that lists and tries the models (aiSetup.ts). */
-export async function startCheckRun(db: Db, actorId: string, now = Date.now()): Promise<string | null> {
-  const id = await startBrainRun(db, { task: "check" }, actorId, now);
-  if (id) await audit(db, { actorId, action: "brain.check_start", entity: "job", entityId: id }, now);
+/** "Check Claude" or "Check Gemini" (null: both): one brain run that lists and tries the models (aiSetup.ts). */
+export async function startCheckRun(db: Db, actorId: string, which: "claude" | "gemini" | null = null, now = Date.now()): Promise<string | null> {
+  const id = await startBrainRun(db, { task: "check", which }, actorId, now);
+  if (id) await audit(db, { actorId, action: "brain.check_start", entity: "job", entityId: id, detail: { which: which ?? "both" } }, now);
   return id;
 }
 
@@ -86,7 +85,7 @@ export async function startTreeRun(db: Db, syllabusId: string, actorId: string, 
 const readParams = (s: string): BrainParams | null => {
   try {
     const p = JSON.parse(s) as BrainParams;
-    if (p?.task === "check") return { task: "check" };
+    if (p?.task === "check") return { task: "check", which: p.which === "claude" || p.which === "gemini" ? p.which : null };
     return p?.task === "topics" && typeof p.syllabusId === "string" ? { task: "topics", syllabusId: p.syllabusId } : null;
   } catch {
     return null;
@@ -201,19 +200,21 @@ export type TreeRow = {
   draftedAt: number | null;
   run: RunState | null;
   pdf: string | null;
+  pdfBytes: number;
 };
 
 type Row = {
   id: string; code: string; valid_from_year: number; valid_to_year: number;
   status: TreeStatus | null; topics: number | null; goals: number | null; drafted_at: number | null;
   job_id: string | null; job_status: RunState["status"] | null; step: string | null; error_ref: string | null; job_created: number | null; job_finished: number | null;
-  pdf: string | null;
+  pdf: string | null; pdf_bytes: number | null;
 };
 
 const SELECT_ROWS = `
 SELECT y.id, y.code, y.valid_from_year, y.valid_to_year, t.status, t.topics, t.goals, t.drafted_at,
        j.id AS job_id, j.status AS job_status, j.step, j.error_ref, j.created_at AS job_created, j.finished_at AS job_finished,
-       (SELECT d.file_name FROM source_document d WHERE d.syllabus_id = y.id AND d.doc_type = 'sy' AND d.status = 'stored' ORDER BY d.acquired_at DESC LIMIT 1) AS pdf
+       (SELECT d.file_name FROM source_document d WHERE d.syllabus_id = y.id AND d.doc_type = 'sy' AND d.status = 'stored' ORDER BY d.acquired_at DESC LIMIT 1) AS pdf,
+       (SELECT d.size_bytes FROM source_document d WHERE d.syllabus_id = y.id AND d.doc_type = 'sy' AND d.status = 'stored' ORDER BY d.acquired_at DESC LIMIT 1) AS pdf_bytes
 FROM syllabus y LEFT JOIN topic_tree t ON t.syllabus_id = y.id LEFT JOIN job j ON j.id = t.job_id`;
 
 const toRow = (r: Row): TreeRow => ({
@@ -229,6 +230,7 @@ const toRow = (r: Row): TreeRow => ({
     ? { id: r.job_id, status: r.job_status, step: r.step, errorRef: r.error_ref, createdAt: r.job_created, finishedAt: r.job_finished }
     : null,
   pdf: r.pdf,
+  pdfBytes: r.pdf_bytes ?? 0,
 });
 
 /** Every version of a syllabus code with its tree status, latest run and stored syllabus PDF. */

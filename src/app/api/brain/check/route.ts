@@ -11,7 +11,7 @@ export async function POST(request: Request) {
   if (typeof jobId !== "string" || !JOB_ID_RE.test(jobId)) return json({ error: "bad_request" }, 400);
   const params = await activeBrainRun(a.db, jobId);
   if (!params || params.task !== "check") return json({ error: "no_run" }, 409);
-  await saveCheck(a.db, b?.result);
+  await saveCheck(a.db, b?.result, params.which);
   await finishCheckRun(a.db, jobId);
   return json({ ok: true });
 }
