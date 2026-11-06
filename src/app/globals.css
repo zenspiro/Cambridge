@@ -186,6 +186,20 @@
   .paper-name .tag { @apply ml-0; }
   .tag-core { @apply bg-sky-100 text-sky-900; }
   .tag-extended { @apply bg-violet-100 text-violet-900; }
+  /* Topic tree (Phase 2 step 1) */
+  .row-actions { @apply flex flex-wrap items-center gap-3; }
+  .list-plain { @apply flex flex-col gap-2 pl-5 list-disc; }
+  .tree { @apply flex flex-col gap-4; }
+  .tree-inner { @apply mt-2 gap-3 border-l border-line pl-4; }
+  .tree-title { @apply font-semibold; }
+  .tree-section { @apply text-lg; }
+  .tree-number { @apply mr-1 inline-block min-w-8 text-muted tabular-nums; }
+  .tree-goals { @apply mt-2 flex flex-col gap-2; }
+  .tree-goal { @apply flex gap-2; }
+  .tree-goal-flag { @apply rounded bg-amber-50 px-1; }
+  .tree-text { @apply flex-1; }
+  .tree-notes { @apply mt-1 block whitespace-pre-line text-muted; }
+  .tag-flag { @apply bg-amber-100 text-amber-900; }
 }
 
 /* Brand page (admin) */

@@ -38,6 +38,11 @@
     "AGENT_WORKFLOW": "agent.yml",
     "AGENT_REF": "main",
     // Workers AI model for the agent (must support JSON mode). Change here to try another.
-    "AI_MODEL": "@cf/meta/llama-3.1-70b-instruct"
+    "AI_MODEL": "@cf/meta/llama-3.1-70b-instruct",
+    // Subject brain (topic tree): its GitHub workflow, the main model and the checking model from another
+    // provider. The API keys are GitHub secrets (CLAUDE_API_KEY, GEMINI_API_KEY), never here.
+    "BRAIN_WORKFLOW": "brain.yml",
+    "CLAUDE_MODEL": "claude-opus-5-5",
+    "GEMINI_MODEL": "gemini-3.5-flash"
   }
 }

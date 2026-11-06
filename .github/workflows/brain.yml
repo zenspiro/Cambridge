@@ -1,0 +1,42 @@
+# Subject brain (Phase 2): topic tree runs. Started only by the admin panel's "Draft topic tree" button
+# (workflow_dispatch with a run id). Secrets: AGENT_SECRET (same value as the Worker's), CLAUDE_API_KEY and
+# GEMINI_API_KEY (set by the owner in GitHub > Settings > Secrets and variables > Actions). No write access to the repo.
+name: Brain
+
+on:
+  workflow_dispatch:
+    inputs:
+      job_id:
+        description: "Run id from the admin panel"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: brain
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+      # The Anthropic SDK comes from the lockfile (exact versions); install scripts are not run.
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Draft the topic tree
+        env:
+          APP_URL: ${{ vars.APP_URL || 'https://cambridge.zenspiroapps.workers.dev' }}
+          AGENT_SECRET: ${{ secrets.AGENT_SECRET }}
+          CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          JOB_ID: ${{ inputs.job_id }}
+        run: node scripts/brain/topics.ts

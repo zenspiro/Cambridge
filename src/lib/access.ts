@@ -28,4 +28,10 @@ export const PUBLIC_ROUTES: readonly string[] = [
   "api/agent/catalog/route.ts",
   "api/agent/ai/route.ts",
   "api/agent/doc/route.ts",
+  // Subject brain endpoints (topic tree runs): the same signed door.
+  "api/brain/job/route.ts",
+  "api/brain/doc/route.ts",
+  "api/brain/step/route.ts",
+  "api/brain/fail/route.ts",
+  "api/brain/finish/route.ts",
 ];

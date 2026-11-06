@@ -31,6 +31,7 @@ Node's built-in test runner, TypeScript loaded directly. Files must not import N
 | `brand.test.ts` | Brand settings: text checks, damaged values fall back, pictures recognised by their bytes (SVG refused), upload, replace and remove with old files deleted and audited, only current files served |
 | `accounts.test.ts` | Sign-in checks (email, code, names, roles), the code email, local mailbox and Resend sending, the real Better Auth on SQLite (code hashed, wrong and right codes, tries per code, cookie rules, no IP, audits), roles and cascade on delete |
 | `profile.test.ts` | Countries, age limits and the safe birth-year rule, standing (details, pending, ok, country limits), parent approval links (hashed, single use, replaced, expired), approve and decline (cascade delete, audit kept), exam plans, export without tokens, delete, the approval email |
+| `brain.test.ts` | Topic tree: every page of a PDF read, the word check (line breaks, two columns, invented and altered wording), numbering, missing headings, cleaning AI answers, comparing two readers and settling by the text, the verdict, runs (one at a time, stale, steps, failure), saving re-checked on the server, reports cleaned |
 | `family.test.ts` | Family codes (loose typing, replaced, expiring), joining (students only, one family, limit), linking by approval once, approving from home, parent-made child accounts (no takeover, Better Auth dates), remove, leave (adults), cascades |
 | `themes.test.ts` | Every theme in config has a token block with the same tokens, WCAG AA contrast for every text pair and subject colour, nothing below 14 px, fonts only from `/fonts/` |
 | `check-inline.test.ts` | The inline code scanner catches each banned pattern and passes normal React code |
@@ -50,6 +51,10 @@ Needs a running Worker, migrations and `.dev.vars` (with `AGENT_SECRET`). Starts
 ## Folder upload test (`tests/e2e/folder.mjs`, part of `npm run test:e2e`)
 
 Builds a folder like an unzipped Google Drive download (names in folders, a scan with a real cover, a wrong name its cover corrects, a repeat, a non-PDF, an unclear file), picks it on `/admin/library/folder`, checks the preview, picks a file for the unclear one, uploads, checks the five stored names, then picks the folder again and checks everything is skipped. It also checks a file with another Cambridge code is uploaded under its own name, Download report gives every file, error pages are retried by themselves and "Try again" sends the rest, the picker shows the full place in the library on its own line, a 2002 file is left out by its name, the AI meter shows on the page and the finish summary appears. Without Workers AI locally, it checks the page says so.
+
+## Topic tree test (`tests/e2e/brain.mjs`, part of `npm run test:e2e`)
+
+At 1400 px, with fake Claude and Gemini servers in the test (never a real AI): without a syllabus PDF there is no Draft button; a made-up syllabus is stored through the folder upload; Draft without a GitHub token says what is missing in place. Then the real brain script runs: both readers agree and the tree is Ready (Claude gets the PDF, structured output, streaming, adaptive thinking and the refusal fallback; Gemini gets the key in a header; keys never in the log), the tree page shows sections, goals, Supplement tags and notes; an invented goal is caught and fixed on the second try; a run that cannot pass is stored Not ready with its open checks, the Claude and Gemini difference and highlighted goals; a missing key stops the run with a plain reason; unsigned calls are refused.
 
 ## Themes and brand test (`tests/e2e/themes.mjs`, part of `npm run test:e2e`)
 

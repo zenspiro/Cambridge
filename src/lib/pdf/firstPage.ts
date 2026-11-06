@@ -303,6 +303,29 @@ class Doc {
     const pages = [...this.objs.entries()].filter(([, o]) => isDict(o.value) && isName(o.value.dict.Type) && o.value.dict.Type.name === "Page").sort((a, b) => a[0] - b[0]);
     return pages.length ? (pages[0]![1].value as Dict) : null;
   }
+  /** Every page in reading order (the page tree, depth first), up to `max`. */
+  pages(max: number): Dict[] {
+    let catalog: Dict | null = null;
+    for (const [, o] of this.objs) {
+      if (isDict(o.value) && isName(o.value.dict.Type) && o.value.dict.Type.name === "Catalog") catalog = o.value;
+    }
+    const out: Dict[] = [];
+    const seen = new Set<Val>();
+    const visit = (v: Val | undefined, depth: number) => {
+      const node = this.get(v);
+      if (!isDict(node) || seen.has(node) || depth > 30 || out.length >= max) return;
+      seen.add(node);
+      const type = node.dict.Type;
+      if (isName(type) && type.name === "Page") {
+        out.push(node);
+        return;
+      }
+      const kids = this.get(node.dict.Kids);
+      if (Array.isArray(kids)) for (const k of kids) visit(k, depth + 1);
+    };
+    if (catalog) visit(catalog.dict.Pages, 0);
+    return out;
+  }
   /** A page's resources, inherited from its parents when missing. */
   resources(page: Dict): Record<string, Val> {
     let node: Val | undefined = page;
@@ -386,7 +409,7 @@ function decode(font: Font, s: Uint8Array): string {
  * line moves, an estimated advance per character) so a line break goes where the text moves
  * down and a space where it jumps right, and words drawn letter by letter stay whole.
  */
-async function runContent(doc: Doc, data: Uint8Array, res: Record<string, Val>, out: { text: string }, depth: number) {
+async function runContent(doc: Doc, data: Uint8Array, res: Record<string, Val>, out: { text: string; max: number }, depth: number) {
   if (depth > 3) return;
   const fontsDict = doc.get(res.Font);
   const xobjects = doc.get(res.XObject);
@@ -402,7 +425,7 @@ async function runContent(doc: Doc, data: Uint8Array, res: Record<string, Val>, 
   const stack: (Val | { op: string })[] = [];
   const lx = new Lexer(data);
   const emit = (t: string) => {
-    if (out.text.length < MAX_TEXT) out.text += t;
+    if (out.text.length < out.max) out.text += t;
   };
   const scale = () => Math.max(Math.abs(tm[3]!), Math.abs(tm[0]!), 0.01) * size;
   const show = (t: string) => {
@@ -422,7 +445,7 @@ async function runContent(doc: Doc, data: Uint8Array, res: Record<string, Val>, 
     lm = [lm[0]!, lm[1]!, lm[2]!, lm[3]!, lm[4]! + tx * lm[0]! + ty * lm[2]!, lm[5]! + tx * lm[1]! + ty * lm[3]!];
     tm = [...lm];
   };
-  for (let guard = 0; guard < 400_000 && out.text.length < MAX_TEXT; guard++) {
+  for (let guard = 0; guard < 400_000 && out.text.length < out.max; guard++) {
     const t = lx.value();
     if (t === undefined) break;
     if (!(typeof t === "object" && t !== null && "op" in t)) {
@@ -480,40 +503,74 @@ async function runContent(doc: Doc, data: Uint8Array, res: Record<string, Val>, 
   }
 }
 
+/** Opens a document for reading; null when it is not a readable (unencrypted) PDF. */
+async function openDoc(bytes: Uint8Array, inflate: Inflate): Promise<Doc | null> {
+  const head = latin1(bytes, 0, Math.min(bytes.length, 1024));
+  if (!head.includes("%PDF-")) return null;
+  const doc = new Doc(bytes, inflate);
+  doc.scan();
+  doc.exactLengths();
+  if (latin1(bytes, Math.max(0, bytes.length - 4096)).includes("/Encrypt")) return null;
+  await doc.objectStreams();
+  return doc;
+}
+
+const tidy = (t: string) =>
+  t
+    .replace(/[\u0000-\u0008\u000b-\u001f\u007f\ufffd]/g, "")
+    .split("\n").map((l) => l.replace(/\s+/g, " ").trim()).filter(Boolean).join("\n");
+
+/** One page's text, up to `max` characters. */
+async function pageText(doc: Doc, page: Dict, max: number): Promise<string> {
+  const res = doc.resources(page);
+  const contents = doc.get(page.dict.Contents);
+  const refs = Array.isArray(page.dict.Contents) ? page.dict.Contents : Array.isArray(contents) ? contents : [page.dict.Contents];
+  const parts: Uint8Array[] = [];
+  for (const r of refs) {
+    const o = isRef(r) ? doc.objs.get(r.ref) : undefined;
+    if (o?.stream) parts.push(await doc.data(o));
+  }
+  const all = new Uint8Array(parts.reduce((n, p) => n + p.length + 1, 0));
+  let off = 0;
+  for (const p of parts) {
+    all.set(p, off);
+    off += p.length;
+    all[off++] = 10;
+  }
+  const out = { text: "", max };
+  await runContent(doc, all, res, out, 0);
+  return tidy(out.text).slice(0, max);
+}
+
 /** The text of page 1, tidied: one line per text line, single spaces. Empty when unreadable. */
 export async function firstPageText(bytes: Uint8Array, inflate: Inflate): Promise<string> {
   try {
-    const head = latin1(bytes, 0, Math.min(bytes.length, 1024));
-    if (!head.includes("%PDF-")) return "";
-    const doc = new Doc(bytes, inflate);
-    doc.scan();
-    doc.exactLengths();
-    if (latin1(bytes, Math.max(0, bytes.length - 4096)).includes("/Encrypt")) return "";
-    await doc.objectStreams();
-    const page = doc.firstPage();
-    if (!page) return "";
-    const res = doc.resources(page);
-    const contents = doc.get(page.dict.Contents);
-    const refs = Array.isArray(page.dict.Contents) ? page.dict.Contents : Array.isArray(contents) ? contents : [page.dict.Contents];
-    const parts: Uint8Array[] = [];
-    for (const r of refs) {
-      const o = isRef(r) ? doc.objs.get(r.ref) : undefined;
-      if (o?.stream) parts.push(await doc.data(o));
-    }
-    const all = new Uint8Array(parts.reduce((n, p) => n + p.length + 1, 0));
-    let off = 0;
-    for (const p of parts) {
-      all.set(p, off);
-      off += p.length;
-      all[off++] = 10;
-    }
-    const out = { text: "" };
-    await runContent(doc, all, res, out, 0);
-    return out.text
-      .replace(/[\u0000-\u0008\u000b-\u001f\u007f�]/g, "")
-      .split("\n").map((l) => l.replace(/\s+/g, " ").trim()).filter(Boolean).join("\n")
-      .slice(0, MAX_TEXT);
+    const doc = await openDoc(bytes, inflate);
+    const page = doc?.firstPage();
+    return doc && page ? await pageText(doc, page, MAX_TEXT) : "";
   } catch {
     return "";
+  }
+}
+
+/**
+ * The text of every page in order (a syllabus, for the topic tree's word check), up to `maxPages`
+ * pages and `maxChars` characters in all. Empty list when unreadable.
+ */
+export async function allPagesText(bytes: Uint8Array, inflate: Inflate, maxPages = 400, maxChars = 2_000_000): Promise<string[]> {
+  try {
+    const doc = await openDoc(bytes, inflate);
+    if (!doc) return [];
+    const out: string[] = [];
+    let total = 0;
+    for (const page of doc.pages(maxPages)) {
+      if (total >= maxChars) break;
+      const t = await pageText(doc, page, Math.min(200_000, maxChars - total));
+      out.push(t);
+      total += t.length;
+    }
+    return out;
+  } catch {
+    return [];
   }
 }

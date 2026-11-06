@@ -11,6 +11,10 @@ export type AppEnv = CloudflareEnv & {
   AGENT_SECRET?: string;
   GITHUB_REPO?: string;
   AGENT_WORKFLOW?: string;
+  /** Subject brain workflow file (topic tree runs), and the models it uses. */
+  BRAIN_WORKFLOW?: string;
+  CLAUDE_MODEL?: string;
+  GEMINI_MODEL?: string;
   AGENT_REF?: string;
   /** Signs student and parent sessions (32+ characters). */
   BETTER_AUTH_SECRET?: string;

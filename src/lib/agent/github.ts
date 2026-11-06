@@ -1,4 +1,4 @@
-// Starts the agent workflow on GitHub Actions (workflow_dispatch). The token needs only
+// Starts the agent (or brain) workflow on GitHub Actions (workflow_dispatch). The token needs only
 // "Actions: read and write" on this one repository.
 import type { AppEnv } from "../env.ts";
 
@@ -8,10 +8,14 @@ const REF_RE = /^[A-Za-z0-9_./-]+$/;
 
 export type DispatchResult = { ok: true } | { ok: false; reason: "not_set_up" | "refused"; status?: number };
 
-export async function dispatchAgent(env: AppEnv, jobId: string): Promise<DispatchResult> {
+export const dispatchAgent = (env: AppEnv, jobId: string) => dispatchWorkflow(env, env.AGENT_WORKFLOW, jobId);
+
+/** The subject brain's runs (topic tree) use their own workflow, which holds the AI keys. */
+export const dispatchBrain = (env: AppEnv, jobId: string) => dispatchWorkflow(env, env.BRAIN_WORKFLOW, jobId);
+
+async function dispatchWorkflow(env: AppEnv, workflow: string | undefined, jobId: string): Promise<DispatchResult> {
   const token = env.GITHUB_TOKEN;
   const repo = env.GITHUB_REPO;
-  const workflow = env.AGENT_WORKFLOW;
   const ref = env.AGENT_REF;
   if (!token || !repo || !workflow || !ref || !REPO_RE.test(repo) || !FILE_RE.test(workflow) || !REF_RE.test(ref)) {
     return { ok: false, reason: "not_set_up" };
