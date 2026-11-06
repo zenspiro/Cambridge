@@ -179,6 +179,15 @@ You see at the end: students and parents can sign up, approve, link, and land on
    and the two agree on 97%+. Later steps use Ready trees only.
 2. **Reading the papers.** Past papers, mark schemes and examiner reports turned into structured questions, mark
    points, common mistakes, topic frequency and paper blueprints (runs on GitHub Actions).
+   **Review screen (owner, 6 Nov 2026; mockup agreed):** opened from any stored paper. Left: the PDF as stored. Right:
+   the same page rebuilt from our database to look like the paper (numbering, wording, [marks], figures, answer
+   lines); one page bar turns both; toggle question paper / mark scheme. Flags boxed with a one-line reason: red
+   wording differs, amber numbers or marks differ, blue our own drawing of a figure (compare by eye); a flag count with
+   "Next flag"; "Show flags" on or off. Not for the topic tree. Fixing a flag (all four agreed): use the PDF's version
+   (code copies the PDF text, no AI), read it again (that question or the whole paper, re-checked), edit it yourself
+   (checked against the PDF), or "It's fine" (false alarm, remembered); figures: Redraw or Looks right. Every fix is
+   audited with Undo and becomes a rule for the subject. A paper is ready when its flags are cleared, and the admin
+   may mark it ready anyway when the remaining flags can be ignored (recorded as an override).
 3. **Question making with self-checks.** Original questions; a second AI from another provider solves each one, code
    recalculates numbers, similarity check against past papers; diagrams drawn as code and checked by a second AI.
    Failures are thrown away.
