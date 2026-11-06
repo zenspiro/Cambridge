@@ -307,7 +307,7 @@ export function isReady(r: Pick<TreeReport, "textChecked" | "problems" | "agreem
   return r.textChecked && r.problems.length === 0 && r.agreement >= BRAIN.minAgreement;
 }
 
-/** Plain-word problems for the retry prompt (Claude's second try is told what the checks found). */
+/** Plain-word problems for Claude's second try, which is told what the checks found. */
 export function retryNotes(problems: readonly Problem[], disagreements: readonly Disagreement[], max = 80): string {
   const lines = [
     ...problems.map((p) => `- ${p.where}: ${p.detail}`),
