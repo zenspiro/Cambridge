@@ -188,6 +188,12 @@ You see at the end: students and parents can sign up, approve, link, and land on
    (checked against the PDF), or "It's fine" (false alarm, remembered); figures: Redraw or Looks right. Every fix is
    audited with Undo and becomes a rule for the subject. A paper is ready when its flags are cleared, and the admin
    may mark it ready anyway when the remaining flags can be ignored (recorded as an override).
+   **Step 2 decisions (owner, 6 Nov 2026):** Physics 0625 first, other subjects once it is proven. "Read this paper"
+   (runs at once) first, then "Read all" for a whole subject and later every subject (Anthropic's batch service, half
+   price, results within hours). Every run skips what is already confirmed and reads only missing or unconfirmed
+   pieces. Every figure is drawn automatically (our own drawing, for comparison on the review screen). Build order:
+   2a sidebar, full width, Parent approval page, review screen with the PDF side; 2b question papers and mark schemes
+   with flags, fixes and override; 2c examiner reports, grade thresholds, blueprints, topic frequency.
 3. **Question making with self-checks.** Original questions; a second AI from another provider solves each one, code
    recalculates numbers, similarity check against past papers; diagrams drawn as code and checked by a second AI.
    Failures are thrown away.
