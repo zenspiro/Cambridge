@@ -1,21 +1,29 @@
 // AI setup (owner, 6 Nov 2026): which models the subject brain uses, and the "Check AI setup" run that asks Google
 // which Gemini models the owner's key can use (and which work on its plan, free or paid) and tries each AI once.
-// The run happens on GitHub, where the keys are. The Gemini model chosen here (setting 'ai_models') wins over the
-// Worker var GEMINI_MODEL, so a model change needs no code change. Takes the database as a parameter. No Next imports.
+// The run happens on GitHub, where the keys are. The models chosen here (setting 'ai_models') win over the
+// Worker vars CLAUDE_MODEL and GEMINI_MODEL, so a model change needs no code change. Takes the database as a parameter. No Next imports.
 import type { Db } from "../db.ts";
 import { audit } from "../auth/session.ts";
 import { BRAIN } from "../config.ts";
 
 export const GEMINI_MODEL_RE = /^gemini-[a-z0-9][a-z0-9.-]{0,60}$/;
+export const CLAUDE_MODEL_RE = /^claude-[a-z0-9][a-z0-9.-]{0,60}$/;
+
+export type CheckWhich = "claude" | "gemini";
 
 export type ModelStatus = "ok" | "busy" | "not_on_plan" | "not_found" | "refused" | "no_credit" | "error" | "untested";
 export type ModelTry = { name: string; label: string; status: ModelStatus; detail: string };
 export type AiCheck = {
   at: number;
+  /** When each AI was last checked (each has its own button since 6 Nov 2026); 0 when never. */
+  claudeAt: number;
+  geminiAt: number;
   claude: { model: string; status: ModelStatus; detail: string };
   gemini: { model: string; status: ModelStatus; detail: string };
   /** Gemini models the key may use for text, the ones tried with their result. */
   models: ModelTry[];
+  /** Claude models the key may use (Anthropic's model list); only the one in use is tried. */
+  claudeModels: ModelTry[];
 };
 
 export const STATUS_WORDS: Record<ModelStatus, string> = {
@@ -48,14 +56,20 @@ async function writeSetting(db: Db, key: string, value: unknown, actorId: string
     .run();
 }
 
-export type AiModels = { claude: string; gemini: string; geminiChosen: boolean };
+export type AiModels = { claude: string; gemini: string; claudeChosen: boolean; geminiChosen: boolean };
 
-/** The models runs use: Claude from the Worker var, Gemini as chosen on the AI setup page, else the Worker var. */
-export async function aiModels(db: Db, env: { CLAUDE_MODEL?: string; GEMINI_MODEL?: string }): Promise<AiModels> {
+async function chosenModels(db: Db): Promise<{ claude: string; gemini: string }> {
   const s = await readSetting(db, "ai_models");
-  const chosen = s && typeof s === "object" && typeof (s as { gemini?: unknown }).gemini === "string" ? (s as { gemini: string }).gemini : "";
-  const gemini = GEMINI_MODEL_RE.test(chosen) ? chosen : env.GEMINI_MODEL ?? "";
-  return { claude: env.CLAUDE_MODEL ?? "", gemini, geminiChosen: GEMINI_MODEL_RE.test(chosen) };
+  const o = s && typeof s === "object" ? (s as Record<string, unknown>) : {};
+  const claude = typeof o.claude === "string" && CLAUDE_MODEL_RE.test(o.claude) ? o.claude : "";
+  const gemini = typeof o.gemini === "string" && GEMINI_MODEL_RE.test(o.gemini) ? o.gemini : "";
+  return { claude, gemini };
+}
+
+/** The models runs use: each as chosen on the AI setup page, else the Worker var. */
+export async function aiModels(db: Db, env: { CLAUDE_MODEL?: string; GEMINI_MODEL?: string }): Promise<AiModels> {
+  const c = await chosenModels(db);
+  return { claude: c.claude || (env.CLAUDE_MODEL ?? ""), gemini: c.gemini || (env.GEMINI_MODEL ?? ""), claudeChosen: !!c.claude, geminiChosen: !!c.gemini };
 }
 
 const str = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, max) : "");
@@ -68,12 +82,16 @@ export function cleanCheck(v: unknown, now: number): AiCheck {
     const r = x && typeof x === "object" ? (x as Record<string, unknown>) : {};
     return { model: str(r.model, 80), status: status(r.status), detail: str(r.detail, 300) };
   };
-  const models = (Array.isArray(o.models) ? o.models : []).slice(0, 80).flatMap((x): ModelTry[] => {
+  const list = (v: unknown, re: RegExp) => (Array.isArray(v) ? v : []).slice(0, 80).flatMap((x): ModelTry[] => {
     const r = x && typeof x === "object" ? (x as Record<string, unknown>) : {};
     const name = str(r.name, 80);
-    return GEMINI_MODEL_RE.test(name) ? [{ name, label: str(r.label, 80) || name, status: status(r.status), detail: str(r.detail, 300) }] : [];
+    return re.test(name) ? [{ name, label: str(r.label, 80) || name, status: status(r.status), detail: str(r.detail, 300) }] : [];
   });
-  return { at: now, claude: one(o.claude), gemini: one(o.gemini), models };
+  const when = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : now);
+  return {
+    at: now, claudeAt: when(o.claudeAt), geminiAt: when(o.geminiAt),
+    claude: one(o.claude), gemini: one(o.gemini), models: list(o.models, GEMINI_MODEL_RE), claudeModels: list(o.claudeModels, CLAUDE_MODEL_RE),
+  };
 }
 
 export async function lastCheck(db: Db): Promise<AiCheck | null> {
@@ -81,20 +99,42 @@ export async function lastCheck(db: Db): Promise<AiCheck | null> {
   return v && typeof v === "object" && typeof (v as AiCheck).at === "number" ? cleanCheck(v, (v as AiCheck).at) : null;
 }
 
-export async function saveCheck(db: Db, raw: unknown, now = Date.now()): Promise<AiCheck> {
-  const check = cleanCheck(raw, now);
+/**
+ * Saves a check. A check of one AI keeps the other AI's last result (each has its own button). `which` null means
+ * both were checked.
+ */
+export async function saveCheck(db: Db, raw: unknown, which: CheckWhich | null = null, now = Date.now()): Promise<AiCheck> {
+  const fresh = cleanCheck(raw, now);
+  const prev = await lastCheck(db);
+  const claude = which !== "gemini" || !prev
+    ? { claude: fresh.claude, claudeModels: fresh.claudeModels, claudeAt: which === "gemini" ? 0 : now }
+    : { claude: prev.claude, claudeModels: prev.claudeModels, claudeAt: prev.claudeAt };
+  const gemini = which !== "claude" || !prev
+    ? { gemini: fresh.gemini, models: fresh.models, geminiAt: which === "claude" ? 0 : now }
+    : { gemini: prev.gemini, models: prev.models, geminiAt: prev.geminiAt };
+  const check: AiCheck = { at: now, ...claude, ...gemini };
   await writeSetting(db, "ai_check", check, "brain", now);
-  await audit(db, { actorId: "brain", action: "brain.ai_check", entity: "setting", entityId: "ai_check", detail: { claude: check.claude.status, gemini: check.gemini.status } }, now);
+  await audit(db, { actorId: "brain", action: "brain.ai_check", entity: "setting", entityId: "ai_check", detail: { which: which ?? "both", claude: check.claude.status, gemini: check.gemini.status } }, now);
   return check;
 }
 
-/** Choose the Gemini model: only one the last check found working. */
-export async function chooseGemini(db: Db, model: unknown, actorId: string, now = Date.now()): Promise<"ok_model" | "bad_model"> {
-  if (typeof model !== "string" || !GEMINI_MODEL_RE.test(model)) return "bad_model";
+/**
+ * Choose the model an AI uses. Gemini: only one the last check found working. Claude: one on Anthropic's list for
+ * the key (only the one in use is tried, so a new pick is tried by the next check or run). The other AI's choice
+ * stays.
+ */
+export async function chooseModel(db: Db, provider: unknown, model: unknown, actorId: string, now = Date.now()): Promise<"ok_model" | "bad_model"> {
+  if (provider !== "claude" && provider !== "gemini") return "bad_model";
+  const re = provider === "claude" ? CLAUDE_MODEL_RE : GEMINI_MODEL_RE;
+  if (typeof model !== "string" || !re.test(model)) return "bad_model";
   const check = await lastCheck(db);
-  if (!check?.models.some((m) => m.name === model && m.status === "ok")) return "bad_model";
-  await writeSetting(db, "ai_models", { gemini: model }, actorId, now);
-  await audit(db, { actorId, action: "brain.gemini_model", entity: "setting", entityId: "ai_models", detail: { model } }, now);
+  const ok = provider === "claude"
+    ? check?.claudeModels.some((m) => m.name === model)
+    : check?.models.some((m) => m.name === model && m.status === "ok");
+  if (!ok) return "bad_model";
+  const chosen = await chosenModels(db);
+  await writeSetting(db, "ai_models", { ...chosen, [provider]: model }, actorId, now);
+  await audit(db, { actorId, action: `brain.${provider}_model`, entity: "setting", entityId: "ai_models", detail: { model } }, now);
   return "ok_model";
 }
 
@@ -103,7 +143,7 @@ export async function chooseGemini(db: Db, model: unknown, actorId: string, now 
  * preview, newest first, up to BRAIN.checkModels, plus the one in use. Pure: the script and tests use it.
  */
 export function modelsToTry(names: readonly string[], inUse: string): string[] {
-  const text = names.filter((n) => GEMINI_MODEL_RE.test(n) && !/(embed|tts|image|imagen|live|audio|native|vision|aqa|learnlm|computer|robotics|veo)/.test(n));
+  const text = names.filter((n) => GEMINI_MODEL_RE.test(n) && !/(embed|tts|image|imagen|live|audio|native|vision|aqa|learnlm|computer|robotics|veo|transcri)/.test(n));
   const preview = (n: string) => /(preview|exp)/.test(n);
   const version = (n: string) => Number(/gemini-(\d+(?:\.\d+)?)/.exec(n)?.[1] ?? 0);
   const sorted = [...new Set(text)].sort((a, b) => Number(preview(a)) - Number(preview(b)) || version(b) - version(a) || a.localeCompare(b));

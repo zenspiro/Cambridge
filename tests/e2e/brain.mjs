@@ -97,6 +97,14 @@ const server = createServer((req, res) => {
   req.on("data", (d) => (body += d));
   req.on("end", () => {
     const json = body ? JSON.parse(body) : {};
+    if (req.method === "GET" && req.url.startsWith("/claude/v1/models")) {
+      // Anthropic's model list for the key (AI setup: Check Claude).
+      ai.claude.push({ headers: req.headers, body: null, url: req.url });
+      const data = ["claude-sonnet-5-5", "claude-opus-5-5"].map((id) => ({ type: "model", id, display_name: id.replace(/-/g, " "), created_at: "2026-10-01T00:00:00Z" }));
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ data, has_more: false, first_id: data[0].id, last_id: data[1].id }));
+      return;
+    }
     if (req.url.startsWith("/claude/v1/messages")) {
       ai.claude.push({ headers: req.headers, body: json });
       if (!json.stream) {
@@ -322,37 +330,85 @@ try {
   const halves = await page.evaluate(() => [...document.querySelectorAll(".review-pane")].map((e) => Math.round(e.getBoundingClientRect().width)));
   check(halves.length === 2 && Math.abs(halves[0] - halves[1]) < 4, "the PDF and what we hold each take half");
 
-  // 10. AI setup: the check lists and tries the models; a working one can be chosen.
+  // 10. AI setup: each AI has its own check and a dropdown of models; the usage dashboard, prices and the cap.
   await page.goto(BASE + "/admin/ai");
-  check((await page.locator("#in-use").textContent())?.includes("gemini-3.5-flash"), "AI setup shows the models in use");
-  await page.locator("button", { hasText: "Check AI setup" }).click();
-  await page.locator(".action-note", { hasText: "GITHUB_TOKEN" }).waitFor({ timeout: 10_000 }).then(() => check(true, "check without a GitHub token says what is missing"), () => check(false, "check without a GitHub token says what is missing"));
-  const checkRun = `e2ec${Date.now()}`;
-  sql(`INSERT INTO job (id, type, status, params, created_by, created_at) VALUES ('${checkRun}', 'brain', 'queued', '{"task":"check"}', 'platform-admin', ${Date.now()})`);
-  const rc = await runBrain(checkRun);
-  check(rc.status === 0, `check run exits cleanly${rc.status ? ": " + rc.out.slice(-600) : ""}`);
+  check((await page.locator("#ai-gemini").textContent())?.includes("gemini-3.5-flash"), "AI setup shows the Gemini model in use");
+  check((await page.locator("#ai-claude").textContent())?.includes("claude-sonnet-5-5"), "Claude Sonnet 5.5 is the default main AI");
+  await page.locator("#ai-gemini button", { hasText: "Check Gemini" }).click();
+  await page.locator("#ai-gemini .action-note", { hasText: "GITHUB_TOKEN" }).waitFor({ timeout: 10_000 }).then(() => check(true, "check without a GitHub token says what is missing"), () => check(false, "check without a GitHub token says what is missing"));
+  const gemRun = `e2eg${Date.now()}`;
+  sql(`INSERT INTO job (id, type, status, params, created_by, created_at) VALUES ('${gemRun}', 'brain', 'queued', '{"task":"check","which":"gemini"}', 'platform-admin', ${Date.now()})`);
+  ai.claude.length = 0;
+  const rg = await runBrain(gemRun);
+  check(rg.status === 0, `Gemini check exits cleanly${rg.status ? ": " + rg.out.slice(-600) : ""}`);
   check(ai.gemini.some((g) => g.url.startsWith("/gemini/models?") && g.headers["x-goog-api-key"] === "test-gemini-key"), "the check asks Google for the key's models, key in a header");
+  check(ai.claude.length === 0, "Check Gemini does not ask Claude anything");
+  const claudeRun = `e2ek${Date.now()}`;
+  sql(`INSERT INTO job (id, type, status, params, created_by, created_at) VALUES ('${claudeRun}', 'brain', 'queued', '{"task":"check","which":"claude"}', 'platform-admin', ${Date.now()})`);
+  ai.gemini.length = 0;
+  const rk = await runBrain(claudeRun);
+  check(rk.status === 0, `Claude check exits cleanly${rk.status ? ": " + rk.out.slice(-600) : ""}`);
+  check(ai.claude.some((c) => c.url?.startsWith("/claude/v1/models")), "Check Claude asks Anthropic for the key's models");
+  check(ai.gemini.length === 0, "Check Claude does not ask Gemini anything");
   await page.goto(BASE + "/admin/ai");
   const row = (n) => page.locator(`#model-${n.replace(/\./g, "\\.")}`);
-  check((await row("gemini-3.5-flash").textContent())?.includes("Works"), "the model in use works");
+  check((await row("gemini-3.5-flash").textContent())?.includes("Works"), "the Gemini list survives a Claude check");
   check((await row("gemini-2.5-pro").textContent())?.includes("Not on your plan"), "a model the free plan lacks says so");
-  check((await page.locator("#check").textContent())?.includes("Claude (claude-opus-5-5)") && (await page.locator("#check").textContent())?.includes("Works"), "Claude is tried too");
+  check((await page.locator("#ai-claude").textContent())?.includes("Works"), "Claude is tried");
   check((await page.locator("#model-gemini-embedding-001").count()) === 0, "models that cannot write text are not listed");
-  await row("gemini-3.1-flash-lite").locator("button", { hasText: "Use this model" }).click();
+  const gemOptions = await page.locator("#ai-gemini select option").evaluateAll((o) => o.map((x) => x.value));
+  check(gemOptions.includes("gemini-3.1-flash-lite") && !gemOptions.includes("gemini-2.5-pro"), "the Gemini dropdown offers only working models");
+  check((await page.locator("#ai-claude select option").count()) === 2, "the Claude dropdown offers the key's Claude models");
+  await page.locator("#ai-gemini select").selectOption("gemini-3.1-flash-lite");
+  await page.locator("#ai-gemini button", { hasText: "Use this model" }).click();
   // In place (ActionForm), or as a plain form if clicked before the page's scripts loaded: either way it says Saved.
   await page.locator(".action-note, .notice", { hasText: "Saved" }).first().waitFor({ timeout: 15_000 });
-  await page.locator("#in-use", { hasText: "gemini-3.1-flash-lite" }).waitFor({ timeout: 10_000 }).then(() => check(true, "a working model is chosen in place"), () => check(false, "a working model is chosen in place"));
+  await page.locator("#ai-gemini", { hasText: "gemini-3.1-flash-lite" }).waitFor({ timeout: 10_000 }).then(() => check(true, "a working model is chosen in place"), () => check(false, "a working model is chosen in place"));
+  await page.locator("#ai-claude select").selectOption("claude-opus-5-5");
+  await page.locator("#ai-claude button", { hasText: "Use this model" }).click();
+  await page.locator("#ai-claude", { hasText: "claude-opus-5-5 (chosen here)" }).waitFor({ timeout: 15_000 }).then(() => check(true, "a Claude model is chosen from the dropdown"), () => check(false, "a Claude model is chosen from the dropdown"));
   ai.gemini.length = 0;
+  ai.claude.length = 0;
   const runChosen = newRun();
   await runBrain(runChosen);
   check(ai.gemini.some((g) => g.url.startsWith("/gemini/models/gemini-3.1-flash-lite:")), "runs use the chosen Gemini model");
+  check(ai.claude.some((c) => c.body?.model === "claude-opus-5-5"), "runs use the chosen Claude model");
+
+  // Usage: every question is recorded with its tokens and shown per model and job.
+  const spent = rows(`SELECT provider, model, SUM(input_tokens) AS tin FROM ai_spend WHERE job_id = '${runChosen}' GROUP BY provider, model`);
+  check(spent.some((r) => r.provider === "claude" && r.model === "claude-opus-5-5" && r.tin > 0) && spent.some((r) => r.provider === "gemini" && r.tin > 0), "a run records each AI's tokens");
+  await page.goto(BASE + "/admin/ai");
+  const usage = (await page.locator("#usage").textContent()) ?? "";
+  check(usage.includes("claude-opus-5-5") && usage.includes("Topic trees") && usage.includes("AI setup checks"), "the dashboard shows usage per model and per job");
+  check((await page.locator("#usage .alert").textContent())?.includes("gemini-3.1-flash-lite"), "a model without a price is named, not guessed");
+  await page.locator("#price-gemini-3\\.1-flash-lite input[name=in]").fill("0");
+  await page.locator("#price-gemini-3\\.1-flash-lite input[name=out]").fill("0");
+  await page.locator("#price-gemini-3\\.1-flash-lite button").click();
+  await page.locator("#price-gemini-3\\.1-flash-lite .action-note", { hasText: "Price saved" }).waitFor({ timeout: 15_000 }).then(() => check(true, "a price is saved in place"), () => check(false, "a price is saved in place"));
+
+  // The cap: the topic tree page shows the rough cost and refuses a run that would go past it.
+  await page.locator("#cap input[name=cap]").fill("0.000001");
+  await page.locator("#cap button").click();
+  await page.locator("#cap .action-note", { hasText: "cap saved" }).waitFor({ timeout: 15_000 });
+  await page.goto(BASE + "/admin/library/0625/topics");
+  check((await card.locator(".cost-line").textContent())?.includes("will not start"), "past the cap, the topic tree page says the run will not start");
+  const refused = await page.evaluate(async (id) => {
+    const r = await fetch("/admin/library/0625/topics/draft", { method: "POST", body: new URLSearchParams({ syllabus: id }) });
+    return new URL(r.url).searchParams.get("e");
+  }, "0625-2023");
+  check(refused === "over_cap", `a run past the cap does not start (${refused})`);
+  sql(`DELETE FROM setting WHERE key = 'ai_budget'`);
+  await page.reload();
+  check((await card.locator(".cost-line").textContent())?.includes("Rough cost: about"), "without a cap the rough cost is shown");
   sql(`DELETE FROM setting WHERE key IN ('ai_models', 'ai_check')`);
+  await page.goto(BASE + "/admin/ai");
   check(await noSideways(), "AI setup: no sideways scroll");
 
   // 11. Signed endpoints refuse unsigned calls.
   const unsigned = await fetch(`${BASE}/api/brain/job`, { method: "POST", body: "{}" });
   check(unsigned.status === 401, "brain endpoints refuse unsigned requests");
   check((await fetch(`${BASE}/api/brain/check`, { method: "POST", body: "{}" })).status === 401, "the check endpoint refuses unsigned requests");
+  check((await fetch(`${BASE}/api/brain/usage`, { method: "POST", body: "{}" })).status === 401, "the usage endpoint refuses unsigned requests");
 
   check(errors.length === 0, `no script errors${errors.length ? ": " + errors.join(" | ") : ""}`);
 } finally {
@@ -361,7 +417,7 @@ try {
   sql(`UPDATE job SET status = 'failed' WHERE type = 'brain' AND status IN ('queued', 'running')`);
   sql(`DELETE FROM topic_tree WHERE syllabus_id = '0625-2023'`);
   sql(`DELETE FROM source_document WHERE file_name = '0625_y23_sy.pdf'`);
-  sql(`DELETE FROM setting WHERE key IN ('ai_models', 'ai_check')`);
+  sql(`DELETE FROM setting WHERE key IN ('ai_models', 'ai_check', 'ai_budget')`);
 }
 
 console.log(failures ? `\n${failures} failed` : "\nall brain checks passed");

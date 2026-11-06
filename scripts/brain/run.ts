@@ -23,7 +23,7 @@ type Limits = {
 };
 type Job =
   | { task: "topics"; subject: string; pdfBytes: number; models: { claude: string; gemini: string }; limits: Limits }
-  | { task: "check"; models: { claude: string; gemini: string }; limits: Limits };
+  | { task: "check"; which: "claude" | "gemini" | null; models: { claude: string; gemini: string }; limits: Limits };
 type TopicJob = Extract<Job, { task: "topics" }>;
 
 const APP_URL = (process.env.APP_URL ?? "").replace(/\/$/, "");
@@ -71,11 +71,33 @@ async function step(text: string) {
   if (r.status === 409) throw new Stop("closed");
 }
 
+/**
+ * Tells our site the tokens one question used (AI usage dashboard and monthly cap). Best effort: a failure here is
+ * logged and the run carries on.
+ */
+async function usage(provider: "claude" | "gemini", model: string, tokensIn: number, tokensOut: number, pages = 0) {
+  try {
+    const r = await api("/api/brain/usage", { usage: { provider, model, calls: 1, pages, tokensIn, tokensOut } });
+    if (r.status !== 200) log(`usage not recorded (${r.status})`);
+  } catch {
+    log("usage not recorded (no answer)");
+  }
+}
+
+/** The plain message of a Claude error (the JSON body's message, not the raw text). */
+function claudeMessage(err: unknown): string {
+  if (err instanceof Anthropic.APIError) {
+    const body = err.error as { error?: { message?: unknown } } | undefined;
+    if (typeof body?.error?.message === "string") return body.error.message.slice(0, 300);
+  }
+  return err instanceof Error ? err.message.slice(0, 300) : "";
+}
+
 // ---------- The two readers ----------
 
 type Reading = { raw: unknown; tokensIn: number; tokensOut: number };
 
-async function askClaude(client: Anthropic, job: TopicJob, pdf64: string, prompt: string): Promise<Reading> {
+async function askClaude(client: Anthropic, job: TopicJob, pdf64: string, prompt: string, pages: number): Promise<Reading> {
   // Streamed (long answer); refusals fall back to another model on Anthropic's side ("default" routing).
   const stream = client.beta.messages.stream({
     model: job.models.claude,
@@ -94,6 +116,8 @@ async function askClaude(client: Anthropic, job: TopicJob, pdf64: string, prompt
     }],
   });
   const msg = await stream.finalMessage();
+  // The model that answered (a fallback may have served it); counted even when the answer is refused or cut off.
+  await usage("claude", msg.model || job.models.claude, msg.usage.input_tokens, msg.usage.output_tokens, pages);
   if (msg.stop_reason === "refusal") throw new Stop("claude_refused");
   if (msg.stop_reason === "max_tokens") throw new Stop("claude_too_long");
   const text = msg.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("");
@@ -128,7 +152,7 @@ async function geminiCall(model: string, body: unknown, limits: Limits, timeoutM
   }
 }
 
-async function askGemini(job: TopicJob, pdf64: string): Promise<Reading> {
+async function askGemini(job: TopicJob, pdf64: string, pages: number): Promise<Reading> {
   const r = await geminiCall(job.models.gemini, {
     systemInstruction: { parts: [{ text: TOPIC_SYSTEM }] },
     contents: [{ role: "user", parts: [{ inline_data: { mime_type: "application/pdf", data: pdf64 } }, { text: topicPrompt(job.subject) }] }],
@@ -144,6 +168,10 @@ async function askGemini(job: TopicJob, pdf64: string): Promise<Reading> {
     candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] }; finishReason?: string }[];
     usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number };
   };
+  const u = data.usageMetadata ?? {};
+  const tokensIn = u.promptTokenCount ?? 0;
+  const tokensOut = (u.candidatesTokenCount ?? 0) + (u.thoughtsTokenCount ?? 0);
+  await usage("gemini", job.models.gemini, tokensIn, tokensOut, pages);
   const c = data.candidates?.[0];
   if (c?.finishReason === "MAX_TOKENS") throw new Stop("gemini_too_long");
   const text = (c?.content?.parts ?? []).filter((p) => !p.thought).map((p) => p.text ?? "").join("");
@@ -153,8 +181,7 @@ async function askGemini(job: TopicJob, pdf64: string): Promise<Reading> {
   } catch {
     throw new Stop("gemini_bad_answer");
   }
-  const u = data.usageMetadata ?? {};
-  return { raw, tokensIn: u.promptTokenCount ?? 0, tokensOut: (u.candidatesTokenCount ?? 0) + (u.thoughtsTokenCount ?? 0) };
+  return { raw, tokensIn, tokensOut };
 }
 
 /** The Gemini models this key may use for text (name and Google's display name). */
@@ -180,56 +207,96 @@ async function geminiModels(): Promise<string> {
 
 // ---------- AI setup check ----------
 
-/** Lists the Gemini models the key may use, tries the one in use and up to `checkModels` more, and tries Claude once. */
+/**
+ * "Check Claude" lists the Claude models the key may use and tries the one in use once; "Check Gemini" lists the
+ * Gemini models the key may use for text and tries the one in use and up to `checkModels` more. `which` null: both.
+ */
 async function runCheck(job: Extract<Job, { task: "check" }>) {
-  const result: { claude: { model: string; status: ModelStatus; detail: string }; gemini: { model: string; status: ModelStatus; detail: string }; models: ModelTry[] } = {
+  const result: CheckResult = {
     claude: { model: job.models.claude, status: "untested", detail: "" },
     gemini: { model: job.models.gemini, status: "untested", detail: "" },
     models: [],
+    claudeModels: [],
   };
-  await step("Trying Claude");
-  if (!CLAUDE_KEY) result.claude = { model: job.models.claude, status: "refused", detail: "The GitHub secret CLAUDE_API_KEY is not set." };
-  else {
-    try {
-      const client = new Anthropic({ apiKey: CLAUDE_KEY, maxRetries: 1, timeout: 120_000, ...(CLAUDE_BASE ? { baseURL: CLAUDE_BASE } : {}) });
-      await client.messages.create({ model: job.models.claude, max_tokens: 64, output_config: { effort: "low" }, messages: [{ role: "user", content: "Reply with the word OK." }] });
-      result.claude.status = "ok";
-    } catch (err) {
-      const msg = err instanceof Error ? err.message.slice(0, 300) : "";
-      const st: ModelStatus = err instanceof Anthropic.AuthenticationError ? "refused" : err instanceof Anthropic.NotFoundError ? "not_found"
-        : err instanceof Anthropic.RateLimitError ? "busy" : /credit balance/i.test(msg) ? "no_credit" : "error";
-      result.claude = { model: job.models.claude, status: st, detail: msg };
-    }
-  }
-  await step("Asking Google which Gemini models your key can use");
-  if (!GEMINI_KEY) result.gemini = { model: job.models.gemini, status: "refused", detail: "The GitHub secret GEMINI_API_KEY is not set." };
-  else {
-    const listed = await listGemini();
-    if (listed.status !== 200) {
-      result.gemini = { model: job.models.gemini, status: geminiStatus(listed.status, listed.text), detail: listed.text.slice(0, 300) };
-    } else {
-      const tries = modelsToTry(listed.models.map((m) => m.name), job.models.gemini);
-      const label = new Map(listed.models.map((m) => [m.name, m.label]));
-      for (const m of listed.models) if (!tries.includes(m.name) && /^gemini-/.test(m.name)) result.models.push({ name: m.name, label: m.label, status: "untested", detail: "" });
-      const tried: ModelTry[] = [];
-      for (const [i, name] of tries.entries()) {
-        await step(`Trying Gemini model ${i + 1} of ${tries.length}`);
-        // One try each: a busy model is reported as busy, not waited for.
-        const r = await geminiCall(name, { contents: [{ role: "user", parts: [{ text: "Reply with the word OK." }] }], generationConfig: { maxOutputTokens: 32 } }, { ...job.limits, geminiTries: 1 }, 60_000);
-        const st = geminiStatus(r.status, r.text);
-        tried.push({ name, label: label.get(name) ?? name, status: st, detail: st === "ok" ? "" : r.text.replace(/\s+/g, " ").slice(0, 300) });
-        if (i < tries.length - 1) await sleep(job.limits.checkDelayMs);
-      }
-      result.models = [...tried, ...result.models];
-      const inUse = tried.find((t) => t.name === job.models.gemini);
-      result.gemini = inUse
-        ? { model: job.models.gemini, status: inUse.status, detail: inUse.detail }
-        : { model: job.models.gemini, status: "not_found", detail: "This model is not in the list your key can use." };
-    }
-  }
+  if (job.which !== "gemini") await checkClaude(job, result);
+  if (job.which !== "claude") await checkGemini(job, result);
   const r = await api("/api/brain/check", { result });
   if (r.status !== 200) throw new Stop(`save_${r.status}`);
   log(`check saved: Claude ${result.claude.status}, Gemini ${result.gemini.status}, ${result.models.filter((m) => m.status === "ok").length} Gemini models work`);
+}
+
+type CheckResult = { claude: { model: string; status: ModelStatus; detail: string }; gemini: { model: string; status: ModelStatus; detail: string }; models: ModelTry[]; claudeModels: ModelTry[] };
+
+async function checkClaude(job: Extract<Job, { task: "check" }>, result: CheckResult) {
+  await step("Asking Anthropic which Claude models your key can use");
+  if (!CLAUDE_KEY) {
+    result.claude = { model: job.models.claude, status: "refused", detail: "The GitHub secret CLAUDE_API_KEY is not set." };
+    return;
+  }
+  const client = new Anthropic({ apiKey: CLAUDE_KEY, maxRetries: 1, timeout: 120_000, ...(CLAUDE_BASE ? { baseURL: CLAUDE_BASE } : {}) });
+  try {
+    for await (const m of client.models.list({ limit: 100 })) {
+      if (/^claude-[a-z0-9][a-z0-9.-]{0,60}$/.test(m.id)) result.claudeModels.push({ name: m.id, label: m.display_name || m.id, status: "untested", detail: "" });
+      if (result.claudeModels.length >= 60) break;
+    }
+  } catch (err) {
+    log(`could not list Claude models: ${claudeMessage(err)}`);
+  }
+  await step("Trying Claude");
+  try {
+    const msg = await client.messages.create({ model: job.models.claude, max_tokens: 64, output_config: { effort: "low" }, messages: [{ role: "user", content: "Reply with the word OK." }] });
+    await usage("claude", msg.model || job.models.claude, msg.usage.input_tokens, msg.usage.output_tokens);
+    result.claude.status = "ok";
+  } catch (err) {
+    const msg = claudeMessage(err);
+    const st: ModelStatus = err instanceof Anthropic.AuthenticationError ? "refused" : err instanceof Anthropic.NotFoundError ? "not_found"
+      : err instanceof Anthropic.RateLimitError ? "busy" : /credit balance/i.test(msg) ? "no_credit" : "error";
+    result.claude = { model: job.models.claude, status: st, detail: msg };
+  }
+  const inUse = result.claudeModels.find((m) => m.name === job.models.claude);
+  if (inUse) {
+    inUse.status = result.claude.status;
+    inUse.detail = result.claude.detail;
+  }
+}
+
+async function checkGemini(job: Extract<Job, { task: "check" }>, result: CheckResult) {
+  await step("Asking Google which Gemini models your key can use");
+  if (!GEMINI_KEY) {
+    result.gemini = { model: job.models.gemini, status: "refused", detail: "The GitHub secret GEMINI_API_KEY is not set." };
+    return;
+  }
+  const listed = await listGemini();
+  if (listed.status !== 200) {
+    result.gemini = { model: job.models.gemini, status: geminiStatus(listed.status, listed.text), detail: listed.text.slice(0, 300) };
+    return;
+  }
+  const tries = modelsToTry(listed.models.map((m) => m.name), job.models.gemini);
+  const label = new Map(listed.models.map((m) => [m.name, m.label]));
+  const untested: ModelTry[] = [];
+  for (const m of listed.models) if (!tries.includes(m.name) && /^gemini-/.test(m.name)) untested.push({ name: m.name, label: m.label, status: "untested", detail: "" });
+  const tried: ModelTry[] = [];
+  for (const [i, name] of tries.entries()) {
+    await step(`Trying Gemini model ${i + 1} of ${tries.length}`);
+    // One try each: a busy model is reported as busy, not waited for.
+    const r = await geminiCall(name, { contents: [{ role: "user", parts: [{ text: "Reply with the word OK." }] }], generationConfig: { maxOutputTokens: 32 } }, { ...job.limits, geminiTries: 1 }, 60_000);
+    const st = geminiStatus(r.status, r.text);
+    if (st === "ok") {
+      try {
+        const u = (JSON.parse(r.text) as { usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number } }).usageMetadata ?? {};
+        await usage("gemini", name, u.promptTokenCount ?? 0, (u.candidatesTokenCount ?? 0) + (u.thoughtsTokenCount ?? 0));
+      } catch {
+        // an answer without usage figures is still a working model
+      }
+    }
+    tried.push({ name, label: label.get(name) ?? name, status: st, detail: st === "ok" ? "" : r.text.replace(/\s+/g, " ").slice(0, 300) });
+    if (i < tries.length - 1) await sleep(job.limits.checkDelayMs);
+  }
+  result.models = [...tried, ...untested];
+  const inUse = tried.find((t) => t.name === job.models.gemini);
+  result.gemini = inUse
+    ? { model: job.models.gemini, status: inUse.status, detail: inUse.detail }
+    : { model: job.models.gemini, status: "not_found", detail: "This model is not in the list your key can use." };
 }
 
 // ---------- One run ----------
@@ -249,7 +316,7 @@ async function main() {
   if (job.task === "check") return runCheck(job);
   if (!CLAUDE_KEY) throw new Stop("claude_key", "the GitHub secret CLAUDE_API_KEY is not set");
   if (!GEMINI_KEY) throw new Stop("gemini_key", "the GitHub secret GEMINI_API_KEY is not set");
-  if (!job.models.claude || !job.models.gemini) throw new Stop("models", "CLAUDE_MODEL and GEMINI_MODEL must be set in wrangler.jsonc");
+  if (!job.models.claude || !job.models.gemini) throw new Stop("models", "no Claude or Gemini model is set (AI setup page or wrangler.jsonc)");
   if (job.pdfBytes > job.limits.maxPdfBytes) throw new Stop("pdf_too_big");
 
   await step("Fetching the syllabus PDF");
@@ -266,7 +333,7 @@ async function main() {
   const usage = { claudeIn: 0, claudeOut: 0, geminiIn: 0, geminiOut: 0 };
 
   await step("Claude and Gemini are each reading the syllabus");
-  const [first, gem] = await Promise.all([askClaude(client, job, pdf64, topicPrompt(job.subject)), askGemini(job, pdf64)]);
+  const [first, gem] = await Promise.all([askClaude(client, job, pdf64, topicPrompt(job.subject), pages.length), askGemini(job, pdf64, pages.length)]);
   usage.claudeIn += first.tokensIn;
   usage.claudeOut += first.tokensOut;
   usage.geminiIn += gem.tokensIn;
@@ -282,7 +349,7 @@ async function main() {
   while (attempts < job.limits.attempts && !isReady({ textChecked, problems, agreement: cmp.agreement }) && (problems.length || cmp.disagreements.length)) {
     attempts++;
     await step(`Claude is checking ${problems.length + cmp.disagreements.length} points again (try ${attempts})`);
-    const next = await askClaude(client, job, pdf64, retryPrompt(job.subject, retryNotes(problems, cmp.disagreements)));
+    const next = await askClaude(client, job, pdf64, retryPrompt(job.subject, retryNotes(problems, cmp.disagreements)), pages.length);
     usage.claudeIn += next.tokensIn;
     usage.claudeOut += next.tokensOut;
     current = cleanDraft(next.raw);

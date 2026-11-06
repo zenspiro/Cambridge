@@ -1,7 +1,7 @@
 // AI setup (Phase 2 step 2a): which Gemini models to try, reading Google's answers, the chosen model, check runs.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { aiModels, chooseGemini, cleanCheck, geminiStatus, lastCheck, modelsToTry, retryDelayMs, saveCheck } from "../../src/lib/brain/aiSetup.ts";
+import { aiModels, chooseModel, cleanCheck, geminiStatus, lastCheck, modelsToTry, retryDelayMs, saveCheck } from "../../src/lib/brain/aiSetup.ts";
 import { activeBrainRun, claimBrainRun, finishCheckRun, lastCheckRun, saveTree, startCheckRun, startTreeRun } from "../../src/lib/brain/runs.ts";
 import { BRAIN } from "../../src/lib/config.ts";
 import { testDb } from "./helpers/d1.ts";
@@ -41,24 +41,41 @@ test("check results are cleaned; only a model the last check found working can b
   assert.deepEqual(c.models.map((m) => m.name), ["gemini-a", "gemini-b"]);
   assert.equal(c.models[1]!.detail, "x y");
   const db = testDb();
-  const env = { CLAUDE_MODEL: "claude-opus-5-5", GEMINI_MODEL: "gemini-default" };
-  assert.deepEqual(await aiModels(db, env), { claude: "claude-opus-5-5", gemini: "gemini-default", geminiChosen: false });
-  assert.equal(await chooseGemini(db, "gemini-a", "platform-admin", NOW), "bad_model", "no check yet");
-  await saveCheck(db, { models: [{ name: "gemini-a", status: "ok" }, { name: "gemini-b", status: "busy" }] }, NOW);
+  const env = { CLAUDE_MODEL: "claude-sonnet-5-5", GEMINI_MODEL: "gemini-default" };
+  assert.deepEqual(await aiModels(db, env), { claude: "claude-sonnet-5-5", gemini: "gemini-default", claudeChosen: false, geminiChosen: false });
+  assert.equal(await chooseModel(db, "gemini", "gemini-a", "platform-admin", NOW), "bad_model", "no check yet");
+  await saveCheck(db, { models: [{ name: "gemini-a", status: "ok" }, { name: "gemini-b", status: "busy" }] }, "gemini", NOW);
   assert.equal((await lastCheck(db))?.models.length, 2);
-  assert.equal(await chooseGemini(db, "gemini-b", "platform-admin", NOW), "bad_model", "not working");
-  assert.equal(await chooseGemini(db, "gemini-a; drop", "platform-admin", NOW), "bad_model");
-  assert.equal(await chooseGemini(db, "gemini-a", "platform-admin", NOW), "ok_model");
-  assert.deepEqual(await aiModels(db, env), { claude: "claude-opus-5-5", gemini: "gemini-a", geminiChosen: true });
+  assert.equal(await chooseModel(db, "gemini", "gemini-b", "platform-admin", NOW), "bad_model", "not working");
+  assert.equal(await chooseModel(db, "gemini", "gemini-a; drop", "platform-admin", NOW), "bad_model");
+  assert.equal(await chooseModel(db, "other", "gemini-a", "platform-admin", NOW), "bad_model");
+  assert.equal(await chooseModel(db, "gemini", "gemini-a", "platform-admin", NOW), "ok_model");
+  assert.deepEqual(await aiModels(db, env), { claude: "claude-sonnet-5-5", gemini: "gemini-a", claudeChosen: false, geminiChosen: true });
+
+  // A Claude check keeps the last Gemini result; any model on Anthropic's list may be chosen (only the one in use is tried).
+  await saveCheck(db, { claude: { model: "claude-sonnet-5-5", status: "no_credit", detail: "low" }, claudeModels: [{ name: "claude-sonnet-5-5", status: "no_credit" }, { name: "claude-opus-5-5" }, { name: "gpt-x" }] }, "claude", NOW + 10);
+  const c2 = (await lastCheck(db))!;
+  assert.equal(c2.models.length, 2, "Gemini list kept");
+  assert.equal(c2.geminiAt, NOW, "Gemini check date kept");
+  assert.equal(c2.claudeAt, NOW + 10);
+  assert.deepEqual(c2.claudeModels.map((m) => m.name), ["claude-sonnet-5-5", "claude-opus-5-5"], "only Claude names");
+  assert.equal(c2.claude.status, "no_credit");
+  assert.equal(await chooseModel(db, "claude", "claude-haiku-5-5", "platform-admin", NOW), "bad_model", "not on the list");
+  assert.equal(await chooseModel(db, "claude", "claude-opus-5-5", "platform-admin", NOW), "ok_model");
+  assert.deepEqual(await aiModels(db, env), { claude: "claude-opus-5-5", gemini: "gemini-a", claudeChosen: true, geminiChosen: true }, "both choices kept");
+});
+
+test("audio and transcription models are not offered", () => {
+  assert.deepEqual(modelsToTry(["gemini-3.5-transcribe", "gemini-3.5-flash"], ""), ["gemini-3.5-flash"]);
 });
 
 test("check runs: one brain run at a time, claimed as a check, finished only as a check", async () => {
   const db = testDb();
-  const id = (await startCheckRun(db, "platform-admin", NOW))!;
+  const id = (await startCheckRun(db, "platform-admin", "gemini", NOW))!;
   assert.ok(id);
   assert.equal(await startTreeRun(db, "0625-2023", "platform-admin", NOW + 1), null, "a tree run waits for the check");
-  assert.deepEqual(await claimBrainRun(db, id, null, NOW + 2), { task: "check" });
-  assert.deepEqual(await activeBrainRun(db, id), { task: "check" });
+  assert.deepEqual(await claimBrainRun(db, id, null, NOW + 2), { task: "check", which: "gemini" });
+  assert.deepEqual(await activeBrainRun(db, id), { task: "check", which: "gemini" });
   assert.equal(await saveTree(db, id, { topics: [] }, {}, NOW + 3), "no_run", "a check run cannot save a tree");
   assert.equal((await lastCheckRun(db, NOW + 3))?.status, "running");
   assert.equal(await finishCheckRun(db, id, NOW + 4), true);

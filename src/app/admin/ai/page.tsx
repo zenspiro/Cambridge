@@ -3,18 +3,24 @@ import { requireAdmin } from "@/lib/auth/guard";
 import { getEnv } from "@/lib/env";
 import { AdminShell, Notice } from "@/components/AdminShell";
 import { ActionForm } from "@/components/ActionForm";
+import { AiUsage } from "@/components/AiUsage";
 import { BRAIN } from "@/lib/config";
-import { aiModels, lastCheck, STATUS_WORDS, type ModelStatus } from "@/lib/brain/aiSetup";
+import { aiModels, lastCheck, STATUS_WORDS, type AiCheck, type ModelStatus } from "@/lib/brain/aiSetup";
 import { isActive, lastCheckRun } from "@/lib/brain/runs";
 import { reasonWords } from "@/lib/brain/labels";
+import { dayStart, monthBounds, readCap, readPrices, recentRuns, spendBetween, taskWords, usdWords, workersAiBetween, type RunSpend } from "@/lib/brain/spend";
 import { dateFmt } from "@/lib/library/labels";
 
 export const metadata: Metadata = { title: "AI setup" };
 
 const MESSAGES = {
   ok_started: "Started. The check runs on GitHub with your keys and takes a minute or two. The page updates by itself.",
-  ok_model: "Saved. Topic trees and paper reading use this Gemini model from now on.",
-  bad_model: "Only a model the last check found working can be chosen. Run the check again.",
+  ok_model: "Saved. Topic trees and paper reading use this model from now on.",
+  bad_model: "That model cannot be chosen. Run the check for that AI again and pick from its list.",
+  ok_price: "Price saved.",
+  bad_price: "Prices are US dollars per million tokens, like 2 or 0.075. Leave both boxes empty to remove a price.",
+  ok_cap: "Spending cap saved.",
+  bad_cap: "The cap is a dollar amount, like 20. Leave it empty or 0 for no cap.",
   running: "A brain run is already going. Wait for it to finish.",
   busy: "Too many runs this hour. Please wait a little.",
   not_set_up: "Starting runs is not set up yet (GITHUB_TOKEN).",
@@ -23,66 +29,177 @@ const MESSAGES = {
 
 const pill = (s: ModelStatus) => (s === "ok" ? "pill pill-ok" : s === "untested" ? "pill" : s === "busy" ? "pill pill-gap" : "pill pill-none");
 
-// AI setup (owner, 6 Nov 2026): which models the subject brain uses, and a check that runs on GitHub (where the keys
-// are) to list the Gemini models the key can use and try them. A working Gemini model can be chosen here.
-export default async function AiSetupPage({ searchParams }: { searchParams: Promise<{ e?: string; ref?: string }> }) {
+// AI setup (owner, 6 Nov 2026): the two AIs side by side (Claude reads, Gemini checks), each with its own check
+// button and a dropdown of the models its key can use; the usage and spend dashboard; the monthly cap; the prices
+// the spend is worked out from; and the last Gemini check's full list. Checks and runs happen on GitHub, where the
+// keys are.
+export default async function AiSetupPage({ searchParams }: { searchParams: Promise<{ e?: string; ref?: string; month?: string }> }) {
   await requireAdmin();
   const q = await searchParams;
   const env = await getEnv();
-  const [models, check, run] = await Promise.all([aiModels(env.DB, env), lastCheck(env.DB), lastCheckRun(env.DB)]);
+  const db = env.DB;
+  const now = Date.now();
+  const month = monthBounds(q.month, now);
+  const thisMonth = monthBounds(undefined, now);
+  const current = month.key === thisMonth.key;
+  const [models, check, run, prices, cap] = await Promise.all([aiModels(db, env), lastCheck(db), lastCheckRun(db), readPrices(db), readCap(db)]);
+  const [summary, monthNow, today, runs, workers, syllabi] = await Promise.all([
+    spendBetween(db, month.from, month.to, prices),
+    current ? null : spendBetween(db, thisMonth.from, thisMonth.to, prices),
+    spendBetween(db, dayStart(now), now + 1, prices),
+    recentRuns(db, prices),
+    workersAiBetween(db, month.from, month.to),
+    db.prepare(`SELECT id, code, valid_from_year FROM syllabus`).bind().all<{ id: string; code: string; valid_from_year: number }>(),
+  ]);
   const active = isActive(run);
-  const working = check?.models.filter((m) => m.status === "ok") ?? [];
+  const bySyllabus = new Map(syllabi.results.map((s) => [s.id, s]));
+  const runLink = (r: RunSpend) => {
+    if (r.task === "check") return { href: "#in-use", label: taskWords("check").replace(/s$/, "") };
+    const y = r.syllabusId ? bySyllabus.get(r.syllabusId) : undefined;
+    return y ? { href: `/admin/library/${y.code}/topics/${y.valid_from_year}`, label: `Topic tree, ${y.code} syllabus from ${y.valid_from_year}` } : null;
+  };
+  // Models in the price table: the two in use, any priced, any used this month.
+  const priceModels = [...new Set([models.claude, models.gemini, ...Object.keys(prices), ...summary.byModel.map((m) => m.model)])].filter(Boolean);
+
   return (
     <AdminShell current="/admin/ai" title="AI setup">
       {active ? <meta httpEquiv="refresh" content={String(BRAIN.refreshSeconds)} /> : null}
       <Notice code={q.e} messages={MESSAGES} errorRef={q.ref} />
       <section className="card stack" id="in-use">
         <h2 className="subtitle">Models in use</h2>
-        <dl className="facts">
-          <dt>Main AI</dt><dd>Claude: <span className="mono">{models.claude || "not set"}</span> (set in wrangler.jsonc)</dd>
-          <dt>Checking AI</dt><dd>Gemini: <span className="mono">{models.gemini || "not set"}</span> {models.geminiChosen ? "(chosen here)" : "(the default in wrangler.jsonc)"}</dd>
-        </dl>
-        <ActionForm className="inline-form" action="/admin/ai/check" messages={MESSAGES}>
-          <button className="btn btn-primary" type="submit" disabled={active}>Check AI setup</button>
-        </ActionForm>
-        <p className="muted">
-          The check runs on GitHub with your keys. It asks Google which Gemini models your key can use, sends one tiny question to the one in use and up
-          to {BRAIN.checkModels} others, and tries Claude once. A model your free plan does not include says so. It costs a fraction of a cent.
-        </p>
         {run && active ? <p className="notice" role="status">{run.status === "queued" ? "Waiting for GitHub to start the check" : run.step ?? "Checking"}. This page refreshes every {BRAIN.refreshSeconds} seconds.</p> : null}
         {run && run.status === "failed" ? <p className="alert" role="alert">The last check stopped: {reasonWords(run.errorRef)}</p> : null}
+        <div className="ai-pair">
+          <AiBox provider="claude" role="Main AI (reads the papers)" model={models.claude} chosen={models.claudeChosen} check={check} active={active} />
+          <AiBox provider="gemini" role="Checking AI (reads them again to compare)" model={models.gemini} chosen={models.geminiChosen} check={check} active={active} />
+        </div>
+        <p className="muted">
+          Each check runs on GitHub with your keys and costs a fraction of a cent. Check Claude asks Anthropic which Claude models your key can use and tries the
+          one in use. Check Gemini asks Google which Gemini models your key can use and tries the one in use and up to {BRAIN.checkModels} others. A model your
+          plan does not include says so.
+        </p>
       </section>
-      {check ? (
+
+      <AiUsage
+        month={{ key: month.key, label: month.label, prev: month.prev, next: month.next, current }}
+        today={today}
+        summary={summary}
+        cap={cap}
+        spentThisMonth={(monthNow ?? summary).total}
+        runs={runs}
+        runLink={runLink}
+        workers={workers}
+      />
+
+      <section className="card stack" id="cap">
+        <h2 className="subtitle">Monthly spending cap</h2>
+        <p className="muted">
+          Before each run starts, its rough cost is worked out. A run that would take this month past the cap does not start. Checks are not stopped (they
+          cost almost nothing). Months follow UTC.
+        </p>
+        <ActionForm className="inline-form" action="/admin/ai/cap" messages={MESSAGES}>
+          <label className="field">
+            <span className="label-inline">Cap in US dollars a month (empty for no cap)</span>
+            <input className="input input-money" name="cap" inputMode="decimal" defaultValue={cap > 0 ? String(cap) : ""} placeholder="No cap" />
+          </label>
+          <button className="btn btn-primary" type="submit">Save cap</button>
+        </ActionForm>
+      </section>
+
+      <section className="card stack" id="prices">
+        <h2 className="subtitle">Prices</h2>
+        <p className="muted">
+          US dollars per million tokens, copied from Anthropic&apos;s and Google&apos;s pricing pages. Spend is worked out from these; a model without a price
+          shows &quot;price not set&quot;. Claude prices were filled in from Anthropic&apos;s list of October 2026. On Gemini&apos;s free tier, set both to 0.
+        </p>
+        <table className="info-table">
+          <thead><tr><th scope="col">Model</th><th scope="col">Price</th></tr></thead>
+          <tbody>
+            {priceModels.map((m) => (
+              <tr key={m} id={`price-${m}`}>
+                <td>{m.startsWith("claude-") ? "Claude" : "Gemini"} <span className="mono muted">{m}</span>{m === models.claude || m === models.gemini ? <span className="muted"> (in use)</span> : null}</td>
+                <td>
+                  <ActionForm className="price-form" action="/admin/ai/price" messages={MESSAGES}>
+                    <input type="hidden" name="model" value={m} />
+                    <label className="field">
+                      <span className="label-inline">Input</span>
+                      <input className="input input-money" name="in" inputMode="decimal" defaultValue={prices[m] ? String(prices[m].in) : ""} />
+                    </label>
+                    <label className="field">
+                      <span className="label-inline">Output</span>
+                      <input className="input input-money" name="out" inputMode="decimal" defaultValue={prices[m] ? String(prices[m].out) : ""} />
+                    </label>
+                    <button className="btn btn-small" type="submit">Save</button>
+                  </ActionForm>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+
+      {check && check.models.length ? (
         <section className="card stack" id="check">
-          <h2 className="subtitle">Last check, {dateFmt.format(check.at)}</h2>
-          <ul className="list-plain">
-            <li>Claude ({check.claude.model}): <span className={pill(check.claude.status)}>{STATUS_WORDS[check.claude.status]}</span> {check.claude.detail ? <span className="muted">{check.claude.detail}</span> : null}</li>
-            <li>Gemini in use ({check.gemini.model}): <span className={pill(check.gemini.status)}>{STATUS_WORDS[check.gemini.status]}</span></li>
-          </ul>
-          <h3 className="label-inline">Gemini models your key can use ({check.models.length}), {working.length} working</h3>
+          <h2 className="subtitle">Gemini models your key can use ({check.models.length}), {check.models.filter((m) => m.status === "ok").length} working</h2>
+          <p className="muted">From the Gemini check of {dateFmt.format(check.geminiAt || check.at)}.</p>
           <table className="info-table">
-            <thead><tr><th scope="col">Model</th><th scope="col">Result</th><th scope="col"><span className="sr-only">Choose</span></th></tr></thead>
+            <thead><tr><th scope="col">Model</th><th scope="col">Result</th></tr></thead>
             <tbody>
               {check.models.map((m) => (
                 <tr key={m.name} id={`model-${m.name}`}>
-                  <td>{m.label} <span className="mono muted">{m.name}</span></td>
+                  <td>{m.label} <span className="mono muted">{m.name}</span>{m.name === models.gemini ? <span className="muted"> (in use)</span> : null}</td>
                   <td><span className={pill(m.status)}>{STATUS_WORDS[m.status]}</span>{m.detail && m.status !== "ok" ? <details className="model-detail"><summary className="link">Google&apos;s words</summary><span className="muted">{m.detail}</span></details> : null}</td>
-                  <td>
-                    {m.status === "ok" && m.name !== models.gemini ? (
-                      <ActionForm action="/admin/ai/model" messages={MESSAGES}>
-                        <input type="hidden" name="model" value={m.name} />
-                        <button className="btn btn-small" type="submit">Use this model</button>
-                      </ActionForm>
-                    ) : m.name === models.gemini ? <span className="muted">In use</span> : null}
-                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </section>
-      ) : (
-        <section className="card"><p className="muted">No check has run yet. Press Check AI setup.</p></section>
-      )}
+      ) : null}
     </AdminShell>
+  );
+}
+
+/** One AI: its model, last check result, model dropdown and its own check button. */
+function AiBox({ provider, role, model, chosen, check, active }: { provider: "claude" | "gemini"; role: string; model: string; chosen: boolean; check: AiCheck | null; active: boolean }) {
+  const name = provider === "claude" ? "Claude" : "Gemini";
+  const at = provider === "claude" ? check?.claudeAt : check?.geminiAt;
+  const result = at ? (provider === "claude" ? check?.claude : check?.gemini) : null;
+  // Claude: Anthropic's list for the key. Gemini: only models the check found working.
+  const options = !check ? [] : provider === "claude" ? check.claudeModels : check.models.filter((m) => m.status === "ok");
+  const list = options.some((o) => o.name === model) ? options : model ? [{ name: model, label: model }, ...options] : options;
+  return (
+    <div className="ai-box stack" id={`ai-${provider}`}>
+      <h3 className="label-inline">{name}: {role}</h3>
+      <dl className="facts">
+        <dt>Model</dt><dd><span className="mono">{model || "not set"}</span> <span className="muted">{chosen ? "(chosen here)" : "(the default in wrangler.jsonc)"}</span></dd>
+        <dt>Last check</dt>
+        <dd>
+          {result && at ? (
+            <>
+              <span className={pill(result.status)}>{STATUS_WORDS[result.status]}</span> <span className="muted">{dateFmt.format(at)}</span>
+              {result.detail && result.status !== "ok" ? (
+                <details className="model-detail"><summary className="link">{provider === "claude" ? "Anthropic's" : "Google's"} words</summary><span className="muted">{result.detail}</span></details>
+              ) : null}
+            </>
+          ) : <span className="muted">Not checked yet</span>}
+        </dd>
+      </dl>
+      {options.length ? (
+        <ActionForm className="inline-form" action="/admin/ai/model" messages={MESSAGES}>
+          <input type="hidden" name="provider" value={provider} />
+          <label className="field">
+            <span className="label-inline">{provider === "claude" ? "Models your key can use" : "Models that worked in the last check"}</span>
+            <select className="input" name="model" defaultValue={model}>
+              {list.map((m) => <option key={m.name} value={m.name}>{m.label === m.name ? m.name : `${m.label} (${m.name})`}</option>)}
+            </select>
+          </label>
+          <button className="btn btn-small" type="submit">Use this model</button>
+        </ActionForm>
+      ) : <p className="muted">Check {name} to see the models your key can use.</p>}
+      <ActionForm className="inline-form" action="/admin/ai/check" messages={MESSAGES}>
+        <input type="hidden" name="which" value={provider} />
+        <button className="btn btn-primary" type="submit" disabled={active}>Check {name}</button>
+      </ActionForm>
+    </div>
   );
 }

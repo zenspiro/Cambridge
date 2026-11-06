@@ -5,11 +5,13 @@ import { allow, limitKey } from "@/lib/ratelimit";
 import { dispatchBrain } from "@/lib/agent/github";
 import { failBrainRun, startCheckRun } from "@/lib/brain/runs";
 
-// "Check AI setup": a brain run on GitHub that lists the Gemini models the key can use and tries each AI once.
+// "Check Claude" / "Check Gemini": a brain run on GitHub that lists the models the key can use and tries them.
 export async function POST(request: Request) {
-  return adminPost(request, "/admin/ai", async ({ db, env, actorId }) => {
+  return adminPost(request, "/admin/ai", async ({ db, env, form, actorId }) => {
+    const w = form.get("which");
+    const which = w === "claude" || w === "gemini" ? w : null;
     if (!(await allow(db, await limitKey("brain-run", actorId), BRAIN.runsPerHour, 3_600_000))) return "busy";
-    const jobId = await startCheckRun(db, actorId);
+    const jobId = await startCheckRun(db, actorId, which);
     if (!jobId) return "running";
     let failure: string | null = null;
     try {

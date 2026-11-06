@@ -205,6 +205,17 @@
   .facts dt { @apply font-medium text-muted; }
   .facts dd { @apply m-0 break-words; }
   .model-detail { @apply mt-1 text-sm; }
+  /* AI setup (owner, 6 Nov 2026): the two AIs side by side, the usage dashboard, prices and the cap. */
+  .ai-pair { @apply grid gap-4 lg:grid-cols-2; }
+  .ai-box { @apply rounded-lg border border-line p-4; }
+  .usage-head { @apply flex flex-wrap items-baseline justify-between gap-3; }
+  .usage-tiles { @apply grid gap-3 sm:grid-cols-2 lg:grid-cols-4; }
+  .usage-tile { @apply flex flex-col gap-1 rounded-lg border border-line p-4; }
+  .usage-label { @apply text-sm text-muted; }
+  .usage-num { @apply text-2xl font-semibold; }
+  .input-money { @apply w-32; }
+  .price-form { @apply flex flex-wrap items-end gap-3; }
+  .cost-line { @apply m-0 basis-full; }
   /* Topic tree (Phase 2 step 1) */
   .row-actions { @apply flex flex-wrap items-center gap-3; }
   .list-plain { @apply flex flex-col gap-2 pl-5 list-disc; }

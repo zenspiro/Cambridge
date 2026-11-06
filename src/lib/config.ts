@@ -109,6 +109,11 @@ export const BRAIN = {
   /** Gemini busy (429): tries per question, and the longest wait between them. */
   geminiTries: 4,
   geminiMaxWaitMs: 60_000,
+  /** Rough cost before a run with no history (owner request 6 Nov 2026): PDF bytes per page, tokens per page read, and
+   * tokens one answer writes (thinking included). Past runs on the same model replace these. */
+  estBytesPerPage: 25_000,
+  estTokensPerPage: 2_500,
+  estOutTokens: 30_000,
 } as const;
 
 export const AGENT = {
