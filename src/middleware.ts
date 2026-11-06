@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { SECURITY_HEADERS, buildCsp, makeNonce } from "@/lib/security/headers";
+import { PDF_VIEW_CSP, PDF_VIEW_RE, REVIEW_PAGE_RE, SECURITY_HEADERS, buildCsp, makeNonce } from "@/lib/security/headers";
 import { AUTH } from "@/lib/config";
 
 // Runs before every page and API route. Sets a per-request CSP nonce (Next reads it
@@ -23,18 +23,25 @@ export function middleware(request: NextRequest) {
   }
 
   const nonce = makeNonce();
+  const framesSelf = REVIEW_PAGE_RE.test(pathname);
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-nonce", nonce);
-  requestHeaders.set("Content-Security-Policy", csp(nonce, plainHttp));
-  return withHeaders(NextResponse.next({ request: { headers: requestHeaders } }), nonce, isAdmin, plainHttp);
+  requestHeaders.set("Content-Security-Policy", csp(nonce, plainHttp, framesSelf));
+  const response = withHeaders(NextResponse.next({ request: { headers: requestHeaders } }), nonce, isAdmin, plainHttp, framesSelf);
+  if (PDF_VIEW_RE.test(pathname)) {
+    // The inline PDF for the review screen: framed by our own pages only.
+    response.headers.set("Content-Security-Policy", PDF_VIEW_CSP);
+    response.headers.set("X-Frame-Options", "SAMEORIGIN");
+  }
+  return response;
 }
 
-function csp(nonce: string, plainHttp: boolean): string {
-  return buildCsp(nonce, { dev: process.env.NODE_ENV === "development", plainHttp });
+function csp(nonce: string, plainHttp: boolean, framesSelf = false): string {
+  return buildCsp(nonce, { dev: process.env.NODE_ENV === "development", plainHttp, framesSelf });
 }
 
-function withHeaders(response: NextResponse, nonce: string, noStore: boolean, plainHttp: boolean): NextResponse {
-  response.headers.set("Content-Security-Policy", csp(nonce, plainHttp));
+function withHeaders(response: NextResponse, nonce: string, noStore: boolean, plainHttp: boolean, framesSelf = false): NextResponse {
+  response.headers.set("Content-Security-Policy", csp(nonce, plainHttp, framesSelf));
   for (const [k, v] of Object.entries(SECURITY_HEADERS)) response.headers.set(k, v);
   if (noStore) response.headers.set("Cache-Control", "no-store");
   return response;

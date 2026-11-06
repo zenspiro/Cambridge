@@ -3,15 +3,17 @@ import type { Cell, Status } from "@/lib/library/checklist";
 import { tone } from "@/lib/library/catalog";
 import { docTypeLabel } from "@/lib/config";
 
-/** One file in the checklist: a tick that downloads it, or Add when it is missing. */
+/** One file in the checklist: a tick that opens it for review (the PDF beside what we hold; Download is there), or Add when it is missing. */
 export function CellLink({ cell, label }: { cell: Cell | undefined; label?: string }) {
   if (!cell) return <span className="cell cell-na" aria-label="Not part of this paper">·</span>;
   const name = label ?? docTypeLabel(cell.docType);
   if (cell.doc) {
     return (
-      <a className="cell cell-have" href={`/admin/library/file/${encodeURIComponent(cell.doc.id)}`} title={`${cell.fileName}: download`}>
+      // A full page load, not a client-side move: the review page's own security policy (it may frame our PDF)
+      // only applies when the page itself is loaded.
+      <a className="cell cell-have" href={`/admin/library/review/${encodeURIComponent(cell.doc.id)}`} title={`${cell.fileName}: open to review`}>
         <span aria-hidden="true">✓</span>
-        <span className="sr-only">{name}, have {cell.fileName}, download</span>
+        <span className="sr-only">{name}, have {cell.fileName}, open to review</span>
         {label ? <span className="cell-label">{label}</span> : null}
       </a>
     );

@@ -9,7 +9,7 @@ export async function POST(request: Request) {
   const jobId = parseJson(a.body)?.jobId;
   if (typeof jobId !== "string" || !JOB_ID_RE.test(jobId)) return json({ error: "bad_request" }, 400);
   const params = await activeBrainRun(a.db, jobId);
-  if (!params) return json({ error: "no_run" }, 409);
+  if (!params || params.task !== "topics") return json({ error: "no_run" }, 409);
   const pdf = await syllabusPdf(a.db, params.syllabusId);
   const obj = pdf ? await a.env.SOURCE.get(pdf.r2Key) : null;
   if (!obj) return json({ error: "not_found" }, 404);

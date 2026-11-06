@@ -54,7 +54,7 @@ export default async function AddPage({ searchParams }: { searchParams: Promise<
         <p className="mono">{p.fileName}</p>
         {existing ? (
           <p className="notice">
-            Already in the library. <a className="link" href={`/admin/library/file/${encodeURIComponent(existing.id)}`}>Download it</a>.
+            Already in the library. <a className="link" href={`/admin/library/review/${encodeURIComponent(existing.id)}`}>Open it</a>.
           </p>
         ) : null}
       </section>

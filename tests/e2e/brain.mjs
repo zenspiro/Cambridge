@@ -89,7 +89,9 @@ const GOOD = {
 const copy = (d) => JSON.parse(JSON.stringify(d));
 
 // ---------- Fake Claude (streamed Messages API) and Gemini (generateContent) ----------
-const ai = { claude: [], gemini: [], claudeAnswers: [], geminiAnswer: GOOD };
+const ai = { claude: [], gemini: [], claudeAnswers: [], geminiAnswer: GOOD, busyOnce: false };
+// Models the fake Google lists for the key; tiny questions to gemini-2.5-pro come back "not on your plan".
+const LISTED = ["gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-2.5-pro", "gemini-embedding-001"];
 const server = createServer((req, res) => {
   let body = "";
   req.on("data", (d) => (body += d));
@@ -97,6 +99,12 @@ const server = createServer((req, res) => {
     const json = body ? JSON.parse(body) : {};
     if (req.url.startsWith("/claude/v1/messages")) {
       ai.claude.push({ headers: req.headers, body: json });
+      if (!json.stream) {
+        // The AI setup check's one tiny question (not streamed).
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ id: "msg_check", type: "message", role: "assistant", model: json.model, content: [{ type: "text", text: "OK" }], stop_reason: "end_turn", stop_sequence: null, usage: { input_tokens: 10, output_tokens: 2 } }));
+        return;
+      }
       const answer = JSON.stringify(ai.claudeAnswers.shift() ?? GOOD);
       res.writeHead(200, { "content-type": "text/event-stream" });
       const ev = (type, data) => res.write(`event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`);
@@ -109,8 +117,25 @@ const server = createServer((req, res) => {
       res.end();
       return;
     }
+    if (req.method === "GET" && req.url.startsWith("/gemini/models?")) {
+      ai.gemini.push({ url: req.url, headers: req.headers, body: null });
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ models: LISTED.map((n) => ({ name: `models/${n}`, displayName: n.replace(/-/g, " "), supportedGenerationMethods: n.includes("embedding") ? ["embedContent"] : ["generateContent"] })) }));
+      return;
+    }
     if (req.url.startsWith("/gemini/models/")) {
       ai.gemini.push({ url: req.url, headers: req.headers, body: json });
+      if (req.url.startsWith("/gemini/models/gemini-2.5-pro:")) {
+        res.writeHead(429, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: { code: 429, message: "Quota exceeded for metric: generate_content_free_tier_requests, limit: 0, model: gemini-2.5-pro" } }));
+        return;
+      }
+      if (ai.busyOnce) {
+        ai.busyOnce = false;
+        res.writeHead(429, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: { code: 429, message: "Quota exceeded for metric: generate_content_free_tier_requests, limit: 10", details: [{ "@type": "type.googleapis.com/google.rpc.RetryInfo", retryDelay: "1s" }] } }));
+        return;
+      }
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(ai.geminiAnswer) }] }, finishReason: "STOP" }], usageMetadata: { promptTokenCount: 900, candidatesTokenCount: 200 } }));
       return;
@@ -123,7 +148,7 @@ const FAKE = `http://127.0.0.1:${server.address().port}`;
 
 const runBrain = (jobId, extra = {}) =>
   new Promise((resolve) => {
-    const child = spawn("node", ["scripts/brain/topics.ts"], {
+    const child = spawn("node", ["scripts/brain/run.ts"], {
       env: {
         ...process.env, APP_URL: BASE, AGENT_SECRET: SECRET, JOB_ID: jobId, BRAIN_TEST_MODE: "1",
         CLAUDE_API_KEY: "test-claude-key", GEMINI_API_KEY: "test-gemini-key",
@@ -161,7 +186,7 @@ try {
 
   // 1. Without the syllabus PDF there is nothing to read.
   await page.goto(BASE + "/admin/library/0625");
-  await page.click("text=Topic tree");
+  await page.locator(".row-actions a", { hasText: "Topic tree" }).click();
   await page.waitForURL(BASE + "/admin/library/0625/topics");
   const card = page.locator("#tree-2023");
   check((await card.textContent())?.includes("not in the library yet"), "no syllabus PDF: the page says so and links to the version page");
@@ -260,9 +285,74 @@ try {
   check((await card.locator(".alert").textContent())?.includes("GEMINI_API_KEY"), "the page says which secret to check");
   check((await card.locator(".pill").textContent()) === "Not ready", "the stored tree stays as it was");
 
-  // 7. Signed endpoints refuse unsigned calls.
+  // 7. Gemini busy for a moment (free per-minute limit): the run waits as Google says and carries on.
+  ai.busyOnce = true;
+  const runBusy = newRun();
+  const rb = await runBrain(runBusy);
+  check(rb.status === 0 && rb.out.includes("Gemini is busy"), "a busy Gemini is waited for, not a failed run");
+
+  // 8. The topic trees overview in the sidebar.
+  await page.goto(BASE + "/admin/topics");
+  check((await page.locator(".side-link[aria-current=page]").textContent()) === "Topic trees", "sidebar marks Topic trees");
+  check((await page.locator("a[href='/admin/library/0625/topics/2023']").textContent())?.includes("5 topics"), "overview links Physics's drafted tree with its size");
+  check((await page.locator("tr", { hasText: "IGCSE Chemistry (0620)" }).first().textContent())?.includes("Not drafted"), "overview shows subjects not drafted yet");
+  check(await noSideways(), "topic trees overview: no sideways scroll");
+
+  // 9. The review screen: a green tick opens the PDF beside what we hold.
+  await page.goto(BASE + "/admin/library/0625/version/2023");
+  await page.locator('a.cell-have[title^="0625_y23_sy.pdf:"]').click();
+  await page.waitForURL(/\/admin\/library\/review\//);
+  const reviewUrl = page.url();
+  check((await page.locator("h1").textContent())?.includes("syllabus"), "review screen names the file in words");
+  const frame = page.locator("iframe.review-pdf");
+  const src = await frame.getAttribute("src");
+  check(Boolean(src?.endsWith("/view")), "the PDF is shown in the page");
+  const view = await page.request.get(BASE + src);
+  check(view.status() === 200 && view.headers()["content-type"] === "application/pdf" && view.headers()["content-disposition"]?.startsWith("inline"), "the PDF is served inline");
+  check(view.headers()["x-frame-options"] === "SAMEORIGIN" && view.headers()["content-security-policy"]?.includes("frame-ancestors 'self'"), "only our own pages may frame the PDF");
+  const reviewHead = await page.request.get(reviewUrl);
+  check(reviewHead.headers()["content-security-policy"]?.includes("frame-src 'self'"), "the review page may frame our own PDF");
+  const libHead = await page.request.get(BASE + "/admin/library");
+  check(libHead.headers()["content-security-policy"]?.includes("frame-src 'none'"), "other pages still frame nothing");
+  const dl = await page.request.get(BASE + "/admin/library/file/" + src.split("/")[4]);
+  check(dl.headers()["content-disposition"]?.startsWith("attachment") && dl.headers()["x-frame-options"] === "DENY", "Download stays an attachment that cannot be framed");
+  check((await page.locator(".facts").textContent())?.includes("0625_y23_sy.pdf"), "what we hold: the file's details");
+  check((await page.locator("text=topic tree").count()) >= 1, "a syllabus links to its topic tree");
+  check(await noSideways(), "review screen: no sideways scroll at 1400 px");
+  const halves = await page.evaluate(() => [...document.querySelectorAll(".review-pane")].map((e) => Math.round(e.getBoundingClientRect().width)));
+  check(halves.length === 2 && Math.abs(halves[0] - halves[1]) < 4, "the PDF and what we hold each take half");
+
+  // 10. AI setup: the check lists and tries the models; a working one can be chosen.
+  await page.goto(BASE + "/admin/ai");
+  check((await page.locator("#in-use").textContent())?.includes("gemini-3.5-flash"), "AI setup shows the models in use");
+  await page.locator("button", { hasText: "Check AI setup" }).click();
+  await page.locator(".action-note", { hasText: "GITHUB_TOKEN" }).waitFor({ timeout: 10_000 }).then(() => check(true, "check without a GitHub token says what is missing"), () => check(false, "check without a GitHub token says what is missing"));
+  const checkRun = `e2ec${Date.now()}`;
+  sql(`INSERT INTO job (id, type, status, params, created_by, created_at) VALUES ('${checkRun}', 'brain', 'queued', '{"task":"check"}', 'platform-admin', ${Date.now()})`);
+  const rc = await runBrain(checkRun);
+  check(rc.status === 0, `check run exits cleanly${rc.status ? ": " + rc.out.slice(-600) : ""}`);
+  check(ai.gemini.some((g) => g.url.startsWith("/gemini/models?") && g.headers["x-goog-api-key"] === "test-gemini-key"), "the check asks Google for the key's models, key in a header");
+  await page.goto(BASE + "/admin/ai");
+  const row = (n) => page.locator(`#model-${n.replace(/\./g, "\\.")}`);
+  check((await row("gemini-3.5-flash").textContent())?.includes("Works"), "the model in use works");
+  check((await row("gemini-2.5-pro").textContent())?.includes("Not on your plan"), "a model the free plan lacks says so");
+  check((await page.locator("#check").textContent())?.includes("Claude (claude-opus-5-5)") && (await page.locator("#check").textContent())?.includes("Works"), "Claude is tried too");
+  check((await page.locator("#model-gemini-embedding-001").count()) === 0, "models that cannot write text are not listed");
+  await row("gemini-3.1-flash-lite").locator("button", { hasText: "Use this model" }).click();
+  // In place (ActionForm), or as a plain form if clicked before the page's scripts loaded: either way it says Saved.
+  await page.locator(".action-note, .notice", { hasText: "Saved" }).first().waitFor({ timeout: 15_000 });
+  await page.locator("#in-use", { hasText: "gemini-3.1-flash-lite" }).waitFor({ timeout: 10_000 }).then(() => check(true, "a working model is chosen in place"), () => check(false, "a working model is chosen in place"));
+  ai.gemini.length = 0;
+  const runChosen = newRun();
+  await runBrain(runChosen);
+  check(ai.gemini.some((g) => g.url.startsWith("/gemini/models/gemini-3.1-flash-lite:")), "runs use the chosen Gemini model");
+  sql(`DELETE FROM setting WHERE key IN ('ai_models', 'ai_check')`);
+  check(await noSideways(), "AI setup: no sideways scroll");
+
+  // 11. Signed endpoints refuse unsigned calls.
   const unsigned = await fetch(`${BASE}/api/brain/job`, { method: "POST", body: "{}" });
   check(unsigned.status === 401, "brain endpoints refuse unsigned requests");
+  check((await fetch(`${BASE}/api/brain/check`, { method: "POST", body: "{}" })).status === 401, "the check endpoint refuses unsigned requests");
 
   check(errors.length === 0, `no script errors${errors.length ? ": " + errors.join(" | ") : ""}`);
 } finally {
@@ -271,6 +361,7 @@ try {
   sql(`UPDATE job SET status = 'failed' WHERE type = 'brain' AND status IN ('queued', 'running')`);
   sql(`DELETE FROM topic_tree WHERE syllabus_id = '0625-2023'`);
   sql(`DELETE FROM source_document WHERE file_name = '0625_y23_sy.pdf'`);
+  sql(`DELETE FROM setting WHERE key IN ('ai_models', 'ai_check')`);
 }
 
 console.log(failures ? `\n${failures} failed` : "\nall brain checks passed");

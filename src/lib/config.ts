@@ -103,6 +103,12 @@ export const BRAIN = {
   minAgreement: 0.97,
   /** Problems and disagreements kept in a report. */
   maxReportItems: 150,
+  /** AI setup check: Gemini models tried with one tiny question each (besides the one in use), and the pause between. */
+  checkModels: 8,
+  checkDelayMs: 1_500,
+  /** Gemini busy (429): tries per question, and the longest wait between them. */
+  geminiTries: 4,
+  geminiMaxWaitMs: 60_000,
 } as const;
 
 export const AGENT = {

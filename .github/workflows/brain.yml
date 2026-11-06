@@ -39,4 +39,4 @@ jobs:
           CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           JOB_ID: ${{ inputs.job_id }}
-        run: node scripts/brain/topics.ts
+        run: node scripts/brain/run.ts
