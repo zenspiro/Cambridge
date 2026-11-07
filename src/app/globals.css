@@ -265,9 +265,11 @@
   .flag-dot-blue { @apply bg-blue-500; }
   .pq-figcaption { @apply flex flex-col gap-1; }
   .pq-figure-actions { @apply flex flex-wrap items-center gap-3; }
-  /* A figure's box drawn by hand on its page. */
-  .box-editor { @apply flex w-full flex-col gap-2 rounded-lg border border-line bg-wash p-3; }
-  .box-editor-page { @apply w-full max-w-3xl cursor-crosshair touch-none select-none bg-white; }
+  /* A figure's box drawn by hand on its page, in a panel over the review screen. */
+  .box-overlay { @apply fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6; }
+  .box-panel { @apply flex max-h-full w-full max-w-5xl flex-col gap-3 overflow-auto rounded-xl bg-paper p-4 shadow-xl outline-none; }
+  .box-panel-head { @apply flex flex-wrap items-start justify-between gap-3; }
+  .box-editor-page { @apply mx-auto block h-[calc(100dvh-12rem)] w-auto max-w-full cursor-crosshair touch-none select-none border border-line bg-white; }
   .box-editor-new { fill: rgb(37 99 235 / 0.12); stroke: #2563eb; stroke-width: 2; stroke-dasharray: 6 4; }
   .fix-list li { @apply flex flex-wrap items-center gap-2; }
   .fix-undo { @apply inline-flex; }

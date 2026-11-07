@@ -2,6 +2,12 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-07: Adjust box opens as a large panel
+
+**What:** owner: "adjust box function is bugged, its not doing anything". The page to draw on opened inside the narrow figure column, low in the scrolling paper sheet: out of sight and too small to drag on. Now it opens as a panel over the review screen (`.box-overlay`, the page as tall as the screen), with Save this box, Use whole page and Cancel at the top; Escape closes it, a save closes it (the paper's revision moves on), and J/K are ignored while it is open.
+
+**Tested:** on the real 0625_w25_qp_42 in the local Worker: Adjust box, drag around Fig. 3.1, Save; the panel closed, the blue flag cleared and the figure showed the new box (screenshots). `npm run check` exits 0. Browser suite from a fresh database: 492 checks, all passing (new: the panel opens large and inside the screen, saving closes it).
+
 ## 2026-11-07: Fix for the failed merge of the figure build
 
 **What:** CI on main failed after merging the figure build. The server dropped the script's "figures" progress events (the stage was missing from `RunStage`), so the panel never showed the step; two browser-test steps looked for a figure on the wrong page and dragged a box outside the visible screen. Now the stage is allowed (unit test added) and the test turns to the figure's page and scrolls the page into view before drawing.
