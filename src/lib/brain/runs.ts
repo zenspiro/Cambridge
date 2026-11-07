@@ -104,9 +104,9 @@ export async function runState(db: Db, id: string, now = Date.now()): Promise<(R
 
 // ---------- Live progress (owner, 7 Nov 2026: real progress per model, not a page that reloads) ----------
 
-export type RunStage = "pdf" | "gemini" | "claude" | "retry" | "drawing" | "checks" | "save";
+export type RunStage = "pdf" | "gemini" | "claude" | "retry" | "figures" | "drawing" | "checks" | "save";
 export type RunEvent = { at: number; stage: RunStage; state: "start" | "wait" | "done" | "fail" | "skip"; text: string; model: string; tokens: number };
-const STAGES: readonly RunStage[] = ["pdf", "gemini", "claude", "retry", "drawing", "checks", "save"];
+const STAGES: readonly RunStage[] = ["pdf", "gemini", "claude", "retry", "figures", "drawing", "checks", "save"];
 const STATES = ["start", "wait", "done", "fail", "skip"] as const;
 
 /** One progress event from the script, made safe. Null when it is not one. */
