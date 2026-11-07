@@ -19,10 +19,10 @@ import { geminiStatus, modelsToTry, retryDelayMs, type ModelStatus, type ModelTr
 
 type Limits = {
   attempts: number; claudeMaxTokens: number; claudeEffort: "low" | "medium" | "high" | "xhigh" | "max"; geminiMaxTokens: number; maxPdfBytes: number;
-  geminiTries: number; geminiMaxWaitMs: number; checkModels: number; checkDelayMs: number;
+  geminiTries: number; geminiMaxWaitMs: number; checkModels: number; checkDelayMs: number; geminiRetryWaitsMs: number[];
 };
 type Job =
-  | { task: "topics"; subject: string; pdfBytes: number; models: { claude: string; gemini: string }; limits: Limits }
+  | { task: "topics"; subject: string; pdfBytes: number; models: { claude: string; gemini: string; drawing?: string }; limits: Limits }
   | { task: "check"; which: "claude" | "gemini" | null; models: { claude: string; gemini: string }; limits: Limits };
 type TopicJob = Extract<Job, { task: "topics" }>;
 
@@ -115,7 +115,15 @@ async function askClaude(client: Anthropic, job: TopicJob, pdf64: string, prompt
       ],
     }],
   });
-  const msg = await stream.finalMessage();
+  let msg;
+  try {
+    msg = await stream.finalMessage();
+  } catch (err) {
+    // Cut off partway (network, overload): count what was read and written so far, so the dashboard matches the bill.
+    const part = stream.currentMessage;
+    if (part?.usage) await usage("claude", part.model || job.models.claude, part.usage.input_tokens ?? 0, part.usage.output_tokens ?? 0, pages);
+    throw err;
+  }
   // The model that answered (a fallback may have served it); counted even when the answer is refused or cut off.
   await usage("claude", msg.model || job.models.claude, msg.usage.input_tokens, msg.usage.output_tokens, pages);
   if (msg.stop_reason === "refusal") throw new Stop("claude_refused");
@@ -132,22 +140,45 @@ async function askClaude(client: Anthropic, job: TopicJob, pdf64: string, prompt
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** Google's temporary failures (overloaded, server error, gateway), worth trying again after a wait. */
+const TEMPORARY = new Set([500, 502, 503, 504]);
+
 /**
  * One Gemini request. A busy answer (429: free per-minute or per-day limits) waits as long as Google suggests and
- * tries again, up to `limits.geminiTries`; a model the plan does not include stops at once.
+ * tries again, up to `limits.geminiTries`; a model the plan does not include stops at once. A temporary failure
+ * (503 overloaded, 500, 502, 504, or no answer at all) waits `limits.geminiRetryWaitsMs` in turn and tries again
+ * (owner, 7 Nov 2026: a 503 had stopped a run).
  */
 async function geminiCall(model: string, body: unknown, limits: Limits, timeoutMs: number): Promise<{ status: number; text: string }> {
-  for (let attempt = 1; ; attempt++) {
-    const res = await fetch(`${GEMINI_API}/models/${encodeURIComponent(model)}:generateContent`, {
-      method: "POST",
-      headers: { "x-goog-api-key": GEMINI_KEY, "Content-Type": "application/json" },
-      signal: AbortSignal.timeout(timeoutMs),
-      body: JSON.stringify(body),
-    });
-    const text = await res.text();
-    if (res.status !== 429 || geminiStatus(429, text) === "not_on_plan" || attempt >= limits.geminiTries) return { status: res.status, text };
+  let busy = 1;
+  let temporary = 0;
+  const waits = (limits.geminiRetryWaitsMs ?? []).map((w) => (TEST_MODE ? Math.min(w, 1_000) : w));
+  for (;;) {
+    let status = 0;
+    let text = "";
+    try {
+      const res = await fetch(`${GEMINI_API}/models/${encodeURIComponent(model)}:generateContent`, {
+        method: "POST",
+        headers: { "x-goog-api-key": GEMINI_KEY, "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(timeoutMs),
+        body: JSON.stringify(body),
+      });
+      status = res.status;
+      text = await res.text();
+    } catch (err) {
+      text = err instanceof Error ? err.message : "no answer";
+    }
+    if (status === 0 || TEMPORARY.has(status)) {
+      if (temporary >= waits.length) return { status: status || 503, text };
+      const wait = waits[temporary++]!;
+      log(`Gemini is having trouble (${status || "no answer"}); waiting ${Math.round(wait / 1000)} s, then trying again`);
+      await sleep(wait);
+      continue;
+    }
+    if (status !== 429 || geminiStatus(429, text) === "not_on_plan" || busy >= limits.geminiTries) return { status, text };
     const wait = Math.min(retryDelayMs(text), limits.geminiMaxWaitMs);
-    log(`Gemini is busy (limit reached); waiting ${Math.round(wait / 1000)} s, then try ${attempt + 1}`);
+    log(`Gemini is busy (limit reached); waiting ${Math.round(wait / 1000)} s, then try ${busy + 1}`);
+    busy++;
     await sleep(wait);
   }
 }
@@ -163,7 +194,7 @@ async function askGemini(job: TopicJob, pdf64: string, pages: number): Promise<R
   if (st === "refused") throw new Stop("gemini_key", `Gemini refused (${r.status}): ${r.text.slice(0, 300)}`);
   if (st === "not_on_plan") throw new Stop("gemini_plan", `model "${job.models.gemini}" is not on this key's plan`);
   if (st === "busy") throw new Stop("gemini_busy", "Gemini's limit was still reached after waiting");
-  if (st !== "ok") throw new Stop("gemini_error", `Gemini error ${r.status}`);
+  if (st !== "ok") throw new Stop(TEMPORARY.has(r.status) ? "gemini_down" : "gemini_error", `Gemini error ${r.status}`);
   const data = JSON.parse(r.text) as {
     candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] }; finishReason?: string }[];
     usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number };
@@ -301,6 +332,23 @@ async function checkGemini(job: Extract<Job, { task: "check" }>, result: CheckRe
 
 // ---------- One run ----------
 
+/**
+ * One AI's first reading: the kept one when an earlier run of this PDF and model left it, else asked for and kept
+ * at once (so a later failure in this run does not throw it away).
+ */
+async function reading(provider: "claude" | "gemini", model: string, words: string, ask: () => Promise<Reading>): Promise<Reading> {
+  const saved = await api("/api/brain/saved", { provider, model });
+  if (saved.status === 200 && saved.data?.found === true && saved.data.raw) {
+    log(`${provider}: reusing the reading kept from an earlier run (no new cost)`);
+    return { raw: saved.data.raw, tokensIn: 0, tokensOut: 0 };
+  }
+  await step(words);
+  const r = await ask();
+  const kept = await api("/api/brain/reading", { provider, model, raw: r.raw });
+  if (kept.status !== 200) log(`${provider}: reading not kept (${kept.status}); the run carries on`);
+  return r;
+}
+
 function checksFor(draft: Draft, idx: TextIndex | null, pages: string[], shape: Problem[]): Problem[] {
   return [...shape, ...(idx ? checkWords(draft, idx) : []), ...checkNumbers(draft), ...missingHeadings(draft, pages)];
 }
@@ -332,13 +380,16 @@ async function main() {
   const client = new Anthropic({ apiKey: CLAUDE_KEY, maxRetries: TEST_MODE ? 0 : 3, timeout: 30 * 60_000, ...(CLAUDE_BASE ? { baseURL: CLAUDE_BASE } : {}) });
   const usage = { claudeIn: 0, claudeOut: 0, geminiIn: 0, geminiOut: 0 };
 
-  await step("Claude and Gemini are each reading the syllabus");
-  const [first, gem] = await Promise.all([askClaude(client, job, pdf64, topicPrompt(job.subject), pages.length), askGemini(job, pdf64, pages.length)]);
-  usage.claudeIn += first.tokensIn;
-  usage.claudeOut += first.tokensOut;
+  // Gemini first (free on the owner's plan): Claude, which costs money, starts only once Gemini's reading is safe, so
+  // a Gemini failure costs nothing (owner, 7 Nov 2026). A reading kept from an earlier run of the same PDF and model
+  // is reused instead of asked for again.
+  const gem = await reading("gemini", job.models.gemini, "Gemini is reading the syllabus", () => askGemini(job, pdf64, pages.length));
   usage.geminiIn += gem.tokensIn;
   usage.geminiOut += gem.tokensOut;
   const gemini = cleanDraft(gem.raw).draft;
+  const first = await reading("claude", job.models.claude, "Claude is reading the syllabus", () => askClaude(client, job, pdf64, topicPrompt(job.subject), pages.length));
+  usage.claudeIn += first.tokensIn;
+  usage.claudeOut += first.tokensOut;
 
   let current = cleanDraft(first.raw);
   let attempts = 1;

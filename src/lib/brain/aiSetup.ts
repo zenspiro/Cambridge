@@ -56,20 +56,28 @@ async function writeSetting(db: Db, key: string, value: unknown, actorId: string
     .run();
 }
 
-export type AiModels = { claude: string; gemini: string; claudeChosen: boolean; geminiChosen: boolean };
+export type AiModels = { claude: string; gemini: string; drawing: string; claudeChosen: boolean; geminiChosen: boolean; drawingChosen: boolean };
 
-async function chosenModels(db: Db): Promise<{ claude: string; gemini: string }> {
+async function chosenModels(db: Db): Promise<{ claude: string; gemini: string; drawing: string }> {
   const s = await readSetting(db, "ai_models");
   const o = s && typeof s === "object" ? (s as Record<string, unknown>) : {};
   const claude = typeof o.claude === "string" && CLAUDE_MODEL_RE.test(o.claude) ? o.claude : "";
   const gemini = typeof o.gemini === "string" && GEMINI_MODEL_RE.test(o.gemini) ? o.gemini : "";
-  return { claude, gemini };
+  const drawing = typeof o.drawing === "string" && CLAUDE_MODEL_RE.test(o.drawing) ? o.drawing : "";
+  return { claude, gemini, drawing };
 }
 
-/** The models runs use: each as chosen on the AI setup page, else the Worker var. */
+/**
+ * The models runs use: each as chosen on the AI setup page, else the Worker var. The drawing AI (owner, 7 Nov 2026:
+ * redraws figures from step 2b) is a Claude model of its own, else the main AI's model.
+ */
 export async function aiModels(db: Db, env: { CLAUDE_MODEL?: string; GEMINI_MODEL?: string }): Promise<AiModels> {
   const c = await chosenModels(db);
-  return { claude: c.claude || (env.CLAUDE_MODEL ?? ""), gemini: c.gemini || (env.GEMINI_MODEL ?? ""), claudeChosen: !!c.claude, geminiChosen: !!c.gemini };
+  const claude = c.claude || (env.CLAUDE_MODEL ?? "");
+  return {
+    claude, gemini: c.gemini || (env.GEMINI_MODEL ?? ""), drawing: c.drawing || claude,
+    claudeChosen: !!c.claude, geminiChosen: !!c.gemini, drawingChosen: !!c.drawing,
+  };
 }
 
 const str = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, max) : "");
@@ -119,16 +127,16 @@ export async function saveCheck(db: Db, raw: unknown, which: CheckWhich | null =
 }
 
 /**
- * Choose the model an AI uses. Gemini: only one the last check found working. Claude: one on Anthropic's list for
- * the key (only the one in use is tried, so a new pick is tried by the next check or run). The other AI's choice
+ * Choose the model an AI uses. Gemini: only one the last check found working. Claude and the drawing AI: one on
+ * Anthropic's list for the key (only the one in use is tried, so a new pick is tried by the next check or run). The other AI's choice
  * stays.
  */
 export async function chooseModel(db: Db, provider: unknown, model: unknown, actorId: string, now = Date.now()): Promise<"ok_model" | "bad_model"> {
-  if (provider !== "claude" && provider !== "gemini") return "bad_model";
-  const re = provider === "claude" ? CLAUDE_MODEL_RE : GEMINI_MODEL_RE;
+  if (provider !== "claude" && provider !== "gemini" && provider !== "drawing") return "bad_model";
+  const re = provider === "gemini" ? GEMINI_MODEL_RE : CLAUDE_MODEL_RE;
   if (typeof model !== "string" || !re.test(model)) return "bad_model";
   const check = await lastCheck(db);
-  const ok = provider === "claude"
+  const ok = provider !== "gemini"
     ? check?.claudeModels.some((m) => m.name === model)
     : check?.models.some((m) => m.name === model && m.status === "ok");
   if (!ok) return "bad_model";
