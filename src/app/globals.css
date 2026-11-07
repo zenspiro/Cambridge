@@ -217,7 +217,7 @@
   .run-step-idle .run-step-text, .run-step-skip .run-step-text { @apply text-muted; }
   .run-step-meta { @apply flex flex-wrap justify-end gap-3 text-sm text-muted; }
   .page-bar { @apply mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-paper px-4 py-2; }
-  .page-bar-count { @apply min-w-28 text-center font-medium; }
+  .page-bar-count, .flag-count { @apply min-w-28 text-center font-medium; }
   .check-inline { @apply inline-flex items-center gap-2 text-base; }
   .paper-sheet { @apply flex max-h-[calc(100dvh-14rem)] min-h-[32rem] flex-col gap-4 overflow-y-auto font-sans text-base leading-relaxed; }
   .pq { @apply rounded-lg border border-transparent p-2; }
@@ -243,6 +243,32 @@
   .flag-reason, .flag-pdf { @apply m-0 break-words; }
   .flag-tag { @apply mr-1 rounded bg-wash px-1.5 py-0.5 text-sm font-semibold; }
   .flag-edit textarea { @apply font-sans; }
+  .review-list { @apply m-0 flex list-none flex-col gap-2 p-0; }
+  .review-list-row { @apply grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 text-base; }
+  .flag-current { @apply ring-2 ring-blue-600 ring-offset-2; }
+  /* Flag list (owner, 7 Nov 2026): every open flag by page, filters by colour, jump with a click or J / K. */
+  .flag-panel { @apply mt-3 flex flex-col gap-2 rounded-lg border border-line bg-paper px-4 py-3; }
+  .flag-panel-head { @apply flex flex-wrap items-center gap-3; }
+  .flag-filters { @apply flex flex-wrap gap-2; }
+  .flag-filter { @apply inline-flex items-center gap-2 rounded-full border border-line bg-paper px-3 py-1 text-base font-medium text-ink hover:bg-wash disabled:cursor-not-allowed disabled:opacity-50; }
+  .flag-filter[aria-pressed="true"] { @apply border-brand bg-brand text-brand-ink hover:bg-brand; }
+  .flag-filter-count { @apply rounded-full bg-wash px-2 text-sm text-ink; }
+  .flag-list { @apply m-0 flex max-h-56 list-none flex-col gap-0.5 overflow-y-auto p-0; }
+  .flag-row { @apply grid w-full grid-cols-[1rem_6.5rem_3.5rem_minmax(0,1fr)] items-center gap-2 rounded-md px-2 py-1 text-left text-base text-ink hover:bg-wash; }
+  .flag-row-current { @apply bg-blue-50 outline outline-2 outline-blue-600; }
+  .flag-row-item { @apply font-semibold; }
+  .flag-row-page { @apply text-sm text-muted; }
+  .flag-row-reason { @apply truncate; }
+  .flag-dot { @apply h-3 w-3 rounded-full; }
+  .flag-dot-red { @apply bg-red-500; }
+  .flag-dot-amber { @apply bg-amber-500; }
+  .flag-dot-blue { @apply bg-blue-500; }
+  .pq-figcaption { @apply flex flex-col gap-1; }
+  .pq-figure-actions { @apply flex flex-wrap items-center gap-3; }
+  /* A figure's box drawn by hand on its page. */
+  .box-editor { @apply flex w-full flex-col gap-2 rounded-lg border border-line bg-wash p-3; }
+  .box-editor-page { @apply w-full max-w-3xl cursor-crosshair touch-none select-none bg-white; }
+  .box-editor-new { fill: rgb(37 99 235 / 0.12); stroke: #2563eb; stroke-width: 2; stroke-dasharray: 6 4; }
   .fix-list li { @apply flex flex-wrap items-center gap-2; }
   .fix-undo { @apply inline-flex; }
   .facts { @apply grid grid-cols-[9rem_minmax(0,1fr)] gap-x-4 gap-y-2 text-base; }

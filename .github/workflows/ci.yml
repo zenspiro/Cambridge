@@ -41,6 +41,7 @@ jobs:
       - name: Browser smoke test
         run: |
           npx playwright install --with-deps chromium
+          command -v pdftocairo || (sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends poppler-utils)
           cp .dev.vars.example .dev.vars
           npx wrangler dev --local --port 8787 > wrangler-dev.log 2>&1 &
           for i in $(seq 1 60); do curl -sf http://localhost:8787/health > /dev/null && break; sleep 1; done

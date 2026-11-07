@@ -124,7 +124,7 @@ export function paperPrompt(kind: "qp" | "ms", paper: string, only: readonly str
 - answerLines: how many answer lines are printed for it (0 when none).
 - figures: the ids of the figures (diagrams, graphs, photographs) it shows, from the figures list.
 - guidance: "".
-figures: every figure in the paper as { id, page, caption }: id "F1", "F2" in order, caption the paper's own label ("Fig. 2.1") and what it shows in a few words.
+figures: every figure in the paper (diagram, graph, chart, flowchart, circuit, table printed as a picture) as { id, page, caption, description }: id "F1", "F2" in order of appearance; caption the paper's own label when printed ("Fig. 2.1") and what it shows in a few words; description every label, value and unit printed in it, and what it shows, in one or two plain sentences (the picture itself is taken from the PDF, so never draw it).
 totalMarks: the total printed on the cover ("The total mark for this paper is 80"), or null.`
     : `items: every mark scheme row, in order.
 - number: the question part as printed, joined: "1", "1(a)", "3(b)(ii)".
@@ -135,7 +135,7 @@ totalMarks: the total printed on the cover ("The total mark for this paper is 80
 - answerLines: 0.
 - figures: [] unless the mark scheme prints a figure.
 - guidance: the guidance printed for that row (accept, allow, ignore), word for word, else "".
-figures: any figure the mark scheme prints, as { id, page, caption }, else [].
+figures: any figure the mark scheme prints, as { id, page, caption, description }, else [].
 totalMarks: the maximum mark printed, or null.`;
   const scope = only.length ? `\n\nOnly copy these items: ${only.join(", ")}. Leave every other item out.` : "";
   const how = parts && parts.textPages.length
@@ -175,8 +175,8 @@ const PAPER_ITEM_SCHEMA = {
 const PAPER_FIGURE_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["id", "page", "caption"],
-  properties: { id: { type: "string" }, page: { type: "integer" }, caption: { type: "string" } },
+  required: ["id", "page", "caption", "description"],
+  properties: { id: { type: "string" }, page: { type: "integer" }, caption: { type: "string" }, description: { type: "string" } },
 } as const;
 
 /** JSON Schema for Claude's reading of a paper. */
@@ -214,7 +214,7 @@ export const PAPER_SCHEMA_GEMINI = {
         },
       },
     },
-    figures: { type: "ARRAY", items: { type: "OBJECT", required: ["id", "page", "caption"], properties: { id: { type: "STRING" }, page: { type: "INTEGER" }, caption: { type: "STRING" } } } },
+    figures: { type: "ARRAY", items: { type: "OBJECT", required: ["id", "page", "caption", "description"], properties: { id: { type: "STRING" }, page: { type: "INTEGER" }, caption: { type: "STRING" }, description: { type: "STRING" } } } },
   },
 } as const;
 

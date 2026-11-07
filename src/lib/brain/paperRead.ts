@@ -7,13 +7,14 @@ import type { Bucket, Db } from "../db.ts";
 import { randomId } from "../auth/crypto.ts";
 import { audit } from "../auth/session.ts";
 import { BRAIN } from "../config.ts";
+import { cleanArt, cleanBox, cropSvg, pageSvg, wholePage, type PageArt } from "./figures.ts";
 import { cleanPaper, editItem, marksAgainstPaper, openFlags, recheckItem, type Flag, type FlagKind, type PaperContent, type PaperKind } from "./paper.ts";
 
 export const PAPER_KINDS: readonly PaperKind[] = ["qp", "ms"];
 const KINDS: readonly FlagKind[] = ["words", "numbers", "marks", "numbering", "figure", "agree", "missing", "text"];
 const enc = new TextEncoder();
 
-const key = (docId: string, part: "content" | "pages" | "gemini") => `papers/${encodeURIComponent(docId)}/${part}.json`;
+const key = (docId: string, part: "content" | "pages" | "gemini" | `art-${number}`) => `papers/${encodeURIComponent(docId)}/${part}.json`;
 
 async function getJson(bucket: Bucket, k: string): Promise<unknown> {
   const obj = await bucket.get(k);
@@ -181,7 +182,7 @@ export async function readingForRun(db: Db, bucket: Bucket, doc: DocInfo): Promi
 
 // ---------- Fixes ----------
 
-export type FixAction = "pdf" | "edit" | "fine" | "looks_right" | "override" | "unoverride" | "undo";
+export type FixAction = "pdf" | "edit" | "fine" | "looks_right" | "box" | "override" | "unoverride" | "undo";
 export type FixResult = "ok_fixed" | "ok_undone" | "ok_ready" | "still_flagged" | "bad" | "not_read";
 
 async function recordFix(db: Db, docId: string, action: string, item: string | null, flagKey: string | null, before: unknown, after: unknown, actorId: string, now: number) {
@@ -204,7 +205,7 @@ async function writeRow(db: Db, docId: string, flags: Flag[], dismissed: string[
  * alarm, remembered for this paper and as a rule for the subject. looks_right: a figure drawing is accepted.
  * override / unoverride: mark ready with flags left, or take that back. undo: reverses one earlier fix.
  */
-export async function applyFix(db: Db, bucket: Bucket, doc: DocInfo, action: FixAction, args: { key?: string; item?: string; text?: string; marks?: string; fix?: string }, actorId: string, now = Date.now()): Promise<FixResult> {
+export async function applyFix(db: Db, bucket: Bucket, doc: DocInfo, action: FixAction, args: { key?: string; item?: string; text?: string; marks?: string; fix?: string; box?: string }, actorId: string, now = Date.now()): Promise<FixResult> {
   const kind = doc.docType as PaperKind;
   const view = await paperView(db, bucket, doc);
   const row = view.row;
@@ -243,6 +244,22 @@ export async function applyFix(db: Db, bucket: Bucket, doc: DocInfo, action: Fix
       await recordFix(db, doc.id, action, flag.item, flag.key, { fingerprint: flag.fingerprint }, undefined, actorId, now);
       return "ok_fixed";
     }
+    case "box": {
+      // A figure's box drawn by hand on its page (or "whole" for the printed page). Recorded as an edit of the figure
+      // (paper_fix.action allows the 0022 values only), so Undo puts the old box and flags back.
+      const fig = view.content.figures.find((f) => f.id === args.item);
+      const art = fig ? await loadArt(bucket, doc.id, fig.page) : null;
+      if (!fig || !art) return "bad";
+      const b = args.box === "whole" ? wholePage(art) : cleanBox((args.box ?? "").split(",").map(Number), art);
+      if (!b) return "bad";
+      const moved = { ...fig, box: b, cut: args.box === "whole" ? ("page" as const) : ("manual" as const), svg: "" };
+      const content = { ...view.content, figures: view.content.figures.map((f) => (f.id === fig.id ? moved : f)) };
+      const flags = row.flags.filter((f) => !(f.kind === "figure" && f.item === fig.id));
+      await putJson(bucket, key(doc.id, "content"), content);
+      await writeRow(db, doc.id, flags, row.dismissed, now);
+      await recordFix(db, doc.id, "edit", fig.id, args.key ?? null, { figure: fig, flags: row.flags }, { box: b }, actorId, now);
+      return "ok_fixed";
+    }
     case "override": {
       if (!view.open.length) return "bad";
       await db.prepare(`UPDATE paper_read SET override_at = ?2, override_by = ?3, updated_at = ?2 WHERE doc_id = ?1`).bind(doc.id, now, actorId).run();
@@ -256,7 +273,13 @@ export async function applyFix(db: Db, bucket: Bucket, doc: DocInfo, action: Fix
         : await db.prepare(`SELECT id, action, before FROM paper_fix WHERE id = ?1 AND doc_id = ?2 AND undone_at IS NULL`).bind(args.fix ?? "", doc.id).first<{ id: string; action: string; before: string | null }>();
       if (!fix) return "bad";
       const before = fix.before ? (JSON.parse(fix.before) as Record<string, unknown>) : {};
-      if (fix.action === "pdf" || fix.action === "edit") {
+      if (fix.action === "edit" && before.figure) {
+        const old = cleanPaper({ items: [], figures: [before.figure] }, kind).figures[0];
+        if (!old) return "bad";
+        const content = { ...view.content, figures: view.content.figures.map((x) => (x.id === old.id ? old : x)) };
+        await putJson(bucket, key(doc.id, "content"), content);
+        await writeRow(db, doc.id, cleanFlags(before.flags), row.dismissed, now);
+      } else if (fix.action === "pdf" || fix.action === "edit") {
         const old = cleanPaper({ items: [before.item] }, kind).items[0];
         if (!old) return "bad";
         const content = { ...view.content, items: view.content.items.map((x) => (x.number === old.number ? old : x)) };
@@ -277,8 +300,41 @@ export async function applyFix(db: Db, bucket: Bucket, doc: DocInfo, action: Fix
   return "bad";
 }
 
-/** One figure's SVG for the review screen (served as an image). */
+// ---------- Figures cut from the PDF (figures.ts) ----------
+
+export type ArtResult = "ok" | "no_run" | "bad" | "too_big";
+
+/** One figure page's drawing from the brain script (a running paper run), kept for cutting and moving boxes. */
+export async function saveArt(bucket: Bucket, docId: string, raw: unknown): Promise<ArtResult> {
+  const art = cleanArt(raw);
+  if (!art) return "bad";
+  const body = JSON.stringify(art);
+  if (body.length > BRAIN.maxArtBytes) return "too_big";
+  await bucket.put(key(docId, `art-${art.page}`), enc.encode(body), { httpMetadata: { contentType: "application/json" } });
+  return "ok";
+}
+
+export async function loadArt(bucket: Bucket, docId: string, page: number): Promise<PageArt | null> {
+  if (!Number.isInteger(page) || page < 1 || page > 500) return null;
+  return cleanArt(await getJson(bucket, key(docId, `art-${page}`)));
+}
+
+/** One figure for the review screen (served as an image): cut from its page by its box, else an older AI drawing. */
 export async function figureSvg(bucket: Bucket, docId: string, kind: PaperKind, figureId: string): Promise<string | null> {
   const c = await loadContent(bucket, docId, kind);
-  return c?.figures.find((f) => f.id === figureId)?.svg || null;
+  const f = c?.figures.find((x) => x.id === figureId);
+  if (!f) return null;
+  if (f.box) {
+    const art = await loadArt(bucket, docId, f.page);
+    if (art) return cropSvg(art, f.box);
+  }
+  return f.svg || null;
+}
+
+/** A figure's whole page with its current box framed, for drawing the box by hand. */
+export async function figurePageSvg(bucket: Bucket, docId: string, kind: PaperKind, figureId: string): Promise<string | null> {
+  const c = await loadContent(bucket, docId, kind);
+  const f = c?.figures.find((x) => x.id === figureId);
+  const art = f ? await loadArt(bucket, docId, f.page) : null;
+  return art && f ? pageSvg(art, f.box) : null;
 }

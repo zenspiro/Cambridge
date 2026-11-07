@@ -42,7 +42,7 @@ const MESSAGES = {
 const FIX_WORDS: Record<string, string> = {
   pdf: "Used the PDF's version", edit: "Edited", fine: "It's fine", looks_right: "Looks right", override: "Marked ready anyway",
 };
-const PAPER_STAGES = ["pdf", "gemini", "claude", "drawing", "checks", "save"] as const;
+const PAPER_STAGES = ["pdf", "gemini", "claude", "figures", "checks", "save"] as const;
 const RECENT_MS = 15 * 60_000;
 
 export default async function ReviewPage({ params }: { params: Promise<{ id: string }> }) {
@@ -104,7 +104,7 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
           pdfUrl={pdf}
           kind={doc.docType as PaperKind}
           items={view.content.items}
-          figures={view.content.figures.map((f) => ({ id: f.id, page: f.page, caption: f.caption, drawn: !!f.svg }))}
+          figures={view.content.figures.map((f) => ({ id: f.id, page: f.page, caption: f.caption, description: f.description, shown: !!f.box || !!f.svg, cut: f.cut }))}
           flags={view.open}
           pageCount={pageCount}
           revision={view.row?.revision ?? 0}

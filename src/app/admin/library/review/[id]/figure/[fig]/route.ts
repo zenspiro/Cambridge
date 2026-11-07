@@ -3,8 +3,9 @@ import { getEnv } from "@/lib/env";
 import { figureSvg, PAPER_KINDS, paperDoc } from "@/lib/brain/paperRead";
 import type { PaperKind } from "@/lib/brain/paper";
 
-// One figure we drew, for the review screen's <img> (an image never runs scripts; the SVG was rebuilt from an
-// allowlist when saved). Admin only, not cached, nothing else may be loaded from it.
+// One figure for the review screen's <img> (an image never runs scripts): cut from its stored page drawing by its box
+// (figures.ts, built only from checked numbers), or an older AI drawing rebuilt from an allowlist. Admin only, not
+// cached, nothing else may be loaded from it.
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string; fig: string }> }) {
   const session = await adminSession();
   if (!session) return new Response("Not found", { status: 404 });

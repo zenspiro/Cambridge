@@ -10,7 +10,7 @@ type Event = { at: number; stage: string; state: "start" | "wait" | "done" | "fa
 type State = { status: "queued" | "running" | "succeeded" | "failed" | "cancelled"; step: string | null; events: Event[]; createdAt: number; finishedAt: number | null; stopped: string | null };
 
 const LABELS: Record<string, string> = {
-  pdf: "The PDF", gemini: "Gemini (checking AI)", claude: "Claude (main AI)", retry: "Claude, second try", drawing: "Drawing AI", checks: "Checks", save: "Saving",
+  pdf: "The PDF", gemini: "Gemini (checking AI)", claude: "Claude (main AI)", retry: "Claude, second try", figures: "Figures (cut from the PDF)", drawing: "Drawing AI", checks: "Checks", save: "Saving",
 };
 const STATE_WORDS = { start: "Working", wait: "Waiting", done: "Done", fail: "Stopped", skip: "Not needed" } as const;
 const n = new Intl.NumberFormat("en-GB");
@@ -71,7 +71,10 @@ export function RunProgress({ runId, stages, intervalMs = 3000 }: { runId: strin
       </p>
       <ol className="run-steps">
         {stages.map((stage) => {
-          const e = latest.get(stage);
+          const last = latest.get(stage);
+          // A step still "working" when the run has ended finished with it (the run closes on the final save, so
+          // the script's last "Saved" note never lands) or stopped with it.
+          const e = last && !active && last.state === "start" ? { ...last, state: state.status === "succeeded" ? ("done" as const) : ("fail" as const) } : last;
           const st = e?.state ?? (active ? "wait" : "skip");
           return (
             <li key={stage} className={`run-step run-step-${e ? st : "idle"}`} data-stage={stage}>

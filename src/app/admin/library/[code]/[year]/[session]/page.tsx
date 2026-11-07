@@ -10,6 +10,7 @@ import { PAPER_TYPES } from "@/lib/library/map";
 import { loadHeader, loadSyllabus } from "@/lib/library/catalog";
 import { loadPapers } from "@/lib/library/papers";
 import { sessionFromSlug, sessionHref } from "@/lib/library/slugs";
+import type { Cell } from "@/lib/library/checklist";
 
 export const metadata: Metadata = { title: "Exam session" };
 
@@ -39,6 +40,17 @@ export default async function SessionPage({
   const extras = main.filter((r) => !r.essential);
   const ofSeries = (code: string) => (c: { fileName: string }) => c.fileName.startsWith(`${code}_`);
   const mainDocs = g.docs.filter((c) => !g.series.some((x) => ofSeries(x.code)(c)));
+  // Question papers and mark schemes held for this session, each with a Review button and whether it was read
+  // (owner, 7 Nov 2026: the ticks open the review screen, but a plain button is clearer).
+  const toRead = [...essential, ...extras].flatMap((r) => (["qp", "ms"] as const).flatMap((t) => {
+    const c = r.cells[t];
+    return c?.doc ? [{ row: r, cell: c as Cell & { doc: NonNullable<Cell["doc"]> } }] : [];
+  }));
+  const readRows = toRead.length
+    ? (await env.DB.prepare(`SELECT doc_id, read_at, override_at FROM paper_read WHERE doc_id IN (${toRead.map((_, k) => `?${k + 1}`).join(", ")})`)
+      .bind(...toRead.map((x) => x.cell.doc.id)).all<{ doc_id: string; read_at: number | null; override_at: number | null }>()).results
+    : [];
+  const readState = new Map(readRows.map((r) => [r.doc_id, r]));
 
   return (
     <AdminShell current="/admin/library" title={g.label}>
@@ -59,6 +71,26 @@ export default async function SessionPage({
         <h2 className="label-inline">For the whole session</h2>
         <DocChips cells={mainDocs} />
       </section>
+
+      {toRead.length ? (
+        <section className="card stack" id="to-review">
+          <h2 className="subtitle">Read and review</h2>
+          <ul className="review-list">
+            {toRead.map(({ row, cell }) => {
+              const st = readState.get(cell.doc.id);
+              const words = !st?.read_at ? "Not read" : st.override_at ? "Read, marked ready" : "Read";
+              return (
+                <li key={cell.doc.id} className="review-list-row">
+                  <span>Paper {row.paper}{row.variant !== null ? `, variant ${row.variant}` : ""}: {cell.docType === "qp" ? "question paper" : "mark scheme"}{row.essential ? "" : " (extra)"}</span>
+                  <span className={`pill${st?.read_at ? " pill-ok" : ""}`}>{words}</span>
+                  {/* A full page load: the review page's own security policy frames the PDF. */}
+                  <a className="btn btn-small" href={`/admin/library/review/${encodeURIComponent(cell.doc.id)}`}>Review</a>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
 
       <section className="card stack">
         <h2 className="subtitle">Essential: variant {[...new Set(essential.map((r) => r.variant))].join(", ")}</h2>

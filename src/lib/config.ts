@@ -127,6 +127,8 @@ export const BRAIN = {
   maxOptions: 8,
   maxFigures: 60,
   maxSvgBytes: 60_000,
+  /** One figure page's drawing (figures.ts PageArt as JSON), from the script. */
+  maxArtBytes: 3_000_000,
   maxPaperBytes: 2_000_000,
   minPaperTextChars: 400,
   /** Brain run activity kept per run for the live progress panel. */
