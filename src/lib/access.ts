@@ -38,4 +38,5 @@ export const PUBLIC_ROUTES: readonly string[] = [
   "api/brain/usage/route.ts",
   "api/brain/reading/route.ts",
   "api/brain/saved/route.ts",
+  "api/brain/paper/route.ts",
 ];

@@ -194,6 +194,8 @@ You see at the end: students and parents can sign up, approve, link, and land on
    pieces. Every figure is drawn automatically (our own drawing, for comparison on the review screen). Build order:
    2a sidebar, full width, Parent approval page, review screen with the PDF side; 2b question papers and mark schemes
    with flags, fixes and override; 2c examiner reports, grade thresholds, blueprints, topic frequency.
+   **2b built 7 Nov 2026** ("Read this paper", the rebuilt paper with flags and fixes, override, live run progress).
+   Still to do in step 2: "Read all" for a subject (batch, half price), then 2c.
 3. **Question making with self-checks.** Original questions; a second AI from another provider solves each one, code
    recalculates numbers, similarity check against past papers; diagrams drawn as code and checked by a second AI.
    Failures are thrown away.
@@ -201,6 +203,11 @@ You see at the end: students and parents can sign up, approve, link, and land on
    quality score per subject in admin; every AI change must pass before going live.
 
 You see at the end: an approved Physics question bank and its quality score.
+
+**Admin UI/UX overhaul (owner, 7 Nov 2026, on the back burner):** a design pass over the whole admin (shared
+buttons with sizes and a busy state, aligned form fields, cards, status pills, progress steps, toast messages for
+feedback, in the style of shadcn/ui but built on our own classes so the strict CSP holds). Not now: 2b comes first.
+It must be done before any student or parent page is built (Phase 3).
 
 ### Phase 3: Student practice (free beta)
 1. **Home and diagnostic.** Diagnostic test, home screen (countdown, predicted grade, today's plan), multiple choice

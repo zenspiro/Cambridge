@@ -7,10 +7,12 @@ import { AdminShell, Notice } from "@/components/AdminShell";
 import { ActionForm } from "@/components/ActionForm";
 import { Crumbs } from "@/components/LibraryTables";
 import { TreeStatusLine } from "@/components/TopicTree";
-import { BRAIN } from "@/lib/config";
 import { loadHeader } from "@/lib/library/catalog";
 import { isActive, treesForCode } from "@/lib/brain/runs";
 import { estimateWords, topicsCostCheck, usdWords } from "@/lib/brain/spend";
+import { RunProgress } from "@/components/RunProgress";
+
+const TOPIC_STAGES = ["pdf", "gemini", "claude", "retry", "checks", "save"] as const;
 
 export const metadata: Metadata = { title: "Topic tree" };
 
@@ -34,14 +36,12 @@ export default async function TopicsPage({ params, searchParams }: { params: Pro
   const env = await getEnv();
   const [header, rows] = await Promise.all([loadHeader(env.DB, code), treesForCode(env.DB, code)]);
   if (!header || !rows.length) redirect("/admin/library?e=unknown");
-  const active = rows.some((r) => isActive(r.run));
   const now = Date.now();
   // Rough cost per version with a PDF (a handful of reads; the versions of one code are few).
   const costs = new Map(await Promise.all(rows.filter((r) => r.pdf).map(async (r) => [r.syllabusId, await topicsCostCheck(env.DB, env, r.pdfBytes, now)] as const)));
 
   return (
     <AdminShell current="/admin/library" title={`Topic tree: ${header.subject_name} ${code}`}>
-      {active ? <meta httpEquiv="refresh" content={String(BRAIN.refreshSeconds)} /> : null}
       <Crumbs items={[
         { label: "Library", href: "/admin/library" },
         { label: header.qualification_name },
@@ -60,6 +60,7 @@ export default async function TopicsPage({ params, searchParams }: { params: Pro
           <section className="card stack" key={r.syllabusId} id={`tree-${r.fromYear}`}>
             <h2 className="subtitle">{label}</h2>
             <TreeStatusLine row={r} now={now} />
+            {running && r.run ? <RunProgress runId={r.run.id} stages={TOPIC_STAGES} /> : null}
             {r.pdf ? (
               <div className="row-actions">
                 {r.status !== "none" ? (

@@ -1,5 +1,6 @@
-// The subject brain, step 1: the topic tree. Runs in GitHub Actions (.github/workflows/brain.yml):
-//   node scripts/brain/run.ts   (task "topics": a topic tree; task "check": the AI setup check)
+// The subject brain. Runs in GitHub Actions (.github/workflows/brain.yml):
+//   node scripts/brain/run.ts   (task "topics": a topic tree; "paper": read a question paper or mark scheme;
+//                                "check": the AI setup check)
 // Reads its run from the Worker, fetches the syllabus PDF, asks Claude to copy the subject content into topics and
 // goals and Gemini (another provider) to do the same on its own, checks Claude's copy word for word against the PDF's
 // text and its numbering, compares the two, gives Claude one more try with what the checks found, and sends the tree
@@ -9,7 +10,11 @@ import Anthropic from "@anthropic-ai/sdk";
 import { constants as zlibConstants, inflateSync } from "node:zlib";
 import { signRequest } from "../../src/lib/agent/sign.ts";
 import { allPagesText } from "../../src/lib/pdf/firstPage.ts";
-import { retryPrompt, TOPIC_SCHEMA, TOPIC_SCHEMA_GEMINI, TOPIC_SYSTEM, topicPrompt } from "../../src/lib/brain/prompts.ts";
+import {
+  DRAW_SCHEMA, DRAW_SYSTEM, drawPrompt, PAPER_SCHEMA, PAPER_SCHEMA_GEMINI, PAPER_SYSTEM, paperPrompt,
+  retryPrompt, TOPIC_SCHEMA, TOPIC_SCHEMA_GEMINI, TOPIC_SYSTEM, topicPrompt,
+} from "../../src/lib/brain/prompts.ts";
+import { cleanPaper, cleanSvg, mergeReading, paperFlags, type PaperContent, type PaperKind } from "../../src/lib/brain/paper.ts";
 import {
   checkNumbers, checkWords, cleanDraft, compareDrafts, isReady, missingHeadings, retryNotes, textIndex,
   type Draft, type Problem, type TextIndex, type TreeReport,
@@ -25,6 +30,13 @@ type Job =
   | { task: "topics"; subject: string; pdfBytes: number; models: { claude: string; gemini: string; drawing?: string }; limits: Limits }
   | { task: "check"; which: "claude" | "gemini" | null; models: { claude: string; gemini: string }; limits: Limits };
 type TopicJob = Extract<Job, { task: "topics" }>;
+type PaperJob = {
+  task: "paper"; kind: PaperKind; subject: string; paper: string; pdfBytes: number;
+  scope: { items: string[]; figures: string[] }; prior: { content: unknown; gemini?: unknown; open: string[] };
+  models: { claude: string; gemini: string; drawing: string }; limits: Limits;
+};
+type Stage = "pdf" | "gemini" | "claude" | "retry" | "drawing" | "checks" | "save";
+type StepEvent = { stage: Stage; state: "start" | "wait" | "done" | "fail" | "skip"; model?: string; tokens?: number };
 
 const APP_URL = (process.env.APP_URL ?? "").replace(/\/$/, "");
 const SECRET = process.env.AGENT_SECRET ?? "";
@@ -64,20 +76,29 @@ async function api(path: string, payload: Record<string, unknown>): Promise<{ st
   }
 }
 
-/** Tells the admin page what is happening. A 409 means the run was closed: stop. */
-async function step(text: string) {
+/** Tells the admin page what is happening (and the live panel, with an event). A 409 means the run was closed: stop. */
+async function step(text: string, event?: StepEvent) {
   log(text);
-  const r = await api("/api/brain/step", { step: text });
+  const r = await api("/api/brain/step", { step: text, ...(event ? { event: { ...event, text } } : {}) });
   if (r.status === 409) throw new Stop("closed");
+}
+
+/** A progress note that must never stop the run (sent while an AI is writing). */
+async function note(text: string, event: StepEvent) {
+  try {
+    await api("/api/brain/step", { step: text, event: { ...event, text } });
+  } catch {
+    // the next step will report
+  }
 }
 
 /**
  * Tells our site the tokens one question used (AI usage dashboard and monthly cap). Best effort: a failure here is
  * logged and the run carries on.
  */
-async function usage(provider: "claude" | "gemini", model: string, tokensIn: number, tokensOut: number, pages = 0) {
+async function usage(provider: "claude" | "gemini", model: string, tokensIn: number, tokensOut: number, pages = 0, task?: "drawing") {
   try {
-    const r = await api("/api/brain/usage", { usage: { provider, model, calls: 1, pages, tokensIn, tokensOut } });
+    const r = await api("/api/brain/usage", { usage: { provider, model, calls: 1, pages, tokensIn, tokensOut }, ...(task ? { task } : {}) });
     if (r.status !== 200) log(`usage not recorded (${r.status})`);
   } catch {
     log("usage not recorded (no answer)");
@@ -97,35 +118,53 @@ function claudeMessage(err: unknown): string {
 
 type Reading = { raw: unknown; tokensIn: number; tokensOut: number };
 
-async function askClaude(client: Anthropic, job: TopicJob, pdf64: string, prompt: string, pages: number): Promise<Reading> {
-  // Streamed (long answer); refusals fall back to another model on Anthropic's side ("default" routing).
+type ClaudeAsk = {
+  model: string; system: string; schema: unknown; prompt: string; pdf64: string; pages: number; limits: Limits;
+  /** The live panel's row and words ("Claude is reading the paper"). */
+  stage: Stage; label: string; task?: "drawing";
+};
+
+/**
+ * One streamed Claude question with the PDF attached and a JSON answer. While it writes, the live panel hears how much
+ * it has written every 15 seconds. Refusals fall back to another model on Anthropic's side ("default" routing).
+ */
+async function askClaude(client: Anthropic, a: ClaudeAsk): Promise<Reading> {
   const stream = client.beta.messages.stream({
-    model: job.models.claude,
-    max_tokens: job.limits.claudeMaxTokens,
+    model: a.model,
+    max_tokens: a.limits.claudeMaxTokens,
     betas: ["server-side-fallback-2026-07-01"],
     fallbacks: "default",
     thinking: { type: "adaptive" },
-    output_config: { effort: job.limits.claudeEffort, format: { type: "json_schema", schema: TOPIC_SCHEMA } },
-    system: TOPIC_SYSTEM,
+    output_config: { effort: a.limits.claudeEffort, format: { type: "json_schema", schema: a.schema as Record<string, unknown> } },
+    system: a.system,
     messages: [{
       role: "user",
       content: [
-        { type: "document", source: { type: "base64", media_type: "application/pdf", data: pdf64 } },
-        { type: "text", text: prompt },
+        { type: "document", source: { type: "base64", media_type: "application/pdf", data: a.pdf64 } },
+        { type: "text", text: a.prompt },
       ],
     }],
   });
+  let written = 0;
+  stream.on("text", (t: string) => {
+    written += t.length;
+  });
+  const timer = setInterval(() => {
+    if (written) void note(`${a.label}: written about ${Math.round(written / 6).toLocaleString("en-GB")} words so far`, { stage: a.stage, state: "start", model: a.model, tokens: Math.round(written / 4) });
+  }, 15_000);
   let msg;
   try {
     msg = await stream.finalMessage();
   } catch (err) {
     // Cut off partway (network, overload): count what was read and written so far, so the dashboard matches the bill.
     const part = stream.currentMessage;
-    if (part?.usage) await usage("claude", part.model || job.models.claude, part.usage.input_tokens ?? 0, part.usage.output_tokens ?? 0, pages);
+    if (part?.usage) await usage("claude", part.model || a.model, part.usage.input_tokens ?? 0, part.usage.output_tokens ?? 0, a.pages, a.task);
     throw err;
+  } finally {
+    clearInterval(timer);
   }
   // The model that answered (a fallback may have served it); counted even when the answer is refused or cut off.
-  await usage("claude", msg.model || job.models.claude, msg.usage.input_tokens, msg.usage.output_tokens, pages);
+  await usage("claude", msg.model || a.model, msg.usage.input_tokens, msg.usage.output_tokens, a.pages, a.task);
   if (msg.stop_reason === "refusal") throw new Stop("claude_refused");
   if (msg.stop_reason === "max_tokens") throw new Stop("claude_too_long");
   const text = msg.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("");
@@ -183,16 +222,19 @@ async function geminiCall(model: string, body: unknown, limits: Limits, timeoutM
   }
 }
 
-async function askGemini(job: TopicJob, pdf64: string, pages: number): Promise<Reading> {
-  const r = await geminiCall(job.models.gemini, {
-    systemInstruction: { parts: [{ text: TOPIC_SYSTEM }] },
-    contents: [{ role: "user", parts: [{ inline_data: { mime_type: "application/pdf", data: pdf64 } }, { text: topicPrompt(job.subject) }] }],
-    generationConfig: { responseMimeType: "application/json", responseSchema: TOPIC_SCHEMA_GEMINI, maxOutputTokens: job.limits.geminiMaxTokens },
-  }, job.limits, 20 * 60_000);
+type GeminiAsk = { model: string; system: string; schema: unknown; prompt: string; pdf64: string; pages: number; limits: Limits };
+
+/** One Gemini question with the PDF attached and a JSON answer (temporary failures and busy limits are waited out). */
+async function askGemini(g: GeminiAsk): Promise<Reading> {
+  const r = await geminiCall(g.model, {
+    systemInstruction: { parts: [{ text: g.system }] },
+    contents: [{ role: "user", parts: [{ inline_data: { mime_type: "application/pdf", data: g.pdf64 } }, { text: g.prompt }] }],
+    generationConfig: { responseMimeType: "application/json", responseSchema: g.schema, maxOutputTokens: g.limits.geminiMaxTokens },
+  }, g.limits, 20 * 60_000);
   const st = geminiStatus(r.status, r.text);
-  if (st === "not_found") throw new Stop("gemini_model", `model "${job.models.gemini}" not found. Available: ${await geminiModels()}`);
+  if (st === "not_found") throw new Stop("gemini_model", `model "${g.model}" not found. Available: ${await geminiModels()}`);
   if (st === "refused") throw new Stop("gemini_key", `Gemini refused (${r.status}): ${r.text.slice(0, 300)}`);
-  if (st === "not_on_plan") throw new Stop("gemini_plan", `model "${job.models.gemini}" is not on this key's plan`);
+  if (st === "not_on_plan") throw new Stop("gemini_plan", `model "${g.model}" is not on this key's plan`);
   if (st === "busy") throw new Stop("gemini_busy", "Gemini's limit was still reached after waiting");
   if (st !== "ok") throw new Stop(TEMPORARY.has(r.status) ? "gemini_down" : "gemini_error", `Gemini error ${r.status}`);
   const data = JSON.parse(r.text) as {
@@ -202,7 +244,7 @@ async function askGemini(job: TopicJob, pdf64: string, pages: number): Promise<R
   const u = data.usageMetadata ?? {};
   const tokensIn = u.promptTokenCount ?? 0;
   const tokensOut = (u.candidatesTokenCount ?? 0) + (u.thoughtsTokenCount ?? 0);
-  await usage("gemini", job.models.gemini, tokensIn, tokensOut, pages);
+  await usage("gemini", g.model, tokensIn, tokensOut, g.pages);
   const c = data.candidates?.[0];
   if (c?.finishReason === "MAX_TOKENS") throw new Stop("gemini_too_long");
   const text = (c?.content?.parts ?? []).filter((p) => !p.thought).map((p) => p.text ?? "").join("");
@@ -340,17 +382,99 @@ async function reading(provider: "claude" | "gemini", model: string, words: stri
   const saved = await api("/api/brain/saved", { provider, model });
   if (saved.status === 200 && saved.data?.found === true && saved.data.raw) {
     log(`${provider}: reusing the reading kept from an earlier run (no new cost)`);
+    await note(`${provider === "claude" ? "Claude" : "Gemini"}: reused the reading kept from an earlier run (no new cost)`, { stage: provider, state: "skip", model });
     return { raw: saved.data.raw, tokensIn: 0, tokensOut: 0 };
   }
-  await step(words);
-  const r = await ask();
+  const r = await timed(provider, model, words, ask);
   const kept = await api("/api/brain/reading", { provider, model, raw: r.raw });
   if (kept.status !== 200) log(`${provider}: reading not kept (${kept.status}); the run carries on`);
   return r;
 }
 
+/** One AI reading with start, done and failed events for the live panel. */
+async function timed(stage: Stage, model: string, words: string, ask: () => Promise<Reading>): Promise<Reading> {
+  await step(words, { stage, state: "start", model });
+  const t0 = Date.now();
+  try {
+    const r = await ask();
+    await step(`${words.replace(/ is (reading|drawing)/, " finished $1")} in ${Math.max(1, Math.round((Date.now() - t0) / 1000))} s`, { stage, state: "done", model, tokens: r.tokensIn + r.tokensOut });
+    return r;
+  } catch (err) {
+    await note(`${words.split(" ")[0]} stopped`, { stage, state: "fail", model });
+    throw err;
+  }
+}
+
 function checksFor(draft: Draft, idx: TextIndex | null, pages: string[], shape: Problem[]): Problem[] {
   return [...shape, ...(idx ? checkWords(draft, idx) : []), ...checkNumbers(draft), ...missingHeadings(draft, pages)];
+}
+
+// ---------- Reading a paper (step 2b) ----------
+
+/**
+ * Reads one question paper or mark scheme: Gemini first (free), then Claude, whose reading is merged with what was
+ * stored (confirmed items stay) and saved at once; then the drawing AI redraws the figures that need it and the
+ * reading is saved again with them. A scope reads only some items again, or only redraws some figures.
+ */
+async function runPaper(job: PaperJob) {
+  if (!CLAUDE_KEY) throw new Stop("claude_key", "the GitHub secret CLAUDE_API_KEY is not set");
+  if (!GEMINI_KEY) throw new Stop("gemini_key", "the GitHub secret GEMINI_API_KEY is not set");
+  if (!job.models.claude || !job.models.gemini) throw new Stop("models", "no Claude or Gemini model is set (AI setup page or wrangler.jsonc)");
+  if (job.pdfBytes > job.limits.maxPdfBytes) throw new Stop("pdf_too_big");
+  const drawingModel = job.models.drawing || job.models.claude;
+
+  await step("Fetching the paper", { stage: "pdf", state: "start" });
+  const doc = await api("/api/brain/doc", {});
+  if (!doc.bytes?.length) throw new Stop("no_paper");
+  const pdf64 = Buffer.from(doc.bytes).toString("base64");
+  const inflate = async (d: Uint8Array) => new Uint8Array(inflateSync(d, { finishFlush: zlibConstants.Z_SYNC_FLUSH }));
+  const pages = await allPagesText(doc.bytes, inflate);
+  await note(`The paper has ${pages.length} pages`, { stage: "pdf", state: "done" });
+
+  const scoped = job.scope.items.length > 0 || job.scope.figures.length > 0;
+  const figuresOnly = scoped && job.scope.items.length === 0;
+  const prior = job.prior.content ? cleanPaper(job.prior.content, job.kind) : null;
+  const priorGemini = job.prior.gemini ? cleanPaper(job.prior.gemini, job.kind) : null;
+  const client = new Anthropic({ apiKey: CLAUDE_KEY, maxRetries: TEST_MODE ? 0 : 3, timeout: 30 * 60_000, ...(CLAUDE_BASE ? { baseURL: CLAUDE_BASE } : {}) });
+  const save = async (content: PaperContent, gemini: PaperContent | null, final: boolean) => {
+    const flags = paperFlags({ content, pages, gemini });
+    if (final) await step(`Checks done: ${flags.length} flag${flags.length === 1 ? "" : "s"} for the review screen`, { stage: "checks", state: "done" });
+    const r = await api("/api/brain/paper", { content, gemini, pages, flags, final });
+    if (r.status !== 200) throw new Stop(`save_${r.status}`);
+  };
+
+  // Gemini first: free on the owner's plan, so a failure here costs nothing. A figure redraw needs no reading.
+  let gemini = priorGemini;
+  if (!figuresOnly) {
+    const g = await timed("gemini", job.models.gemini, "Gemini is reading the paper", () =>
+      askGemini({ model: job.models.gemini, system: PAPER_SYSTEM, schema: PAPER_SCHEMA_GEMINI, prompt: paperPrompt(job.kind, job.paper), pdf64, pages: pages.length, limits: job.limits }));
+    gemini = cleanPaper(g.raw, job.kind);
+  } else await note("Gemini: not needed to redraw a figure", { stage: "gemini", state: "skip" });
+
+  let content = prior;
+  if (!figuresOnly) {
+    const r = await timed("claude", job.models.claude, job.scope.items.length ? `Claude is reading ${job.scope.items.join(", ")} again` : "Claude is reading the paper", () =>
+      askClaude(client, { model: job.models.claude, system: PAPER_SYSTEM, schema: PAPER_SCHEMA, prompt: paperPrompt(job.kind, job.paper, job.scope.items), pdf64, pages: pages.length, limits: job.limits, stage: "claude", label: "Claude" }));
+    const fresh = cleanPaper(r.raw, job.kind);
+    if (!fresh.items.length) throw new Stop("claude_bad_answer", "the reading had no questions");
+    content = mergeReading(prior, fresh, new Set(job.prior.open), scoped ? job.scope : undefined);
+    await step("Saving Claude's reading", { stage: "save", state: "start" });
+    await save(content, gemini, false);
+  } else await note("Claude: not needed to redraw a figure", { stage: "claude", state: "skip" });
+  if (!content) throw new Stop("no_reading", "there is no reading to draw figures for");
+
+  const toDraw = content.figures.filter((f) => job.scope.figures.includes(f.id) || (!figuresOnly && !f.svg));
+  if (toDraw.length) {
+    const r = await timed("drawing", drawingModel, `Drawing ${toDraw.length} figure${toDraw.length === 1 ? "" : "s"}`, () =>
+      askClaude(client, { model: drawingModel, system: DRAW_SYSTEM, schema: DRAW_SCHEMA, prompt: drawPrompt(job.paper, toDraw), pdf64, pages: pages.length, limits: job.limits, stage: "drawing", label: "Drawing AI", task: "drawing" }));
+    const drawn = new Map(((r.raw as { figures?: { id?: unknown; svg?: unknown }[] }).figures ?? []).flatMap((f) =>
+      typeof f.id === "string" && typeof f.svg === "string" ? [[f.id, cleanSvg(f.svg)] as const] : []));
+    content = { ...content, figures: content.figures.map((f) => (drawn.get(f.id) ? { ...f, svg: drawn.get(f.id)! } : f)) };
+  } else await note("Drawing: no figures to draw", { stage: "drawing", state: "skip" });
+
+  await step("Saving the reading", { stage: "save", state: "start" });
+  await save(content, gemini, true);
+  log(`saved: ${content.items.length} items, ${content.figures.length} figures`);
 }
 
 async function main() {
@@ -362,12 +486,13 @@ async function main() {
   if (jr.status !== 200 || !jr.data) throw new Stop(jr.data?.error === "no_syllabus" ? "no_syllabus" : "no_run");
   const job = jr.data as unknown as Job;
   if (job.task === "check") return runCheck(job);
+  if ((job as unknown as { task: string }).task === "paper") return runPaper(job as unknown as PaperJob);
   if (!CLAUDE_KEY) throw new Stop("claude_key", "the GitHub secret CLAUDE_API_KEY is not set");
   if (!GEMINI_KEY) throw new Stop("gemini_key", "the GitHub secret GEMINI_API_KEY is not set");
   if (!job.models.claude || !job.models.gemini) throw new Stop("models", "no Claude or Gemini model is set (AI setup page or wrangler.jsonc)");
   if (job.pdfBytes > job.limits.maxPdfBytes) throw new Stop("pdf_too_big");
 
-  await step("Fetching the syllabus PDF");
+  await step("Fetching the syllabus PDF", { stage: "pdf", state: "start" });
   const doc = await api("/api/brain/doc", {});
   if (!doc.bytes?.length) throw new Stop("no_syllabus");
   const pdf64 = Buffer.from(doc.bytes).toString("base64");
@@ -376,6 +501,7 @@ async function main() {
   const idx = textIndex(pages);
   const textChecked = idx.chars >= BRAIN.minTextChars;
   log(`syllabus: ${pages.length} pages, ${idx.chars} letters and digits; word check ${textChecked ? "on" : "off (text unreadable)"}`);
+  await note(`The syllabus has ${pages.length} pages${textChecked ? "" : " (its text could not be read, so the word check is off)"}`, { stage: "pdf", state: "done" });
 
   const client = new Anthropic({ apiKey: CLAUDE_KEY, maxRetries: TEST_MODE ? 0 : 3, timeout: 30 * 60_000, ...(CLAUDE_BASE ? { baseURL: CLAUDE_BASE } : {}) });
   const usage = { claudeIn: 0, claudeOut: 0, geminiIn: 0, geminiOut: 0 };
@@ -383,11 +509,14 @@ async function main() {
   // Gemini first (free on the owner's plan): Claude, which costs money, starts only once Gemini's reading is safe, so
   // a Gemini failure costs nothing (owner, 7 Nov 2026). A reading kept from an earlier run of the same PDF and model
   // is reused instead of asked for again.
-  const gem = await reading("gemini", job.models.gemini, "Gemini is reading the syllabus", () => askGemini(job, pdf64, pages.length));
+  const gem = await reading("gemini", job.models.gemini, "Gemini is reading the syllabus", () =>
+    askGemini({ model: job.models.gemini, system: TOPIC_SYSTEM, schema: TOPIC_SCHEMA_GEMINI, prompt: topicPrompt(job.subject), pdf64, pages: pages.length, limits: job.limits }));
   usage.geminiIn += gem.tokensIn;
   usage.geminiOut += gem.tokensOut;
   const gemini = cleanDraft(gem.raw).draft;
-  const first = await reading("claude", job.models.claude, "Claude is reading the syllabus", () => askClaude(client, job, pdf64, topicPrompt(job.subject), pages.length));
+  const topicAsk = (prompt: string, stage: Stage, label: string) =>
+    askClaude(client, { model: job.models.claude, system: TOPIC_SYSTEM, schema: TOPIC_SCHEMA, prompt, pdf64, pages: pages.length, limits: job.limits, stage, label });
+  const first = await reading("claude", job.models.claude, "Claude is reading the syllabus", () => topicAsk(topicPrompt(job.subject), "claude", "Claude"));
   usage.claudeIn += first.tokensIn;
   usage.claudeOut += first.tokensOut;
 
@@ -399,8 +528,8 @@ async function main() {
 
   while (attempts < job.limits.attempts && !isReady({ textChecked, problems, agreement: cmp.agreement }) && (problems.length || cmp.disagreements.length)) {
     attempts++;
-    await step(`Claude is checking ${problems.length + cmp.disagreements.length} points again (try ${attempts})`);
-    const next = await askClaude(client, job, pdf64, retryPrompt(job.subject, retryNotes(problems, cmp.disagreements)), pages.length);
+    await step(`Claude is checking ${problems.length + cmp.disagreements.length} points again (try ${attempts})`, { stage: "retry", state: "start", model: job.models.claude });
+    const next = await topicAsk(retryPrompt(job.subject, retryNotes(problems, cmp.disagreements)), "retry", "Claude's second try");
     usage.claudeIn += next.tokensIn;
     usage.claudeOut += next.tokensOut;
     current = cleanDraft(next.raw);
@@ -419,7 +548,8 @@ async function main() {
     models: job.models,
     usage,
   };
-  await step("Saving the topic tree");
+  await step(`Checks done: ${problems.length} open, agreement with Gemini ${(cmp.agreement * 100).toFixed(1)}%`, { stage: "checks", state: "done" });
+  await step("Saving the topic tree", { stage: "save", state: "start" });
   const fin = await api("/api/brain/finish", { draft: current.draft, report });
   if (fin.status !== 200) throw new Stop(`save_${fin.status}`);
   log(`saved: ${String(fin.data?.result)}; Claude ${usage.claudeIn} in / ${usage.claudeOut} out, Gemini ${usage.geminiIn} in / ${usage.geminiOut} out`);

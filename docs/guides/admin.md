@@ -91,3 +91,18 @@ Admin > Themes shows every part of the student pages with sample words, in a pho
 
 ## Parent approval
 Admin > Students and parents > Parent approval sets who needs a parent's yes: students under the age shown (18 now). Add a country with a different age if a country's rules differ, or take it back to the default. Only the birth year is known, so a student who could still be under the age is asked. Parents approve or decline from an email link; a decline deletes the student's account.
+
+## Reading a paper (step 2b)
+
+1. Open any question paper or mark scheme from the library (its green tick) to reach its review screen.
+2. Check the rough cost under **Read this paper**, then press it. Progress shows in place: Gemini, Claude, then the drawings.
+3. When it finishes, the right side shows the paper rebuilt from our database beside the PDF. One page bar turns both.
+4. Flags: red means the wording differs, amber means numbers or marks differ, blue is our own drawing of a figure.
+5. Fix each flag:
+   - **Use the PDF's version**: copies the PDF's own words.
+   - **Read it again**: that part only, re-checked.
+   - **Edit it yourself**: your wording, checked against the PDF.
+   - **It's fine**: a false alarm, remembered for the whole subject.
+   - Figures: **Looks right** or **Redraw**.
+6. The paper is Ready when no flag is left. **Mark ready anyway** records that the remaining flags were ignored.
+7. Every fix can be undone under **Fixes on this paper**. **Read it again** keeps everything already confirmed.

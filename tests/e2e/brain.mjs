@@ -53,6 +53,27 @@ const LINES = [
     ...Array.from({ length: 100 }, (_, i) => `Background reading line ${i + 1} about scientific skills for planning a fair test with care`),
   ],
 ];
+// A made-up question paper (step 2b): a cover long enough for the word check, and two pages of questions.
+const PAPER_LINES = [
+  ["Cambridge IGCSE PHYSICS 0625/42", "Paper 4 Theory (Extended) May/June 2024", "The total mark for this paper is 5.",
+    ...Array.from({ length: 30 }, (_, i) => `Instruction line ${i + 1}: answer all questions in the spaces provided with a dark pen`)],
+  ["1 (a) State the instrument used to measure the time taken by a trolley", "rolling down a ramp. [1]",
+    "(b) The trolley takes 2.5 s to travel 1.5 m. Calculate its average speed. [2]", "Fig. 1.1 shows the ramp."],
+  ["2 (a) Define the term density and state its unit. [2]"],
+];
+const PAPER_GOOD = {
+  totalMarks: 5,
+  items: [
+    { number: "1(a)", page: 2, text: "State the instrument used to measure the time taken by a trolley rolling down a ramp.", marks: 1, options: [], answerLines: 1, figures: ["F1"], guidance: "" },
+    { number: "1(b)", page: 2, text: "The trolley takes 2.5 s to travel 1.5 m. Calculate its average speed.", marks: 2, options: [], answerLines: 2, figures: [], guidance: "" },
+    { number: "2(a)", page: 3, text: "Define the term density and state its unit.", marks: 2, options: [], answerLines: 2, figures: [], guidance: "" },
+  ],
+  figures: [{ id: "F1", page: 2, caption: "Fig. 1.1 the ramp" }],
+};
+// Claude misreads 1(b): the word check and Gemini both catch it.
+const PAPER_CLAUDE = { ...PAPER_GOOD, items: PAPER_GOOD.items.map((i) => (i.number === "1(b)" ? { ...i, text: "The trolley takes 2.5 s to travel 1.5 m. Calculate its mean speed." } : i)) };
+const DRAWN = { figures: [{ id: "F1", svg: "<svg viewBox='0 0 100 50'><script>alert(1)</script><line x1='0' y1='50' x2='100' y2='0' stroke='black' onclick='x()'/><text x='40' y='45'>ramp</text></svg>" }] };
+
 function pagesPdf(pages) {
   const enc = (s) => new TextEncoder().encode(s);
   const esc = (s) => s.replace(/[\\()]/g, (c) => `\\${c}`);
@@ -89,7 +110,9 @@ const GOOD = {
 const copy = (d) => JSON.parse(JSON.stringify(d));
 
 // ---------- Fake Claude (streamed Messages API) and Gemini (generateContent) ----------
-const ai = { claude: [], gemini: [], claudeAnswers: [], geminiAnswer: GOOD, busyOnce: false, down503: 0, claudeFailOnce: false };
+const ai = { claude: [], gemini: [], claudeAnswers: [], geminiAnswer: GOOD, busyOnce: false, down503: 0, claudeFailOnce: false, seq: [] };
+const isPaper = (system) => /exam paper/.test(String(system ?? ""));
+const isDrawing = (system) => /redraw figures/.test(String(system ?? ""));
 // Models the fake Google lists for the key; tiny questions to gemini-2.5-pro come back "not on your plan".
 const LISTED = ["gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-2.5-pro", "gemini-embedding-001"];
 const server = createServer((req, res) => {
@@ -119,7 +142,8 @@ const server = createServer((req, res) => {
         res.end(JSON.stringify({ type: "error", error: { type: "api_error", message: "Internal server error" } }));
         return;
       }
-      const answer = JSON.stringify(ai.claudeAnswers.shift() ?? GOOD);
+      ai.seq.push(isDrawing(json.system) ? "claude-draw" : isPaper(json.system) ? "claude-paper" : "claude");
+      const answer = JSON.stringify(isDrawing(json.system) ? DRAWN : isPaper(json.system) ? PAPER_CLAUDE : ai.claudeAnswers.shift() ?? GOOD);
       res.writeHead(200, { "content-type": "text/event-stream" });
       const ev = (type, data) => res.write(`event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`);
       ev("message_start", { message: { id: "msg_test", type: "message", role: "assistant", model: json.model, content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 1200, output_tokens: 1 } } });
@@ -156,8 +180,10 @@ const server = createServer((req, res) => {
         res.end(JSON.stringify({ error: { code: 429, message: "Quota exceeded for metric: generate_content_free_tier_requests, limit: 10", details: [{ "@type": "type.googleapis.com/google.rpc.RetryInfo", retryDelay: "1s" }] } }));
         return;
       }
+      const paper = isPaper(json.systemInstruction?.parts?.[0]?.text);
+      if (json.systemInstruction) ai.seq.push(paper ? "gemini-paper" : "gemini");
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(ai.geminiAnswer) }] }, finishReason: "STOP" }], usageMetadata: { promptTokenCount: 900, candidatesTokenCount: 200 } }));
+      res.end(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(paper ? PAPER_GOOD : ai.geminiAnswer) }] }, finishReason: "STOP" }], usageMetadata: { promptTokenCount: 900, candidatesTokenCount: 200 } }));
       return;
     }
     res.writeHead(404).end();
@@ -453,11 +479,89 @@ try {
   await page.goto(BASE + "/admin/ai");
   check(await noSideways(), "AI setup: no sideways scroll");
 
+  // 12. Reading a paper (step 2b): Read this paper, live progress, the paper rebuilt beside the PDF, flags and fixes.
+  sql(`DELETE FROM source_document WHERE file_name = '0625_s24_qp_42.pdf'`);
+  const paperPdf = [...pagesPdf(PAPER_LINES)];
+  const storedPaper = await page.evaluate(async (bytes) => {
+    const r = await fetch("/admin/library/folder/file", { method: "POST", headers: { "x-file-name": "0625_s24_qp_42.pdf", "Content-Type": "application/pdf" }, body: new Uint8Array(bytes) });
+    return r.json();
+  }, paperPdf);
+  check(storedPaper.ok === true, `test question paper stored${storedPaper.ok ? "" : ": " + JSON.stringify(storedPaper)}`);
+  const paperId = rows(`SELECT id FROM source_document WHERE file_name = '0625_s24_qp_42.pdf'`)[0]?.id;
+  await page.goto(`${BASE}/admin/library/review/${paperId}`);
+  check((await page.locator("#reading .pill").textContent()) === "Not read", "a paper not read yet says so");
+  check((await page.locator("#reading").textContent())?.includes("Rough cost"), "Read this paper shows the rough cost first");
+  await page.locator("#reading button", { hasText: "Read this paper" }).click();
+  await page.locator("#reading .action-note", { hasText: "GITHUB_TOKEN" }).waitFor({ timeout: 10_000 }).then(() => check(true, "Read this paper without a GitHub token says what is missing"), () => check(false, "Read this paper without a GitHub token says what is missing"));
+
+  // A queued run shows the live progress panel (no page reloads).
+  const queued = `e2eq${Date.now()}`;
+  sql(`INSERT INTO job (id, type, status, params, created_by, created_at) VALUES ('${queued}', 'brain', 'queued', '{"task":"paper","docId":"${paperId}","scope":{"items":[],"figures":[]}}', 'platform-admin', ${Date.now()})`);
+  sql(`UPDATE paper_read SET job_id = '${queued}' WHERE doc_id = '${paperId}'`);
+  await page.reload();
+  await page.locator("#run-progress", { hasText: "Waiting for GitHub" }).waitFor({ timeout: 10_000 }).then(() => check(true, "a waiting run shows the live progress panel"), () => check(false, "a waiting run shows the live progress panel"));
+  check((await page.locator("#run-progress .run-step").count()) === 6, "the panel lists each step: PDF, Gemini, Claude, drawing, checks, saving");
+  check((await page.locator("meta[http-equiv=refresh]").count()) === 0, "no page reloads while it runs");
+  ai.seq.length = 0;
+  const rp = await runBrain(queued);
+  check(rp.status === 0, `the paper run exits cleanly${rp.status ? ": " + rp.out.slice(-800) : ""}`);
+  const order = ai.seq.filter((x) => x !== "claude");
+  check(order.join(",") === "gemini-paper,claude-paper,claude-draw", `Gemini reads first, then Claude, then the drawing AI (${order.join(",")})`);
+  await page.locator("#run-progress", { hasText: "Finished" }).waitFor({ timeout: 15_000 }).then(() => check(true, "the panel shows the run finished, in place"), () => check(false, "the panel shows the run finished, in place"));
+  const st = await (await page.request.get(`${BASE}/admin/brain/runs/${queued}`)).json();
+  check(["gemini", "claude", "drawing", "checks"].every((s) => st.events.some((e) => e.stage === s && e.state === "done")), "each step reported done, with its model and tokens");
+  check(st.events.some((e) => e.stage === "claude" && e.model === "claude-sonnet-5-5" && e.tokens > 0), "Claude's step shows its model and tokens");
+  check(rows(`SELECT COUNT(*) AS n FROM ai_spend WHERE job_id = '${queued}' AND task = 'drawing'`)[0].n === 1, "the drawing counts as its own job on the dashboard");
+
+  await page.goto(`${BASE}/admin/library/review/${paperId}`);
+  await page.locator("#paper-sheet").waitFor({ timeout: 10_000 });
+  const pill = await page.locator("#reading .pill").textContent();
+  check(/flag/.test(pill ?? ""), `the misread is flagged (${pill})`);
+  check((await page.locator("#item-1\\(a\\)").textContent())?.includes("State the instrument"), "the paper is rebuilt from our reading, page by page");
+  check((await page.locator("#item-1\\(a\\) .pq-marks").textContent()) === "[1]", "marks show as on the paper");
+  check((await page.locator("#item-1\\(b\\).pq-red").count()) === 1, "the misread part is boxed in red");
+  check((await page.locator("#run-progress", { hasText: "Finished" }).count()) === 1, "the finished run's steps stay on the page for a while");
+  check((await page.locator("#item-1\\(b\\) .flag-pdf").first().textContent())?.includes("Calculate its average speed"), "the flag shows the PDF's own words");
+  const img = page.locator("#figure-F1 img");
+  check((await img.count()) === 1 && (await page.locator("#figure-F1.pq-blue").count()) === 1, "our drawing of the figure shows, boxed in blue");
+  const svg = await page.request.get(BASE + (await img.getAttribute("src")));
+  const svgText = await svg.text();
+  check(svg.headers()["content-type"] === "image/svg+xml" && !svgText.includes("script") && !svgText.includes("onclick") && svgText.includes("ramp"), "the figure is served as a clean image (no scripts)");
+  check((await page.locator("iframe.review-pdf").getAttribute("src"))?.endsWith("#page=2"), "the PDF opens on the first page with questions");
+  await page.locator(".page-bar button", { hasText: "Next page" }).click();
+  check((await page.locator("iframe.review-pdf").getAttribute("src"))?.endsWith("#page=3") && (await page.locator("#item-2\\(a\\)").count()) === 1, "one page bar turns both sides");
+  await page.locator(".page-bar button", { hasText: "Next flag" }).click();
+  check((await page.locator(".page-bar-count").textContent()) === "Page 2 of 3", "Next flag jumps to the flagged page");
+  const flagsBefore = await page.locator("#paper-sheet .flag-box").count();
+  await page.locator(".check-inline input").uncheck();
+  check((await page.locator("#paper-sheet .flag-box").count()) === 0, "Show flags off hides them");
+  await page.locator(".check-inline input").check();
+  check((await page.locator("#paper-sheet .flag-box").count()) === flagsBefore, "and on shows them again");
+
+  await page.locator('#item-1\\(b\\) .flag-box[data-flag="words:1(b)"] button', { hasText: "Use the PDF's version" }).click();
+  await page.locator("#item-1\\(b\\) .pq-text", { hasText: "Calculate its average speed" }).waitFor({ timeout: 15_000 }).then(() => check(true, "Use the PDF's version copies the PDF's words, in place"), () => check(false, "Use the PDF's version copies the PDF's words, in place"));
+  await page.locator("#item-1\\(b\\).pq-red").waitFor({ state: "detached", timeout: 15_000 }).then(() => check(true, "the wording and Gemini flags clear once it matches the PDF"), () => check(false, "the wording and Gemini flags clear once it matches the PDF"));
+  await page.locator("#figure-F1 button", { hasText: "Looks right" }).click();
+  await page.locator("#reading .pill", { hasText: "Ready" }).waitFor({ timeout: 15_000 }).then(() => check(true, "every flag cleared: the paper is Ready"), () => check(false, "every flag cleared: the paper is Ready"));
+  await page.locator("#reading summary", { hasText: "Fixes on this paper" }).click();
+  await page.locator("#reading .fix-list li", { hasText: "Looks right" }).locator("button", { hasText: "Undo" }).click();
+  await page.locator("#reading .pill", { hasText: "1 flag open" }).waitFor({ timeout: 15_000 }).then(() => check(true, "Undo brings a flag back"), () => check(false, "Undo brings a flag back"));
+  await page.locator("#reading button", { hasText: "Mark ready anyway" }).click();
+  await page.locator("#reading button", { hasText: "Yes" }).click();
+  await page.locator("#reading .pill", { hasText: "Ready (marked ready)" }).waitFor({ timeout: 15_000 }).then(() => check(true, "the admin can mark it ready with flags left (recorded)"), () => check(false, "the admin can mark it ready with flags left (recorded)"));
+  check(rows(`SELECT COUNT(*) AS n FROM audit_log WHERE action = 'paper.override'`)[0].n >= 1, "the override is audited");
+  check(await noSideways(), "review screen with the rebuilt paper: no sideways scroll at 1400 px");
+  const halves2 = await page.evaluate(() => [...document.querySelectorAll(".review-pane")].map((e) => Math.round(e.getBoundingClientRect().width)));
+  check(halves2.length === 2 && Math.abs(halves2[0] - halves2[1]) < 4, "the PDF and the rebuilt paper each take half");
+
   // 11. Signed endpoints refuse unsigned calls.
   const unsigned = await fetch(`${BASE}/api/brain/job`, { method: "POST", body: "{}" });
   check(unsigned.status === 401, "brain endpoints refuse unsigned requests");
   check((await fetch(`${BASE}/api/brain/check`, { method: "POST", body: "{}" })).status === 401, "the check endpoint refuses unsigned requests");
   check((await fetch(`${BASE}/api/brain/usage`, { method: "POST", body: "{}" })).status === 401, "the usage endpoint refuses unsigned requests");
+  check((await fetch(`${BASE}/api/brain/paper`, { method: "POST", body: "{}" })).status === 401, "the paper endpoint refuses unsigned requests");
+  const anon = await fetch(`${BASE}/admin/brain/runs/${queued}`, { redirect: "manual" });
+  check(anon.status !== 200 && !(anon.headers.get("content-type") ?? "").includes("json"), "run state needs the admin");
   check((await fetch(`${BASE}/api/brain/reading`, { method: "POST", body: "{}" })).status === 401 && (await fetch(`${BASE}/api/brain/saved`, { method: "POST", body: "{}" })).status === 401, "the kept-reading endpoints refuse unsigned requests");
 
   check(errors.length === 0, `no script errors${errors.length ? ": " + errors.join(" | ") : ""}`);
@@ -466,7 +570,7 @@ try {
   server.close();
   sql(`UPDATE job SET status = 'failed' WHERE type = 'brain' AND status IN ('queued', 'running')`);
   sql(`DELETE FROM topic_tree WHERE syllabus_id = '0625-2023'`);
-  sql(`DELETE FROM source_document WHERE file_name = '0625_y23_sy.pdf'`);
+  sql(`DELETE FROM source_document WHERE file_name IN ('0625_y23_sy.pdf', '0625_s24_qp_42.pdf')`);
   sql(`DELETE FROM setting WHERE key IN ('ai_models', 'ai_check', 'ai_budget')`);
 }
 

@@ -23,6 +23,8 @@ export const BRAIN_REASONS: Record<string, string> = {
   gemini_error: "Gemini's service gave an error. Try again later.",
   gemini_down: "Google's Gemini service was overloaded or down, and still was after three more tries over about two minutes. Nothing was charged for Claude: it only starts after Gemini. Try again later.",
   models: "CLAUDE_MODEL or GEMINI_MODEL is not set.",
+  no_paper: "The paper's PDF is not in the library.",
+  no_reading: "There is no reading yet to draw the figures for. Read the paper first.",
   script_error: "The run stopped on an unexpected error. The GitHub log has the details.",
 };
 
