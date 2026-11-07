@@ -601,6 +601,8 @@ try {
   await page.locator(".page-bar button", { hasText: "Previous page" }).click();
   await page.locator("#item-1\\(b\\) .pq-text", { hasText: "Calculate its average speed" }).waitFor({ timeout: 15_000 }).then(() => check(true, "Use the PDF's version copies the PDF's words, in place"), () => check(false, "Use the PDF's version copies the PDF's words, in place"));
   check((await page.locator("#item-1\\(b\\).pq-red").count()) === 0, "the wording and Gemini flags clear once it matches the PDF");
+  await page.locator(".page-bar button", { hasText: "Next page" }).click();
+  await page.locator(".page-bar button", { hasText: "Next page" }).click();
   check((await page.locator("#figure-F2.pq-blue").count()) === 1, "the figure cut without a label is boxed in blue");
   await page.locator("#figure-F2 button", { hasText: "Looks right" }).click();
   await page.locator("#reading .pill", { hasText: "Ready" }).waitFor({ timeout: 15_000 }).then(() => check(true, "every flag cleared: the paper is Ready"), () => check(false, "every flag cleared: the paper is Ready"));
@@ -618,6 +620,7 @@ try {
   await page.locator("#figure-F2 .flag-box button", { hasText: "Adjust box" }).click();
   const sheet = page.locator("#figure-F2 .box-editor-page");
   await sheet.waitFor({ timeout: 10_000 });
+  await sheet.evaluate((el) => el.scrollIntoView({ block: "start" }));
   const bb = (await sheet.boundingBox());
   await page.mouse.move(bb.x + bb.width * 0.3, bb.y + bb.height * 0.3);
   await page.mouse.down();

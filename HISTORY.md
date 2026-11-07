@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-07: Fix for the failed merge of the figure build
+
+**What:** CI on main failed after merging the figure build. The server dropped the script's "figures" progress events (the stage was missing from `RunStage`), so the panel never showed the step; two browser-test steps looked for a figure on the wrong page and dragged a box outside the visible screen. Now the stage is allowed (unit test added) and the test turns to the figure's page and scrolls the page into view before drawing.
+
+**Why:** owner: "merge error".
+
+**Tested:** `npm run check` exits 0 (206 unit tests). Browser suite from a fresh database: 490 checks, all passing (figures cut by Poppler, flag list, J key, page remembered, box drawn by hand, session Review button).
+
 ## 2026-11-07: Figures cut from the PDF as SVG (no drawing AI), flag list, adjust box, session Review buttons
 
 **What:** the owner saw a "γ" drawn as "y" and asked for a better way than asking the AI to redraw. After a dry run on the six real papers (Physics 8 of 8 figures exact, Maths and Computer Science diagrams, flowcharts and tables exact), figures are now cut from the PDF by code: the brain script turns each figure page into SVG with Poppler (`pdftocairo -svg`, `pdftotext -bbox-layout`, installed in the Brain and CI workflows), `figures.ts` keeps each drawn element with its box (letters as shared outlines, numbers rounded; a crop is about 5 to 40 KB), finds each figure above its printed label ("Fig. 2.1") or, without one, the drawing group whose labels match the reading's new figure description, and stores each page's drawing (signed `/api/brain/figpage`, R2 `papers/<doc>/art-<page>.json`). The figure route cuts the box on request. Blue flags only for figures cut by position or not found (and older AI drawings). Review screen: a flag list with colour filters, "Flag N of M", J/K keys, fix-and-next, and the page and flag remembered in the browser; "Adjust box" drags a new box on the whole page (or "Use whole page"), saved as fix action `box` (recorded as an `edit` of the figure, since `paper_fix.action` allows only the 0022 values) with Undo. The run panel shows a step still "working" after the run ended as done (the final save closes the run, so the script's "Saved" note was refused). The session page lists question papers and mark schemes with a Review button and their reading status. The drawing AI is no longer called when reading (about $0.12 saved per paper); its setting stays for step 3.

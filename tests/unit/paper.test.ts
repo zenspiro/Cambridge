@@ -144,6 +144,7 @@ test("paper runs: started with a scope, progress events kept in order, a reading
   assert.equal(st.events.at(-1)!.text, `step ${BRAIN.maxRunEvents + 4}`, "newest last");
   assert.equal(st.events[0]!.text, "step 5", "oldest dropped first");
   assert.equal(cleanEvent({ stage: "nope", state: "start" }, NOW), null);
+  assert.equal(cleanEvent({ stage: "figures", state: "done", text: "Cut 2 of 2 figures" }, NOW)?.stage, "figures", "the figure step is kept");
 
   const content = cleanPaper(READING, "qp");
   const flags = paperFlags({ content: { ...content, items: [{ ...content.items[0]!, text: "A student pushes a trolley down a ramp and measures the time it takes to travel 1.5 m. State the device used to measure the time." }, ...content.items.slice(1)] }, pages: PAGES, gemini: null });
