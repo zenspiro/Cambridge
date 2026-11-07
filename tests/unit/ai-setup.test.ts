@@ -42,7 +42,7 @@ test("check results are cleaned; only a model the last check found working can b
   assert.equal(c.models[1]!.detail, "x y");
   const db = testDb();
   const env = { CLAUDE_MODEL: "claude-sonnet-5-5", GEMINI_MODEL: "gemini-default" };
-  assert.deepEqual(await aiModels(db, env), { claude: "claude-sonnet-5-5", gemini: "gemini-default", claudeChosen: false, geminiChosen: false });
+  assert.deepEqual(await aiModels(db, env), { claude: "claude-sonnet-5-5", gemini: "gemini-default", drawing: "claude-sonnet-5-5", claudeChosen: false, geminiChosen: false, drawingChosen: false });
   assert.equal(await chooseModel(db, "gemini", "gemini-a", "platform-admin", NOW), "bad_model", "no check yet");
   await saveCheck(db, { models: [{ name: "gemini-a", status: "ok" }, { name: "gemini-b", status: "busy" }] }, "gemini", NOW);
   assert.equal((await lastCheck(db))?.models.length, 2);
@@ -50,7 +50,7 @@ test("check results are cleaned; only a model the last check found working can b
   assert.equal(await chooseModel(db, "gemini", "gemini-a; drop", "platform-admin", NOW), "bad_model");
   assert.equal(await chooseModel(db, "other", "gemini-a", "platform-admin", NOW), "bad_model");
   assert.equal(await chooseModel(db, "gemini", "gemini-a", "platform-admin", NOW), "ok_model");
-  assert.deepEqual(await aiModels(db, env), { claude: "claude-sonnet-5-5", gemini: "gemini-a", claudeChosen: false, geminiChosen: true });
+  assert.deepEqual(await aiModels(db, env), { claude: "claude-sonnet-5-5", gemini: "gemini-a", drawing: "claude-sonnet-5-5", claudeChosen: false, geminiChosen: true, drawingChosen: false });
 
   // A Claude check keeps the last Gemini result; any model on Anthropic's list may be chosen (only the one in use is tried).
   await saveCheck(db, { claude: { model: "claude-sonnet-5-5", status: "no_credit", detail: "low" }, claudeModels: [{ name: "claude-sonnet-5-5", status: "no_credit" }, { name: "claude-opus-5-5" }, { name: "gpt-x" }] }, "claude", NOW + 10);
@@ -62,7 +62,14 @@ test("check results are cleaned; only a model the last check found working can b
   assert.equal(c2.claude.status, "no_credit");
   assert.equal(await chooseModel(db, "claude", "claude-haiku-5-5", "platform-admin", NOW), "bad_model", "not on the list");
   assert.equal(await chooseModel(db, "claude", "claude-opus-5-5", "platform-admin", NOW), "ok_model");
-  assert.deepEqual(await aiModels(db, env), { claude: "claude-opus-5-5", gemini: "gemini-a", claudeChosen: true, geminiChosen: true }, "both choices kept");
+  assert.deepEqual(await aiModels(db, env), { claude: "claude-opus-5-5", gemini: "gemini-a", drawing: "claude-opus-5-5", claudeChosen: true, geminiChosen: true, drawingChosen: false }, "both choices kept; drawing follows the main AI");
+  // The drawing AI has its own choice from the same Claude list.
+  assert.equal(await chooseModel(db, "drawing", "gemini-a", "platform-admin", NOW), "bad_model", "drawing is a Claude model");
+  assert.equal(await chooseModel(db, "drawing", "claude-sonnet-5-5", "platform-admin", NOW), "ok_model");
+  const m = await aiModels(db, env);
+  assert.equal(m.drawing, "claude-sonnet-5-5");
+  assert.equal(m.claude, "claude-opus-5-5", "the main AI is unchanged");
+  assert.equal(m.drawingChosen, true);
 });
 
 test("audio and transcription models are not offered", () => {

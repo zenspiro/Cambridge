@@ -27,6 +27,7 @@ export async function POST(request: Request) {
     geminiMaxWaitMs: BRAIN.geminiMaxWaitMs,
     checkModels: BRAIN.checkModels,
     checkDelayMs: BRAIN.checkDelayMs,
+    geminiRetryWaitsMs: BRAIN.geminiRetryWaitsMs,
   };
   if (params.task === "check") return json({ task: "check", which: params.which, models: { claude: models.claude, gemini: models.gemini }, limits });
   const y = await a.db
@@ -40,7 +41,7 @@ export async function POST(request: Request) {
     task: params.task,
     subject: `${subjectLabel(await listSubjects(a.db), y.code)}, syllabus for ${years}`,
     pdfBytes: pdf.bytes,
-    models: { claude: models.claude, gemini: models.gemini },
+    models: { claude: models.claude, gemini: models.gemini, drawing: models.drawing },
     limits,
   });
 }

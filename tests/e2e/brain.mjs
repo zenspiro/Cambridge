@@ -89,7 +89,7 @@ const GOOD = {
 const copy = (d) => JSON.parse(JSON.stringify(d));
 
 // ---------- Fake Claude (streamed Messages API) and Gemini (generateContent) ----------
-const ai = { claude: [], gemini: [], claudeAnswers: [], geminiAnswer: GOOD, busyOnce: false };
+const ai = { claude: [], gemini: [], claudeAnswers: [], geminiAnswer: GOOD, busyOnce: false, down503: 0, claudeFailOnce: false };
 // Models the fake Google lists for the key; tiny questions to gemini-2.5-pro come back "not on your plan".
 const LISTED = ["gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-2.5-pro", "gemini-embedding-001"];
 const server = createServer((req, res) => {
@@ -111,6 +111,12 @@ const server = createServer((req, res) => {
         // The AI setup check's one tiny question (not streamed).
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ id: "msg_check", type: "message", role: "assistant", model: json.model, content: [{ type: "text", text: "OK" }], stop_reason: "end_turn", stop_sequence: null, usage: { input_tokens: 10, output_tokens: 2 } }));
+        return;
+      }
+      if (ai.claudeFailOnce) {
+        ai.claudeFailOnce = false;
+        res.writeHead(500, { "content-type": "application/json" });
+        res.end(JSON.stringify({ type: "error", error: { type: "api_error", message: "Internal server error" } }));
         return;
       }
       const answer = JSON.stringify(ai.claudeAnswers.shift() ?? GOOD);
@@ -136,6 +142,12 @@ const server = createServer((req, res) => {
       if (req.url.startsWith("/gemini/models/gemini-2.5-pro:")) {
         res.writeHead(429, { "content-type": "application/json" });
         res.end(JSON.stringify({ error: { code: 429, message: "Quota exceeded for metric: generate_content_free_tier_requests, limit: 0, model: gemini-2.5-pro" } }));
+        return;
+      }
+      if (ai.down503 > 0) {
+        ai.down503--;
+        res.writeHead(503, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: { code: 503, message: "The model is overloaded. Please try again later.", status: "UNAVAILABLE" } }));
         return;
       }
       if (ai.busyOnce) {
@@ -299,6 +311,38 @@ try {
   const rb = await runBrain(runBusy);
   check(rb.status === 0 && rb.out.includes("Gemini is busy"), "a busy Gemini is waited for, not a failed run");
 
+  // 7b. Gemini overloaded (503) for a moment: tried again after a wait, and the run carries on.
+  ai.down503 = 1;
+  const runBlip = newRun();
+  const rbl = await runBrain(runBlip);
+  check(rbl.status === 0 && rbl.out.includes("Gemini is having trouble (503)"), "an overloaded Gemini is tried again, not a failed run");
+
+  // 7c. Gemini stays down: the run stops before Claude is asked anything, so it costs nothing.
+  ai.down503 = 10;
+  ai.claude.length = 0;
+  const runDown = newRun();
+  const rd = await runBrain(runDown);
+  check(rd.status === 1 && rows(`SELECT error_ref FROM job WHERE id = '${runDown}'`)[0].error_ref === "gemini_down", "Gemini down after its retries stops the run with its own reason");
+  check(ai.claude.length === 0, "Claude is never asked when Gemini is down (Gemini reads first)");
+  ai.down503 = 0;
+  await page.goto(BASE + "/admin/library/0625/topics");
+  check((await card.locator(".alert").textContent())?.includes("Nothing was charged for Claude"), "the page says Claude was not charged");
+
+  // 7d. Claude fails after Gemini finished: Gemini's reading is kept, and the next run reuses it.
+  ai.claudeFailOnce = true;
+  const runFail = newRun();
+  const rf = await runBrain(runFail);
+  check(rf.status === 1, "a Claude failure stops the run");
+  ai.gemini.length = 0;
+  const runAgain = newRun();
+  const ra = await runBrain(runAgain);
+  check(ra.status === 0 && ra.out.includes("gemini: reusing the reading kept"), "the next run reuses Gemini's kept reading");
+  check(!ai.gemini.some((x) => x.url.includes(":generateContent")), "Gemini is not asked again for a kept reading");
+  ai.gemini.length = 0;
+  const runFresh = newRun();
+  await runBrain(runFresh);
+  check(ai.gemini.some((x) => x.url.includes(":generateContent")), "after a saved tree, the next run reads afresh");
+
   // 8. The topic trees overview in the sidebar.
   await page.goto(BASE + "/admin/topics");
   check((await page.locator(".side-link[aria-current=page]").textContent()) === "Topic trees", "sidebar marks Topic trees");
@@ -359,6 +403,11 @@ try {
   const gemOptions = await page.locator("#ai-gemini select option").evaluateAll((o) => o.map((x) => x.value));
   check(gemOptions.includes("gemini-3.1-flash-lite") && !gemOptions.includes("gemini-2.5-pro"), "the Gemini dropdown offers only working models");
   check((await page.locator("#ai-claude select option").count()) === 2, "the Claude dropdown offers the key's Claude models");
+  check((await page.locator("#ai-drawing").textContent())?.includes("(the same as the main AI)"), "the drawing AI follows the main AI until chosen");
+  await page.locator("#ai-drawing select").selectOption("claude-opus-5-5");
+  await page.locator("#ai-drawing button", { hasText: "Use this model" }).click();
+  await page.locator("#ai-drawing", { hasText: "(chosen here)" }).waitFor({ timeout: 15_000 }).then(() => check(true, "a drawing model is chosen on its own"), () => check(false, "a drawing model is chosen on its own"));
+  check((await page.locator("#ai-claude").textContent())?.includes("claude-sonnet-5-5"), "choosing the drawing model leaves the main AI alone");
   await page.locator("#ai-gemini select").selectOption("gemini-3.1-flash-lite");
   await page.locator("#ai-gemini button", { hasText: "Use this model" }).click();
   // In place (ActionForm), or as a plain form if clicked before the page's scripts loaded: either way it says Saved.
@@ -409,6 +458,7 @@ try {
   check(unsigned.status === 401, "brain endpoints refuse unsigned requests");
   check((await fetch(`${BASE}/api/brain/check`, { method: "POST", body: "{}" })).status === 401, "the check endpoint refuses unsigned requests");
   check((await fetch(`${BASE}/api/brain/usage`, { method: "POST", body: "{}" })).status === 401, "the usage endpoint refuses unsigned requests");
+  check((await fetch(`${BASE}/api/brain/reading`, { method: "POST", body: "{}" })).status === 401 && (await fetch(`${BASE}/api/brain/saved`, { method: "POST", body: "{}" })).status === 401, "the kept-reading endpoints refuse unsigned requests");
 
   check(errors.length === 0, `no script errors${errors.length ? ": " + errors.join(" | ") : ""}`);
 } finally {

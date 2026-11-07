@@ -21,6 +21,7 @@ export const BRAIN_REASONS: Record<string, string> = {
   gemini_too_long: "Gemini's answer was longer than allowed.",
   gemini_bad_answer: "Gemini's answer was not in the agreed shape.",
   gemini_error: "Gemini's service gave an error. Try again later.",
+  gemini_down: "Google's Gemini service was overloaded or down, and still was after three more tries over about two minutes. Nothing was charged for Claude: it only starts after Gemini. Try again later.",
   models: "CLAUDE_MODEL or GEMINI_MODEL is not set.",
   script_error: "The run stopped on an unexpected error. The GitHub log has the details.",
 };

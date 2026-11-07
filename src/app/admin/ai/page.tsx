@@ -59,7 +59,7 @@ export default async function AiSetupPage({ searchParams }: { searchParams: Prom
     return y ? { href: `/admin/library/${y.code}/topics/${y.valid_from_year}`, label: `Topic tree, ${y.code} syllabus from ${y.valid_from_year}` } : null;
   };
   // Models in the price table: the two in use, any priced, any used this month.
-  const priceModels = [...new Set([models.claude, models.gemini, ...Object.keys(prices), ...summary.byModel.map((m) => m.model)])].filter(Boolean);
+  const priceModels = [...new Set([models.claude, models.gemini, models.drawing, ...Object.keys(prices), ...summary.byModel.map((m) => m.model)])].filter(Boolean);
 
   return (
     <AdminShell current="/admin/ai" title="AI setup">
@@ -72,6 +72,7 @@ export default async function AiSetupPage({ searchParams }: { searchParams: Prom
         <div className="ai-pair">
           <AiBox provider="claude" role="Main AI (reads the papers)" model={models.claude} chosen={models.claudeChosen} check={check} active={active} />
           <AiBox provider="gemini" role="Checking AI (reads them again to compare)" model={models.gemini} chosen={models.geminiChosen} check={check} active={active} />
+          <DrawingBox model={models.drawing} chosen={models.drawingChosen} check={check} />
         </div>
         <p className="muted">
           Each check runs on GitHub with your keys and costs a fraction of a cent. Check Claude asks Anthropic which Claude models your key can use and tries the
@@ -117,7 +118,7 @@ export default async function AiSetupPage({ searchParams }: { searchParams: Prom
           <tbody>
             {priceModels.map((m) => (
               <tr key={m} id={`price-${m}`}>
-                <td>{m.startsWith("claude-") ? "Claude" : "Gemini"} <span className="mono muted">{m}</span>{m === models.claude || m === models.gemini ? <span className="muted"> (in use)</span> : null}</td>
+                <td>{m.startsWith("claude-") ? "Claude" : "Gemini"} <span className="mono muted">{m}</span>{m === models.claude || m === models.gemini || m === models.drawing ? <span className="muted"> (in use)</span> : null}</td>
                 <td>
                   <ActionForm className="price-form" action="/admin/ai/price" messages={MESSAGES}>
                     <input type="hidden" name="model" value={m} />
@@ -156,6 +157,36 @@ export default async function AiSetupPage({ searchParams }: { searchParams: Prom
         </section>
       ) : null}
     </AdminShell>
+  );
+}
+
+/**
+ * The drawing AI (owner, 7 Nov 2026): a Claude model of its own for redrawing figures (step 2b on). It picks from the
+ * Claude check's list and has no check of its own; until chosen it is the main AI's model.
+ */
+function DrawingBox({ model, chosen, check }: { model: string; chosen: boolean; check: AiCheck | null }) {
+  const options = check?.claudeModels ?? [];
+  const list = options.some((o) => o.name === model) ? options : model ? [{ name: model, label: model }, ...options] : options;
+  return (
+    <div className="ai-box stack" id="ai-drawing">
+      <h3 className="label-inline">Drawing AI: redraws the figures (used from paper reading on)</h3>
+      <dl className="facts">
+        <dt>Model</dt><dd><span className="mono">{model || "not set"}</span> <span className="muted">{chosen ? "(chosen here)" : "(the same as the main AI)"}</span></dd>
+      </dl>
+      {options.length ? (
+        <ActionForm className="inline-form" action="/admin/ai/model" messages={MESSAGES}>
+          <input type="hidden" name="provider" value="drawing" />
+          <label className="field">
+            <span className="label-inline">Claude models your key can use</span>
+            <select className="input" name="model" defaultValue={model}>
+              {list.map((m) => <option key={m.name} value={m.name}>{m.label === m.name ? m.name : `${m.label} (${m.name})`}</option>)}
+            </select>
+          </label>
+          <button className="btn btn-small" type="submit">Use this model</button>
+        </ActionForm>
+      ) : <p className="muted">Check Claude to see the models your key can use.</p>}
+      <p className="muted">Its spend shows as its own job (Drawing figures) on the dashboard below.</p>
+    </div>
   );
 }
 

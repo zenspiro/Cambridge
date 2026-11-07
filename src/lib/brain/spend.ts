@@ -22,6 +22,7 @@ export const TASK_WORDS: Record<string, string> = {
   topics: "Topic trees",
   check: "AI setup checks",
   paper: "Reading papers",
+  drawing: "Drawing figures",
 };
 export const taskWords = (t: string) => TASK_WORDS[t] ?? "Other runs";
 

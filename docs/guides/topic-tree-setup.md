@@ -46,3 +46,9 @@ The version shows the reason in plain words, for example a missing or refused ke
 - Spend comes from the tokens each service reports and the prices on the page (dollars per million tokens). Claude's are filled in; type Gemini's (0 on the free tier).
 - Set a monthly cap to stop runs that would go past it. With a cap, every model in use needs a price.
 - The figures are estimates. The real bill is on the Anthropic Console (Plans & Billing) and in Google AI Studio.
+
+## When Google is busy
+
+- Gemini reads first and Claude second, so if Google is down you pay nothing.
+- Google overloaded (503) is tried again three times over about two minutes before the run stops.
+- A reading that finished is kept: press Draft again later and it is reused, not paid for twice.

@@ -109,6 +109,8 @@ export const BRAIN = {
   /** Gemini busy (429): tries per question, and the longest wait between them. */
   geminiTries: 4,
   geminiMaxWaitMs: 60_000,
+  /** Gemini overloaded or down (503, 500, 502, 504, no answer): the waits before each further try (owner, 7 Nov 2026). */
+  geminiRetryWaitsMs: [10_000, 30_000, 60_000],
   /** Rough cost before a run with no history (owner request 6 Nov 2026): PDF bytes per page, tokens per page read, and
    * tokens one answer writes (thinking included). Past runs on the same model replace these. */
   estBytesPerPage: 25_000,
