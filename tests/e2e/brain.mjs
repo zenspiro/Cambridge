@@ -520,7 +520,8 @@ try {
   check((await page.locator("#item-1\\(a\\)").textContent())?.includes("State the instrument"), "the paper is rebuilt from our reading, page by page");
   check((await page.locator("#item-1\\(a\\) .pq-marks").textContent()) === "[1]", "marks show as on the paper");
   check((await page.locator("#item-1\\(b\\).pq-red").count()) === 1, "the misread part is boxed in red");
-  check((await page.locator("#run-progress", { hasText: "Finished" }).count()) === 1, "the finished run's steps stay on the page for a while");
+  // The panel asks the server for its state after the page loads, so wait for its answer (CI is slower than local).
+  await page.locator("#run-progress", { hasText: "Finished" }).waitFor({ timeout: 15_000 }).then(() => check(true, "the finished run's steps stay on the page for a while"), () => check(false, "the finished run's steps stay on the page for a while"));
   check((await page.locator("#item-1\\(b\\) .flag-pdf").first().textContent())?.includes("Calculate its average speed"), "the flag shows the PDF's own words");
   const img = page.locator("#figure-F1 img");
   check((await img.count()) === 1 && (await page.locator("#figure-F1.pq-blue").count()) === 1, "our drawing of the figure shows, boxed in blue");

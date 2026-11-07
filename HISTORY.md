@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-07: CI fix: wait for the live panel's answer
+
+**What:** merge #37 (step 2b) failed one browser check on CI's main run: right after the review page loads, the live progress panel asks the server for the run's state, and the check looked for "Finished" before that answer came back (the slower CI machine lost the race; the pull request's own run passed). The check now waits for the answer. No app code changed.
+
+**Why:** owner reported the failed merge.
+
+**Tested:** full browser suite from a fresh database passes locally (exit 0), including this check.
+
 ## 2026-11-07: Reading papers with flags and fixes (Phase 2, step 2b); live run progress
 
 **What:** every question paper and mark scheme in the library can be read by the brain. On its review screen, "Read this paper" (with its rough cost and the monthly cap) starts a run on GitHub: Gemini reads it first (free), then Claude copies every question part (wording, [marks], options, answer lines, figures) or mark scheme row, then the Drawing AI redraws each figure as our own drawing. The right side of the review screen now shows the paper rebuilt from our database, page by page, beside the PDF; one page bar turns both. Code checks every part against the PDF's own text and Gemini's reading and boxes problems: red when the wording differs, amber when numbers or marks differ (including a mark scheme against its question paper), blue for every figure we drew. Each flag has its fixes: use the PDF's version (code copies the PDF's words), read it again (that part only), edit it yourself (checked against the PDF), or It's fine (remembered as a rule for the subject); figures get Looks right or Redraw. Every fix can be undone. A paper is Ready when no flag is open, or when the admin marks it ready anyway (recorded). Reading again keeps everything already confirmed. Topic tree and paper runs now show live progress for each step and model (what it is doing, tokens, time) in place, instead of reloading the page. Drawings are cleaned to safe SVG and shown only as images. The admin UI/UX overhaul is recorded in the plan as a must-do before any student page.
