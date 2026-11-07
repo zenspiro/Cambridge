@@ -1,0 +1,369 @@
+// Reading the papers (Phase 2, step 2b; owner 6 and 7 Nov 2026). A question paper or mark scheme is read by Claude
+// into numbered items (questions and parts, or mark scheme answers) with their marks, options and figures; the drawing
+// AI redraws each figure as our own SVG; Gemini reads the same paper separately. Code then checks every item against
+// the PDF's own text and the two readings against each other, and raises flags for the review screen: red when the
+// wording differs, amber when numbers or marks differ, blue for every figure we drew (compared by eye).
+// Pure, strip-only TypeScript: shared by the brain script (GitHub Actions) and the Worker. No Next imports.
+import { BRAIN } from "../config.ts";
+import { coverage, similarity, squash, textIndex, type TextIndex } from "./topics.ts";
+
+export type PaperKind = "qp" | "ms";
+export type PaperOption = { letter: string; text: string };
+export type PaperItem = {
+  /** As printed: "1", "1(a)", "3(b)(ii)". */
+  number: string;
+  /** The page it starts on (1-based). */
+  page: number;
+  /** Question wording, or for a mark scheme the answer and mark points. */
+  text: string;
+  marks: number | null;
+  /** Multiple choice options A to D. */
+  options: PaperOption[];
+  /** Answer lines printed under a question part. */
+  answerLines: number;
+  /** Figures this item shows, by id. */
+  figures: string[];
+  /** Mark scheme guidance (accept, ignore, allow), word for word. */
+  guidance: string;
+};
+export type PaperFigure = { id: string; page: number; caption: string; svg: string };
+export type PaperContent = { kind: PaperKind; totalMarks: number | null; items: PaperItem[]; figures: PaperFigure[] };
+
+export type FlagKind = "words" | "numbers" | "marks" | "numbering" | "figure" | "agree" | "missing" | "text";
+export type FlagColour = "red" | "amber" | "blue";
+export type Flag = {
+  /** Stable within a reading: "words:1(a)", "figure:F2". */
+  key: string;
+  /** The item (or figure id, or "paper") it belongs to. */
+  item: string;
+  kind: FlagKind;
+  colour: FlagColour;
+  /** One plain line for the review screen. */
+  reason: string;
+  /** The PDF's own words for this item, when code could find them ("Use the PDF's version" copies these). */
+  pdfText: string;
+  /** What was flagged, independent of the item number: an "It's fine" becomes a rule on this for the subject. */
+  fingerprint: string;
+};
+
+const COLOUR: Record<FlagKind, FlagColour> = {
+  words: "red", agree: "red", missing: "red", numbers: "amber", marks: "amber", numbering: "amber", text: "amber", figure: "blue",
+};
+
+const NUMBER_RE = /^[0-9]{1,3}(\s?\([a-z]{1,4}\)){0,3}$/;
+const FIGURE_ID_RE = /^[A-Za-z0-9_.-]{1,20}$/;
+
+const str = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/\r\n?/g, "\n").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "").trim().slice(0, max) : "");
+const int = (v: unknown, min: number, max: number) => (typeof v === "number" && Number.isInteger(v) && v >= min && v <= max ? v : null);
+const obj = (v: unknown) => (v && typeof v === "object" ? (v as Record<string, unknown>) : {});
+
+/** "1 (a)(ii)" and "1(a) (ii)" both become "1(a)(ii)". */
+export const normNumber = (s: string) => s.replace(/\s+/g, "");
+
+/** An AI's answer made safe: known fields only, capped, numbers in the printed shape. */
+export function cleanPaper(raw: unknown, kind: PaperKind): PaperContent {
+  const o = obj(raw);
+  const figures: PaperFigure[] = (Array.isArray(o.figures) ? o.figures : []).slice(0, BRAIN.maxFigures).flatMap((x): PaperFigure[] => {
+    const r = obj(x);
+    const id = str(r.id, 20);
+    return FIGURE_ID_RE.test(id) ? [{ id, page: int(r.page, 1, 500) ?? 1, caption: str(r.caption, 300), svg: cleanSvg(str(r.svg, BRAIN.maxSvgBytes * 2)) }] : [];
+  });
+  const figureIds = new Set(figures.map((f) => f.id));
+  const items: PaperItem[] = (Array.isArray(o.items) ? o.items : []).slice(0, BRAIN.maxPaperItems).flatMap((x): PaperItem[] => {
+    const r = obj(x);
+    const number = normNumber(str(r.number, 24));
+    if (!NUMBER_RE.test(number)) return [];
+    const options = (Array.isArray(r.options) ? r.options : []).slice(0, BRAIN.maxOptions).flatMap((y): PaperOption[] => {
+      const q = obj(y);
+      const letter = str(q.letter, 2).toUpperCase();
+      return /^[A-H]$/.test(letter) ? [{ letter, text: str(q.text, 600) }] : [];
+    });
+    const figs = (Array.isArray(r.figures) ? r.figures : []).map((f) => str(f, 20)).filter((f) => FIGURE_ID_RE.test(f)).slice(0, 10);
+    return [{
+      number,
+      page: int(r.page, 1, 500) ?? 1,
+      text: str(r.text, BRAIN.maxItemText),
+      marks: int(r.marks, 0, 200),
+      options,
+      answerLines: int(r.answerLines, 0, 40) ?? 0,
+      figures: figs,
+      guidance: str(r.guidance, 2_000),
+    }];
+  });
+  // Figures named by an item but not drawn still get an entry (flagged "not drawn yet").
+  for (const it of items) for (const f of it.figures) if (!figures.some((x) => x.id === f)) figures.push({ id: f, page: it.page, caption: "", svg: "" });
+  return { kind, totalMarks: int(o.totalMarks, 1, 1_000), items, figures: figures.slice(0, BRAIN.maxFigures) };
+}
+
+// ---------- Figures: our own drawing, as safe SVG ----------
+
+const SVG_TAGS = new Set(["svg", "g", "path", "line", "polyline", "polygon", "rect", "circle", "ellipse", "text", "tspan", "defs", "marker", "title", "desc"]);
+const SVG_ATTRS = new Set([
+  "xmlns", "version", "viewbox", "width", "height", "preserveaspectratio", "id", "transform", "d", "x", "y", "x1", "y1", "x2", "y2",
+  "cx", "cy", "r", "rx", "ry", "points", "fill", "stroke", "stroke-width", "stroke-dasharray", "stroke-linecap", "stroke-linejoin",
+  "opacity", "fill-opacity", "stroke-opacity", "font-size", "font-family", "font-weight", "font-style", "text-anchor",
+  "dominant-baseline", "marker-end", "marker-start", "markerwidth", "markerheight", "refx", "refy", "orient", "dx", "dy",
+]);
+const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const unesc = (s: string) => s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, "\"").replace(/&#39;/g, "'").replace(/&amp;/g, "&");
+
+/**
+ * An AI-drawn SVG rebuilt from an allowlist: drawing elements and presentation attributes only, every value and text
+ * escaped again, no scripts, styles, links, foreign content or outside references. It is also only ever shown through
+ * an <img> (which never runs scripts). Returns "" when nothing usable is left.
+ */
+export function cleanSvg(input: string): string {
+  if (!input || input.length > BRAIN.maxSvgBytes * 2) return "";
+  let s = input
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, "")
+    .replace(/<[!?][^>]*>/g, "")
+    .replace(/<(script|style|foreignObject|iframe|object|embed|image|use|a)\b[\s\S]*?<\/\1\s*>/gi, "");
+  const out: string[] = [];
+  const re = /<(\/?)([a-zA-Z][a-zA-Z0-9-]*)([^>]*?)(\/?)>|([^<]+)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(s)) !== null) {
+    if (m[5] !== undefined) {
+      if (out.length) out.push(esc(unesc(m[5])));
+      continue;
+    }
+    const tag = m[2]!.toLowerCase();
+    if (!SVG_TAGS.has(tag)) continue;
+    if (m[1]) {
+      out.push(`</${tag}>`);
+      continue;
+    }
+    const attrs: string[] = [];
+    const ar = /([a-zA-Z][a-zA-Z0-9:-]*)\s*=\s*("([^"]*)"|'([^']*)')/g;
+    let a: RegExpExecArray | null;
+    while ((a = ar.exec(m[3] ?? "")) !== null) {
+      const name = a[1]!.toLowerCase();
+      const value = unesc(a[3] ?? a[4] ?? "");
+      if (!SVG_ATTRS.has(name) || value.length > 20_000) continue;
+      if (/url\s*\(/i.test(value) && !/^url\(#[A-Za-z0-9_-]{1,40}\)$/.test(value.trim())) continue;
+      if (/javascript:|data:|expression\s*\(|[<>]/i.test(value)) continue;
+      if (name === "xmlns" && value !== "http://www.w3.org/2000/svg") continue;
+      attrs.push(` ${name === "viewbox" ? "viewBox" : name === "preserveaspectratio" ? "preserveAspectRatio" : name === "markerwidth" ? "markerWidth" : name === "markerheight" ? "markerHeight" : name === "refx" ? "refX" : name === "refy" ? "refY" : name}="${esc(value)}"`);
+    }
+    if (tag === "svg" && !attrs.some((x) => x.startsWith(" xmlns="))) attrs.unshift(` xmlns="http://www.w3.org/2000/svg"`);
+    out.push(`<${tag}${attrs.join("")}${m[4] ? "/" : ""}>`);
+  }
+  s = out.join("");
+  if (!s.startsWith("<svg") || s.length > BRAIN.maxSvgBytes) return "";
+  return s;
+}
+
+// ---------- Checks and flags ----------
+
+/** A short stable fingerprint (FNV-1a, hex). */
+export function fingerprint(...parts: string[]): string {
+  let h = 0x811c9dc5;
+  for (const ch of parts.join("|")) {
+    h ^= ch.codePointAt(0)!;
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(16).padStart(8, "0");
+}
+
+/** Everything of an item that must be in the PDF: its wording and its options. */
+export const itemWording = (it: PaperItem) => [it.text, ...it.options.map((o) => o.text)].join(" ");
+
+const numbersIn = (s: string) => [...new Set(s.match(/\d+(?:\.\d+)?/g) ?? [])];
+
+/** The PDF's numbers, as printed ("3.5", "120"), for the numbers check. */
+export function pdfNumbers(pages: readonly string[]): Set<string> {
+  return new Set(pages.join(" ").match(/\d+(?:\.\d+)?/g) ?? []);
+}
+
+/**
+ * The PDF's own words closest to an item's wording, from the page it is on (else the whole paper), so "Use the PDF's
+ * version" can copy them. Empty when nothing is close enough.
+ */
+export function pdfVersion(it: PaperItem, pages: readonly string[]): string {
+  const source = (pages[it.page - 1] && squash(pages[it.page - 1]!).length > 20 ? pages[it.page - 1]! : pages.join(" ")).replace(/\s+/g, " ");
+  const words = source.split(" ").filter(Boolean).slice(0, 6_000);
+  const want = it.text.replace(/\s+/g, " ").trim();
+  const wantWords = want.split(" ");
+  const n = wantWords.length;
+  if (!want || n > 400 || !words.length) return "";
+  const first = squash(wantWords[0] ?? "");
+  const last = squash(wantWords[n - 1] ?? "");
+  // Start where the item's first word is printed (else anywhere); end where its last word is, when it is.
+  const starts = words.map((w, i) => (squash(w) === first ? i : -1)).filter((i) => i >= 0);
+  let best = { score: 0, text: "" };
+  for (const i of starts.length ? starts : words.map((_, k) => k)) {
+    for (let len = Math.max(1, n - 3); len <= n + 3 && i + len <= words.length; len++) {
+      const text = words.slice(i, i + len).join(" ");
+      const score = similarity(text, want) + (last && squash(words[i + len - 1]!) === last ? 0.05 : 0);
+      if (score > best.score) best = { score, text };
+    }
+  }
+  return best.score >= 0.6 ? best.text : "";
+}
+
+export type CheckInput = {
+  content: PaperContent;
+  pages: readonly string[];
+  /** Gemini's reading of the same paper, when it read it. */
+  gemini: PaperContent | null;
+};
+
+/**
+ * Every flag on a reading. Words: each item's wording must be found in the PDF text (as for the topic tree). Numbers:
+ * every number an item uses must be printed in the PDF. Marks: each part's [marks] must be printed, and the parts
+ * must add up to the paper's total. Numbering: no item twice. Figures: each one we drew is checked by eye (blue).
+ * Agreement: where Gemini read an item differently, missed one or found one we lack, unless the PDF text settles it.
+ */
+export function paperFlags({ content, pages, gemini }: CheckInput): Flag[] {
+  const flags: Flag[] = [];
+  const idx: TextIndex = textIndex(pages);
+  const textOk = idx.chars >= BRAIN.minPaperTextChars;
+  const nums = pdfNumbers(pages);
+  const raw = pages.join(" ");
+  const add = (kind: FlagKind, item: string, reason: string, what: string, pdfText = "", keyExtra = "") =>
+    flags.push({ key: `${kind}:${item}${keyExtra}`, item, kind, colour: COLOUR[kind], reason, pdfText, fingerprint: fingerprint(kind, squash(what), reason) });
+  const found = (s: string) => coverage(idx, s) >= BRAIN.minWordCover;
+
+  if (!textOk) add("text", "paper", "The PDF's text could not be read (a scan?), so wording and numbers were not checked against it.", "unreadable");
+  const seen = new Set<string>();
+  for (const it of content.items) {
+    if (seen.has(it.number)) add("numbering", it.number, `Question ${it.number} appears twice.`, it.number + itemWording(it), "", `#${content.items.indexOf(it)}`);
+    seen.add(it.number);
+    if (textOk) {
+      const wording = itemWording(it);
+      if (squash(wording) && !found(wording)) add("words", it.number, "Wording not found in the PDF.", wording, pdfVersion(it, pages));
+      for (const x of numbersIn(wording)) {
+        if (!nums.has(x)) {
+          add("numbers", it.number, `The number ${x} is not printed in the PDF.`, `${x}|${wording}`, "", `:${x}`);
+          break;
+        }
+      }
+      if (content.kind === "qp" && it.marks !== null && it.marks > 0 && !raw.includes(`[${it.marks}]`) && !raw.includes(`[Total: ${it.marks}]`)) {
+        add("marks", it.number, `[${it.marks}] is not printed in the PDF.`, `${it.marks}|${wording}`);
+      }
+    }
+  }
+  if (content.totalMarks !== null) {
+    const sum = content.items.reduce((a, it) => a + (it.marks ?? 0), 0);
+    if (sum > 0 && sum !== content.totalMarks) add("marks", "paper", `The parts add up to ${sum} marks, but the paper's total is ${content.totalMarks}.`, `${sum}/${content.totalMarks}`);
+    if (textOk && !nums.has(String(content.totalMarks))) add("numbers", "paper", `The total of ${content.totalMarks} marks is not printed in the PDF.`, `total ${content.totalMarks}`);
+  }
+  for (const f of content.figures) {
+    add("figure", f.id, f.svg ? `Figure ${f.id}: our own drawing. Compare it with the PDF.` : `Figure ${f.id} is not drawn yet.`, f.svg || `none:${f.id}:${f.caption}`);
+  }
+  if (gemini) {
+    const theirs = new Map(gemini.items.map((g) => [g.number, g]));
+    const ours = new Set(content.items.map((i) => i.number));
+    for (const it of content.items) {
+      const g = theirs.get(it.number);
+      if (!g) continue;
+      const mine = itemWording(it);
+      const other = itemWording(g);
+      if (similarity(mine, other) < BRAIN.sameText) {
+        const settled = textOk && found(mine) && !found(other);
+        if (!settled) add("agree", it.number, "Claude and Gemini read this differently.", `${mine}|${other}`, textOk && found(other) ? g.text : "");
+      }
+      if (it.marks !== null && g.marks !== null && it.marks !== g.marks) add("marks", it.number, `Gemini reads ${g.marks} marks here, we have ${it.marks}.`, `${it.marks}|${g.marks}|${mine}`, "", ":gemini");
+    }
+    for (const g of gemini.items) {
+      if (!ours.has(g.number)) add("missing", g.number, `Gemini found question ${g.number}; our reading does not have it.`, itemWording(g), textOk && found(itemWording(g)) ? g.text : "");
+    }
+  }
+  return flags;
+}
+
+/** Flags a mark scheme raises against its question paper: the marks per question must match. */
+export function marksAgainstPaper(ms: PaperContent, qp: PaperContent): Flag[] {
+  const top = (n: string) => n.match(/^\d+/)?.[0] ?? n;
+  const sum = (c: PaperContent) => {
+    const m = new Map<string, number>();
+    for (const it of c.items) if (it.marks !== null) m.set(top(it.number), (m.get(top(it.number)) ?? 0) + it.marks);
+    return m;
+  };
+  const a = sum(ms);
+  const b = sum(qp);
+  const flags: Flag[] = [];
+  for (const [q, marks] of a) {
+    const want = b.get(q);
+    if (want !== undefined && want !== marks) {
+      const reason = `Question ${q} carries ${marks} marks in the mark scheme, ${want} in the question paper.`;
+      flags.push({ key: `marks:${q}:qp`, item: q, kind: "marks", colour: "amber", reason, pdfText: "", fingerprint: fingerprint("marks", `${q}:${marks}:${want}`, reason) });
+    }
+  }
+  return flags;
+}
+
+/** Flags still open: not settled by the admin ("It's fine", "Looks right") and not ruled out for the subject. */
+export function openFlags(flags: readonly Flag[], dismissed: ReadonlySet<string>, rules: ReadonlySet<string>): Flag[] {
+  return flags.filter((f) => !dismissed.has(f.fingerprint) && !rules.has(f.fingerprint));
+}
+
+/**
+ * A new reading merged with what was there (owner: every run skips what is confirmed). `only` given: just those items
+ * (and figures) are taken from the new reading. Otherwise items without open flags are kept as they were and the rest
+ * come from the new reading, in the new reading's order; items only the old one had stay.
+ */
+export function mergeReading(old: PaperContent | null, fresh: PaperContent, open: ReadonlySet<string>, only?: { items: readonly string[]; figures: readonly string[] }): PaperContent {
+  if (!old) return fresh;
+  const oldItems = new Map(old.items.map((i) => [i.number, i]));
+  const keepOld = (n: string) => (only ? !only.items.includes(n) : !open.has(n));
+  const items: PaperItem[] = [];
+  const done = new Set<string>();
+  for (const it of only ? old.items : fresh.items) {
+    const o = oldItems.get(it.number);
+    const f = fresh.items.find((x) => x.number === it.number);
+    items.push(o && keepOld(it.number) ? o : f ?? it);
+    done.add(it.number);
+  }
+  for (const it of only ? fresh.items.filter((x) => only.items.includes(x.number)) : old.items) if (!done.has(it.number)) items.push(it);
+  const figIds = new Set([...old.figures.map((f) => f.id), ...fresh.figures.map((f) => f.id)]);
+  const figures: PaperFigure[] = [];
+  for (const id of figIds) {
+    const o = old.figures.find((f) => f.id === id);
+    const f = fresh.figures.find((x) => x.id === id);
+    const takeFresh = only ? only.figures.includes(id) || only.items.some((n) => fresh.items.find((x) => x.number === n)?.figures.includes(id)) : !o || !o.svg || open.has(id);
+    figures.push(takeFresh && f && (f.svg || !o) ? f : o ?? f!);
+  }
+  return { kind: fresh.kind, totalMarks: fresh.totalMarks ?? old.totalMarks, items, figures };
+}
+
+/**
+ * After the admin changes one item (the PDF's version, or their own wording): its wording, number and marks flags are
+ * worked out again from the pages around it only (quick enough for the Worker), and a Gemini difference is settled
+ * when the new wording is in the PDF. Other items' flags stay as they were.
+ */
+export function recheckItem(c: PaperContent, flags: readonly Flag[], number: string, pages: readonly string[]): Flag[] {
+  const it = c.items.find((x) => x.number === number);
+  if (!it) return [...flags];
+  const near = pages.slice(Math.max(0, it.page - 2), it.page + 1);
+  const pageIdx = textIndex(near.length ? near : pages);
+  const allText = pages.join(" ");
+  const readable = squash(allText).length >= BRAIN.minPaperTextChars;
+  const nums = pdfNumbers(pages);
+  const wording = itemWording(it);
+  const found = !readable || coverage(pageIdx, wording) >= BRAIN.minWordCover;
+  const kept = flags.filter((f) => f.item !== number || !(f.kind === "words" || f.kind === "numbers" || (f.kind === "marks" && !f.key.endsWith(":gemini")) || (f.kind === "agree" && found)));
+  const add = (kind: FlagKind, reason: string, what: string, keyExtra = "") =>
+    kept.push({ key: `${kind}:${number}${keyExtra}`, item: number, kind, colour: COLOUR[kind], reason, pdfText: "", fingerprint: fingerprint(kind, squash(what), reason) });
+  if (readable) {
+    if (!found) add("words", "Your wording is not found in the PDF either.", wording);
+    const missing = numbersIn(wording).find((x) => !nums.has(x));
+    if (missing) add("numbers", `The number ${missing} is not printed in the PDF.`, `${missing}|${wording}`, `:${missing}`);
+    if (c.kind === "qp" && it.marks !== null && it.marks > 0 && !allText.includes(`[${it.marks}]`) && !allText.includes(`[Total: ${it.marks}]`)) {
+      add("marks", `[${it.marks}] is not printed in the PDF.`, `${it.marks}|${wording}`);
+    }
+  }
+  return kept;
+}
+
+/** The admin's own wording for one item (checked against the PDF by the next recheck). */
+export function editItem(c: PaperContent, number: string, text: string, marks: number | null): PaperContent {
+  return { ...c, items: c.items.map((it) => (it.number === number ? { ...it, text: str(text, BRAIN.maxItemText), marks } : it)) };
+}
+
+/** Pages of a reading, in order, with their items: what the review screen lays out like the paper. */
+export function itemsByPage(c: PaperContent): { page: number; items: PaperItem[] }[] {
+  const m = new Map<number, PaperItem[]>();
+  for (const it of c.items) m.set(it.page, [...(m.get(it.page) ?? []), it]);
+  return [...m.entries()].sort((a, b) => a[0] - b[0]).map(([page, items]) => ({ page, items }));
+}

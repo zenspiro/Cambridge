@@ -7,7 +7,11 @@ import { randomId } from "../auth/crypto.ts";
 import { audit } from "../auth/session.ts";
 import { checkNumbers, cleanDraft, isReady, type Disagreement, type Draft, type Problem, type TreeReport } from "./topics.ts";
 
-export type BrainParams = { task: "topics"; syllabusId: string } | { task: "check"; which: "claude" | "gemini" | null };
+export type PaperScope = { items: string[]; figures: string[] };
+export type BrainParams =
+  | { task: "topics"; syllabusId: string }
+  | { task: "check"; which: "claude" | "gemini" | null }
+  | { task: "paper"; docId: string; scope: PaperScope };
 export type TreeStatus = "none" | "ready" | "not_ready";
 export type RunState = { id: string; status: "queued" | "running" | "succeeded" | "failed" | "cancelled"; step: string | null; errorRef: string | null; createdAt: number; finishedAt: number | null };
 
@@ -69,6 +73,67 @@ export async function finishCheckRun(db: Db, id: string, now = Date.now()): Prom
   return !!row;
 }
 
+/**
+ * "Read this paper" (or read one question again, or redraw one figure): a brain run for one question paper or mark
+ * scheme. An empty scope reads the whole paper (keeping what is confirmed).
+ */
+export async function startPaperRun(db: Db, docId: string, scope: PaperScope, actorId: string, now = Date.now()): Promise<string | null> {
+  const id = await startBrainRun(db, { task: "paper", docId, scope }, actorId, now);
+  if (!id) return null;
+  await db
+    .prepare(`INSERT INTO paper_read (doc_id, job_id, updated_at) VALUES (?1, ?2, ?3) ON CONFLICT (doc_id) DO UPDATE SET job_id = ?2, updated_at = ?3`)
+    .bind(docId, id, now)
+    .run();
+  await audit(db, { actorId, action: "brain.paper_start", entity: "source_document", entityId: docId, detail: { job: id, items: scope.items.length, figures: scope.figures.length } }, now);
+  return id;
+}
+
+/** A brain run's state for its page (and the live progress panel). */
+export async function runState(db: Db, id: string, now = Date.now()): Promise<(RunState & { events: RunEvent[]; task: string }) | null> {
+  await closeStaleBrainRuns(db, now);
+  const r = await db
+    .prepare(`SELECT id, status, step, error_ref, created_at, finished_at, events, params FROM job WHERE id = ?1 AND type = 'brain'`)
+    .bind(id)
+    .first<{ id: string; status: RunState["status"]; step: string | null; error_ref: string | null; created_at: number; finished_at: number | null; events: string | null; params: string }>();
+  if (!r) return null;
+  return {
+    id: r.id, status: r.status, step: r.step, errorRef: r.error_ref, createdAt: r.created_at, finishedAt: r.finished_at,
+    events: cleanEvents(r.events), task: readParams(r.params)?.task ?? "",
+  };
+}
+
+// ---------- Live progress (owner, 7 Nov 2026: real progress per model, not a page that reloads) ----------
+
+export type RunStage = "pdf" | "gemini" | "claude" | "retry" | "drawing" | "checks" | "save";
+export type RunEvent = { at: number; stage: RunStage; state: "start" | "wait" | "done" | "fail" | "skip"; text: string; model: string; tokens: number };
+const STAGES: readonly RunStage[] = ["pdf", "gemini", "claude", "retry", "drawing", "checks", "save"];
+const STATES = ["start", "wait", "done", "fail", "skip"] as const;
+
+/** One progress event from the script, made safe. Null when it is not one. */
+export function cleanEvent(v: unknown, now: number): RunEvent | null {
+  const o = v && typeof v === "object" ? (v as Record<string, unknown>) : null;
+  if (!o) return null;
+  const stage = STAGES.find((s) => s === o.stage);
+  const state = STATES.find((s) => s === o.state);
+  if (!stage || !state) return null;
+  const text = typeof o.text === "string" ? o.text.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 200) : "";
+  const model = typeof o.model === "string" && /^[a-z0-9][a-z0-9.-]{0,60}$/.test(o.model) ? o.model : "";
+  const tokens = typeof o.tokens === "number" && Number.isInteger(o.tokens) && o.tokens >= 0 ? Math.min(o.tokens, 50_000_000) : 0;
+  return { at: now, stage, state, text, model, tokens };
+}
+
+function cleanEvents(s: string | null): RunEvent[] {
+  try {
+    const v = JSON.parse(s ?? "[]") as unknown[];
+    return Array.isArray(v) ? v.flatMap((e) => {
+      const c = cleanEvent(e, typeof (e as RunEvent)?.at === "number" ? (e as RunEvent).at : 0);
+      return c ? [c] : [];
+    }) : [];
+  } catch {
+    return [];
+  }
+}
+
 export async function startTreeRun(db: Db, syllabusId: string, actorId: string, now = Date.now()): Promise<string | null> {
   const id = await startBrainRun(db, { task: "topics", syllabusId }, actorId, now);
   if (!id) return null;
@@ -86,6 +151,11 @@ const readParams = (s: string): BrainParams | null => {
   try {
     const p = JSON.parse(s) as BrainParams;
     if (p?.task === "check") return { task: "check", which: p.which === "claude" || p.which === "gemini" ? p.which : null };
+    if (p?.task === "paper" && typeof p.docId === "string") {
+      const list = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string").slice(0, 100) : []);
+      const sc = (p.scope ?? {}) as { items?: unknown; figures?: unknown };
+      return { task: "paper", docId: p.docId, scope: { items: list(sc.items), figures: list(sc.figures) } };
+    }
     return p?.task === "topics" && typeof p.syllabusId === "string" ? { task: "topics", syllabusId: p.syllabusId } : null;
   } catch {
     return null;
@@ -107,12 +177,24 @@ export async function activeBrainRun(db: Db, id: string): Promise<BrainParams | 
   return row ? readParams(row.params) : null;
 }
 
-/** One plain-word step ("Claude is reading the syllabus") and a heartbeat. False when the run is no longer running. */
-export async function brainStep(db: Db, id: string, step: string, now = Date.now()): Promise<boolean> {
-  const row = await db
-    .prepare(`UPDATE job SET step = ?2, heartbeat_at = ?3 WHERE id = ?1 AND type = 'brain' AND status = 'running' RETURNING id`)
-    .bind(id, step.slice(0, 200), now)
-    .first();
+/**
+ * One plain-word step ("Claude is reading the syllabus") and a heartbeat, plus a progress event for the live panel
+ * (kept to the last BRAIN.maxRunEvents). False when the run is no longer running.
+ */
+export async function brainStep(db: Db, id: string, step: string, now = Date.now(), event: RunEvent | null = null): Promise<boolean> {
+  const row = event
+    ? await db
+      .prepare(`UPDATE job SET step = ?2, heartbeat_at = ?3,
+                  events = (SELECT json_group_array(json(value)) FROM (
+                              SELECT value FROM json_each(json_insert(COALESCE(events, '[]'), '$[#]', json(?4)))
+                              WHERE key >= json_array_length(COALESCE(events, '[]')) + 1 - ?5 ORDER BY key))
+                WHERE id = ?1 AND type = 'brain' AND status = 'running' RETURNING id`)
+      .bind(id, step.slice(0, 200), now, JSON.stringify(event), BRAIN.maxRunEvents)
+      .first()
+    : await db
+      .prepare(`UPDATE job SET step = ?2, heartbeat_at = ?3 WHERE id = ?1 AND type = 'brain' AND status = 'running' RETURNING id`)
+      .bind(id, step.slice(0, 200), now)
+      .first();
   return !!row;
 }
 

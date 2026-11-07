@@ -319,3 +319,35 @@ export function estimateWords(e: Estimate): string {
   if (e.usd === null) return `Rough cost: unknown (price not set for ${e.missing.join(" and ")}; add it on the AI setup page).`;
   return `Rough cost: about ${usdWords(e.usd)} (${e.basis === "history" ? "the average of past runs" : "a guess from the PDF's size; past runs will make it closer"}).`;
 }
+
+/**
+ * Rough cost of one paper reading: Gemini and Claude read it once, the drawing AI once more for its figures; past
+ * paper runs (and past drawings) on the same models replace the size guess. Pure.
+ */
+export function estimatePaper(models: { claude: string; gemini: string; drawing: string }, pdfBytes: number, history: { paper: readonly ModelHistory[]; drawing: readonly ModelHistory[] }, prices: Prices): Estimate {
+  const pages = Math.max(1, Math.ceil(pdfBytes / BRAIN.estBytesPerPage));
+  const parts = [
+    { model: models.gemini, h: history.paper.find((x) => x.model === models.gemini && x.runs > 0) },
+    { model: models.claude, h: history.paper.find((x) => x.model === models.claude && x.runs > 0) },
+    { model: models.drawing, h: history.drawing.find((x) => x.model === models.drawing && x.runs > 0) },
+  ];
+  const missing = [...new Set(parts.map((p) => p.model).filter((m) => !prices[m]))];
+  let usd = 0;
+  for (const p of parts) {
+    const tin = p.h ? p.h.tokensIn / p.h.runs : pages * BRAIN.estTokensPerPage;
+    const tout = p.h ? p.h.tokensOut / p.h.runs : BRAIN.estOutTokens;
+    usd += costUsd(tin, tout, prices[p.model]) ?? 0;
+  }
+  return { usd: missing.length ? null : usd, basis: parts.every((p) => p.h) ? "history" : "rough", missing };
+}
+
+/** The Read this paper button's check: rough cost, this month's spend, the cap. */
+export async function paperCostCheck(db: Db, env: { CLAUDE_MODEL?: string; GEMINI_MODEL?: string }, pdfBytes: number, now = Date.now()): Promise<CostCheck> {
+  const [models, prices, cap] = await Promise.all([aiModels(db, env), readPrices(db), readCap(db)]);
+  const month = monthBounds(undefined, now);
+  const [paper, drawing, summary] = await Promise.all([
+    taskHistory(db, "paper", [models.claude, models.gemini]), taskHistory(db, "drawing", [models.drawing]), spendBetween(db, month.from, month.to, prices),
+  ]);
+  const estimate = estimatePaper(models, pdfBytes, { paper, drawing }, prices);
+  return { estimate, cap, spent: summary.total, verdict: capCheck(cap, summary.total, estimate) };
+}

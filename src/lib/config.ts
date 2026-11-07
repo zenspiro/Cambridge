@@ -116,6 +116,17 @@ export const BRAIN = {
   estBytesPerPage: 25_000,
   estTokensPerPage: 2_500,
   estOutTokens: 30_000,
+  /** Reading papers (step 2b, owner 7 Nov 2026): size limits on one paper's reading, the drawing of each figure, and the
+   * least readable text for the word check to run. */
+  maxPaperItems: 400,
+  maxItemText: 4_000,
+  maxOptions: 8,
+  maxFigures: 60,
+  maxSvgBytes: 60_000,
+  maxPaperBytes: 2_000_000,
+  minPaperTextChars: 400,
+  /** Brain run activity kept per run for the live progress panel. */
+  maxRunEvents: 60,
 } as const;
 
 export const AGENT = {

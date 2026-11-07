@@ -1,7 +1,7 @@
 import { agentRequest, json, JOB_ID_RE, parseJson } from "@/lib/agent/api";
-import { brainStep } from "@/lib/brain/runs";
+import { brainStep, cleanEvent } from "@/lib/brain/runs";
 
-// The brain script's sign of life and current step in plain words. Signed only. 409: the run was closed.
+// The brain script's sign of life, its current step in plain words and a progress event for the live panel. Signed only. 409: the run was closed.
 export async function POST(request: Request) {
   const a = await agentRequest(request, 8 * 1024);
   if (!a.ok) return a.response;
@@ -9,5 +9,6 @@ export async function POST(request: Request) {
   const jobId = b?.jobId;
   const step = typeof b?.step === "string" ? b.step.replace(/[\u0000-\u001f\u007f]/g, " ").trim() : "";
   if (typeof jobId !== "string" || !JOB_ID_RE.test(jobId) || !step) return json({ error: "bad_request" }, 400);
-  return (await brainStep(a.db, jobId, step)) ? json({ ok: true }) : json({ error: "no_run" }, 409);
+  const now = Date.now();
+  return (await brainStep(a.db, jobId, step, now, cleanEvent(b?.event, now))) ? json({ ok: true }) : json({ error: "no_run" }, 409);
 }

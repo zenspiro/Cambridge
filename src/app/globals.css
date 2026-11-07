@@ -201,6 +201,50 @@
   .review-head { @apply border-b border-line bg-wash px-4 py-2 text-base font-semibold; }
   .review-pdf { @apply h-[calc(100dvh-14rem)] min-h-[32rem] w-full border-0 bg-slate-300; }
   .review-body { @apply p-4; }
+  /* Step 2b (owner, 7 Nov 2026): the reading card, live progress, page bar and the paper rebuilt from our database. */
+  .reading-head { @apply flex flex-wrap items-center gap-3; }
+  .run-progress { @apply flex flex-col gap-2 rounded-lg border border-line bg-wash p-4; }
+  .run-progress-head { @apply m-0; }
+  .run-steps { @apply m-0 flex list-none flex-col gap-1 p-0; }
+  .run-step { @apply grid grid-cols-[1rem_12rem_minmax(0,1fr)_auto] items-center gap-3 py-1 text-base; }
+  .run-step-dot { @apply h-3 w-3 rounded-full bg-slate-300; }
+  .run-step-start .run-step-dot { @apply animate-pulse bg-blue-600; }
+  .run-step-done .run-step-dot { @apply bg-green-600; }
+  .run-step-fail .run-step-dot { @apply bg-red-600; }
+  .run-step-skip .run-step-dot, .run-step-wait .run-step-dot { @apply bg-slate-300; }
+  .run-step-name { @apply font-medium; }
+  .run-step-text { @apply min-w-0 break-words; }
+  .run-step-idle .run-step-text, .run-step-skip .run-step-text { @apply text-muted; }
+  .run-step-meta { @apply flex flex-wrap justify-end gap-3 text-sm text-muted; }
+  .page-bar { @apply mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-paper px-4 py-2; }
+  .page-bar-count { @apply min-w-28 text-center font-medium; }
+  .check-inline { @apply inline-flex items-center gap-2 text-base; }
+  .paper-sheet { @apply flex max-h-[calc(100dvh-14rem)] min-h-[32rem] flex-col gap-4 overflow-y-auto font-sans text-base leading-relaxed; }
+  .pq { @apply rounded-lg border border-transparent p-2; }
+  .pq-flag.pq-red { @apply border-red-400 bg-red-50/40; }
+  .pq-flag.pq-amber { @apply border-amber-400 bg-amber-50/40; }
+  .pq-flag.pq-blue { @apply border-blue-400 bg-blue-50/40; }
+  .pq-row { @apply grid grid-cols-[4.5rem_minmax(0,1fr)_3rem] gap-3; }
+  .pq-num { @apply font-bold; }
+  .pq-main { @apply flex min-w-0 flex-col gap-2; }
+  .pq-text { @apply m-0 whitespace-pre-line break-words; }
+  .pq-marks { @apply text-right font-bold; }
+  .pq-options { @apply m-0 flex list-none flex-col gap-1 p-0; }
+  .pq-letter { @apply inline-block w-6 font-bold; }
+  .pq-figure { @apply m-0 flex flex-col items-start gap-1 rounded-lg border border-line p-2; }
+  .pq-figure img { @apply max-h-96 max-w-full bg-white; }
+  .pq-lines { @apply flex flex-col gap-5 py-2; }
+  .pq-lines span { @apply block border-b border-dotted border-slate-400; }
+  .pq-guidance { @apply m-0 text-muted; }
+  .flag-box { @apply mt-2 flex flex-col gap-2 rounded-lg border-l-4 bg-paper p-3; }
+  .flag-red { @apply border-red-500; }
+  .flag-amber { @apply border-amber-500; }
+  .flag-blue { @apply border-blue-500; }
+  .flag-reason, .flag-pdf { @apply m-0 break-words; }
+  .flag-tag { @apply mr-1 rounded bg-wash px-1.5 py-0.5 text-sm font-semibold; }
+  .flag-edit textarea { @apply font-sans; }
+  .fix-list li { @apply flex flex-wrap items-center gap-2; }
+  .fix-undo { @apply inline-flex; }
   .facts { @apply grid grid-cols-[9rem_minmax(0,1fr)] gap-x-4 gap-y-2 text-base; }
   .facts dt { @apply font-medium text-muted; }
   .facts dd { @apply m-0 break-words; }

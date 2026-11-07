@@ -32,6 +32,8 @@ A plain list of what the platform does today, for non-developers.
 - Review screen: click any green tick to see the stored PDF beside what we hold about it, switch between the paper's question paper, mark scheme and insert, and download. Next: the paper rebuilt from our database with problem parts flagged.
 - AI setup: check Claude and Gemini separately, see which models each key can use, and pick each AI's model from a dropdown (Claude Sonnet 5.5 by default).
 - AI usage dashboard: spend today and this month, questions, pages, tokens and spend per model and per job, the latest runs; prices per model typed on the page.
+- Reading papers: "Read this paper" on any question paper or mark scheme; the review screen shows the paper rebuilt from our database beside the PDF, with red, amber and blue flags, fixes (the PDF's version, read again, edit, It's fine, Looks right, Redraw), Undo, and Mark ready anyway.
+- Live progress for brain runs: each step and model, tokens and time, updating in place.
 - Drawing AI: its own Claude model for redrawing figures (from paper reading on).
 - Topic tree runs read with Gemini first (free) and Claude second, retry when Google is overloaded, and keep finished readings so a failed run is never paid for twice.
 - Monthly spending cap: a run whose rough cost would pass it does not start; the rough cost shows beside each Draft button.

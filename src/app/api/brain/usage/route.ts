@@ -14,6 +14,8 @@ export async function POST(request: Request) {
   if (!params) return json({ error: "no_run" }, 409);
   const entry = cleanUsage(b?.usage);
   if (!entry) return json({ error: "bad_request" }, 400);
-  await recordSpend(a.db, jobId, params.task, entry);
+  // A paper run's figure drawings count as their own job ("Drawing figures").
+  const task = params.task === "paper" && b?.task === "drawing" ? "drawing" : params.task;
+  await recordSpend(a.db, jobId, task, entry);
   return json({ ok: true });
 }
