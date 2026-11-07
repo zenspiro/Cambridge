@@ -146,7 +146,12 @@ const server = createServer((req, res) => {
         return;
       }
       ai.seq.push(isDrawing(json.system) ? "claude-draw" : isPaper(json.system) ? "claude-paper" : "claude");
-      ai.claudePages = { ...(ai.claudePages ?? {}), [ai.seq.at(-1)]: pdfPages(json.messages?.[0]?.content?.[0]?.source?.data) };
+      const doc = (json.messages?.[0]?.content ?? []).find((c) => c.type === "document");
+      ai.claudePages = { ...(ai.claudePages ?? {}), [ai.seq.at(-1)]: pdfPages(doc?.source?.data) };
+      if (ai.seq.at(-1) === "claude-paper") {
+        ai.claudeText = (json.messages?.[0]?.content ?? []).filter((c) => c.type === "text").map((c) => c.text).join("\n");
+        ai.claudeEffort = json.output_config?.effort;
+      }
       const answer = JSON.stringify(isDrawing(json.system) ? DRAWN : isPaper(json.system) ? PAPER_CLAUDE : ai.claudeAnswers.shift() ?? GOOD);
       res.writeHead(200, { "content-type": "text/event-stream" });
       const ev = (type, data) => res.write(`event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`);
@@ -511,7 +516,9 @@ try {
   check(rp.status === 0, `the paper run exits cleanly${rp.status ? ": " + rp.out.slice(-800) : ""}`);
   const order = ai.seq.filter((x) => x !== "claude");
   check(order.join(",") === "gemini-paper,claude-paper,claude-draw", `Gemini reads first, then Claude, then the drawing AI (${order.join(",")})`);
-  check(ai.claudePages["claude-paper"] === 3, `Claude is not sent the blank page (${ai.claudePages["claude-paper"]} of 4 pages)`);
+  check(ai.claudePages["claude-paper"] === 1, `Claude gets only the page with a figure as a picture (${ai.claudePages["claude-paper"]} of 4 pages)`);
+  check(ai.claudeText.includes("=== Page 4 ===") && ai.claudeText.includes("=== Page 1 ===") && !ai.claudeText.includes("=== Page 3 ==="), "the other pages go as text, without the blank page");
+  check(ai.claudeEffort === "low", `Claude reads papers at low effort (${ai.claudeEffort})`);
   check(ai.claudePages["claude-draw"] === 1, `the drawing AI gets only the page with its figure (${ai.claudePages["claude-draw"]} page)`);
   check(rp.out.includes("Leaving out 1 blank page (3)"), "the run says which blank pages it left out");
   await page.locator("#run-progress", { hasText: "Finished" }).waitFor({ timeout: 15_000 }).then(() => check(true, "the panel shows the run finished, in place"), () => check(false, "the panel shows the run finished, in place"));

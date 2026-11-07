@@ -31,6 +31,8 @@ export async function POST(request: Request) {
     checkModels: BRAIN.checkModels,
     checkDelayMs: BRAIN.checkDelayMs,
     geminiRetryWaitsMs: BRAIN.geminiRetryWaitsMs,
+    paperEffort: BRAIN.paperEffort,
+    drawEffort: BRAIN.drawEffort,
   };
   if (params.task === "check") return json({ task: "check", which: params.which, models: { claude: models.claude, gemini: models.gemini }, limits });
   if (params.task === "paper") {

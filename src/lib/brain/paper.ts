@@ -168,6 +168,18 @@ export function fingerprint(...parts: string[]): string {
 /** Everything of an item that must be in the PDF: its wording and its options. */
 export const itemWording = (it: PaperItem) => [it.text, ...it.options.map((o) => o.text)].join(" ");
 
+/**
+ * A power of ten or a unit written flat, as the PDF's text layer gives it ("× 10–2", "10 5", "cm3", "m / s2"), which
+ * the word check cannot see (it compares letters and digits only). Returns the first one found, else "". Pure.
+ */
+export function lostSuperscript(s: string): string {
+  const m = /×\s*10\s*[–\-−]?\s*\d+/.exec(s) ?? /\b(?:c?m|mm|km)[23]\b/.exec(s) ?? /\/\s*s2\b/.exec(s);
+  return m ? m[0] : "";
+}
+
+/** Mostly a formula: maths signs, powers or brackets in it (its text-layer copy is scrambled, so words decide). */
+export const isFormula = (s: string) => /[=×÷+−√π²³⁰¹⁴-⁹⁻()/^<>≤≥]/.test(s) && /\d|[a-z]\b/i.test(s);
+
 const numbersIn = (s: string) => [...new Set(s.match(/\d+(?:\.\d+)?/g) ?? [])];
 
 /** The PDF's numbers, as printed ("3.5", "120"), for the numbers check. */
@@ -222,7 +234,16 @@ export function paperFlags({ content, pages, gemini }: CheckInput): Flag[] {
   const raw = pages.join(" ");
   const add = (kind: FlagKind, item: string, reason: string, what: string, pdfText = "", keyExtra = "") =>
     flags.push({ key: `${kind}:${item}${keyExtra}`, item, kind, colour: COLOUR[kind], reason, pdfText, fingerprint: fingerprint(kind, squash(what), reason) });
-  const found = (s: string) => coverage(idx, s) >= BRAIN.minWordCover;
+  // Formulas reach the PDF's text layer scrambled ("(x + 7)(2x − 3)" can come out as "()() xx72 3"), so a wording
+  // that fails the run check passes when its real words (four letters or more) are all printed; a part that is almost
+  // all formula, with too few words to judge, is left to Gemini's reading of the page picture.
+  const words = (s: string) => (s.normalize("NFKD").toLowerCase().match(/[a-z]{4,}/g) ?? []);
+  const found = (s: string) => {
+    if (coverage(idx, s) >= BRAIN.minWordCover) return true;
+    const w = words(s);
+    if (w.length < 3) return isFormula(s) && w.every((x) => idx.text.includes(x));
+    return w.filter((x) => idx.text.includes(x)).length / w.length >= BRAIN.minWordCover;
+  };
 
   if (!textOk) add("text", "paper", "The PDF's text could not be read (a scan?), so wording and numbers were not checked against it.", "unreadable");
   const seen = new Set<string>();
@@ -238,6 +259,8 @@ export function paperFlags({ content, pages, gemini }: CheckInput): Flag[] {
           break;
         }
       }
+      const lost = lostSuperscript(wording);
+      if (lost) add("numbers", it.number, `"${lost}" looks like a power or unit that lost its superscript (10⁻², cm³).`, `${lost}|${wording}`, "", ":sup");
       if (content.kind === "qp" && it.marks !== null && it.marks > 0 && !raw.includes(`[${it.marks}]`) && !raw.includes(`[Total: ${it.marks}]`)) {
         add("marks", it.number, `[${it.marks}] is not printed in the PDF.`, `${it.marks}|${wording}`);
       }
@@ -341,7 +364,9 @@ export function recheckItem(c: PaperContent, flags: readonly Flag[], number: str
   const readable = squash(allText).length >= BRAIN.minPaperTextChars;
   const nums = pdfNumbers(pages);
   const wording = itemWording(it);
-  const found = !readable || coverage(pageIdx, wording) >= BRAIN.minWordCover;
+  const w = wording.normalize("NFKD").toLowerCase().match(/[a-z]{4,}/g) ?? [];
+  const found = !readable || coverage(pageIdx, wording) >= BRAIN.minWordCover
+    || (w.length >= 3 ? w.filter((x) => pageIdx.text.includes(x)).length / w.length >= BRAIN.minWordCover : isFormula(wording) && w.every((x) => pageIdx.text.includes(x)));
   const kept = flags.filter((f) => f.item !== number || !(f.kind === "words" || f.kind === "numbers" || (f.kind === "marks" && !f.key.endsWith(":gemini")) || (f.kind === "agree" && found)));
   const add = (kind: FlagKind, reason: string, what: string, keyExtra = "") =>
     kept.push({ key: `${kind}:${number}${keyExtra}`, item: number, kind, colour: COLOUR[kind], reason, pdfText: "", fingerprint: fingerprint(kind, squash(what), reason) });
@@ -433,4 +458,61 @@ export function placeOnPages(c: PaperContent, pages: readonly string[]): PaperCo
     return i >= 0 ? { ...f, page: i + 1 } : f;
   });
   return { ...c, items, figures };
+}
+
+// ---------- Text instead of pictures where a page has no figure (owner, 7 Nov 2026: dry-run optimisation) ----------
+
+/** What the PDF reader saw on a page besides its text (`allPagesInfo`): path segments drawn (drawings, tables). */
+export type PageDrawn = { paths: number; images?: number };
+
+const CODE_LINE = /^(?:\d{2}\s+\S|(?:OUTPUT|INPUT|IF|THEN|ELSE|ENDIF|WHILE|ENDWHILE|REPEAT|UNTIL|FOR|NEXT|DECLARE|CONSTANT|PROCEDURE|ENDPROCEDURE|FUNCTION|ENDFUNCTION|RETURN|CASE|OTHERWISE|ENDCASE|CALL|OPENFILE|READFILE|WRITEFILE|CLOSEFILE)\b)/;
+
+/**
+ * Pages whose text cannot stand in for a picture of them, 1-based (owner, 7 Nov 2026; tuned on real Physics, Maths and
+ * Computer Science papers):
+ * - a printed figure label ("Fig. 2.1");
+ * - drawings or tables: clearly more path segments than the page furniture (the plainest inner page);
+ * - formulas: the text layer scatters fractions, powers and symbols into short fragments ("3 Gm n", "5", "2=") and
+ *   even maps "×" to "#", so three or more fragment lines mean the page is read as a picture;
+ * - program code: indentation and arrows ("←") are lost, so numbered lines or pseudocode keywords do the same;
+ * - almost no text and no [marks] (probably a picture page).
+ * Blank pages and the cover are never pictures. Pure.
+ */
+export function picturePages(pages: readonly string[], blank: readonly number[], drawn: readonly PageDrawn[] = []): number[] {
+  // Page furniture (corner marks, bar codes) is the same on every page: the plainest inner page shows how much it is.
+  const inner = drawn.slice(1).map((d) => d.paths);
+  const furniture = inner.length ? Math.min(...inner) : 0;
+  return pages.flatMap((text, i) => {
+    const p = i + 1;
+    if (p === 1 || blank.includes(p)) return [];
+    const lines = aiPageText(text).split("\n").map((l) => l.trim()).filter(Boolean);
+    const all = text.split("\n").slice(1).map((l) => l.trim()).filter(Boolean);
+    // Formula fragments: short lines that are not a mark, a part label like "(a)" or a row of dots...
+    const fragments = all.filter((l) => l.length <= 4 && !/^\[\s*\d+\s*\]$/.test(l) && !/^\([a-z]{1,4}\)$/.test(l) && !/^\.+$/.test(l)).length;
+    // ...and the scrambled pieces a formula leaves: empty brackets "()", letters run into numbers "xx72", "yx xx31".
+    const garbled = all.filter((l) => /\(\s*\)/.test(l) || /\b[a-z]{1,3}\d{2,}\b/.test(l) || /\b[a-z]{2}\s[a-z]{2}\d/.test(l)).length;
+    const code = lines.filter((l) => CODE_LINE.test(l)).length;
+    const paths = drawn[i]?.paths ?? 0;
+    if (/\bFig\.?\s*\d+\.\d+/i.test(text)) return [p];
+    if (drawn.length && paths > furniture + 8) return [p];
+    if ((drawn[i]?.images ?? 0) > Math.min(...drawn.slice(1).map((d) => d.images ?? 0))) return [p];
+    if (fragments >= 2 || garbled >= 1 || code >= 4) return [p];
+    return squash(aiPageText(text)).length < 80 && !/\[\s*\d+\s*\]/.test(text) ? [p] : [];
+  });
+}
+
+/** A page's text as Claude gets it: the margin warnings, bar codes and footers that Cambridge prints on every page left out. */
+export function aiPageText(text: string): string {
+  return text
+    .split("\n")
+    .map((l) => l.replace(/(DO NOT WRITE IN THIS MARGIN\s*)+/g, "").trim())
+    // Answer lines are rows of dots: one short marker each is enough (a page of them was 4,000 characters).
+    .map((l) => l.replace(/\.{6,}/g, "[line]"))
+    .filter((l) => l && !/^\*\s*\d{6,}\s*\*$/.test(l) && !/^[A-Z]{2,4}$/.test(l) && !/^\d{1,2}$/.test(l) && !/^\d{4}\/\d{2}\/[A-Z/]+\/\d{2}\s*©\s*UCLES\s*\d{4}/.test(l))
+    .join("\n");
+}
+
+/** The text pages laid out for Claude, each under a marker with the paper's own page number. */
+export function textPagesBlock(pages: readonly string[], textPages: readonly number[]): string {
+  return textPages.map((p) => `=== Page ${p} ===\n${aiPageText(pages[p - 1] ?? "")}`).join("\n\n");
 }

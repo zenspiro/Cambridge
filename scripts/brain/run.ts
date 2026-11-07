@@ -10,12 +10,12 @@ import Anthropic from "@anthropic-ai/sdk";
 import { PDFDocument } from "pdf-lib";
 import { constants as zlibConstants, inflateSync } from "node:zlib";
 import { signRequest } from "../../src/lib/agent/sign.ts";
-import { allPagesText } from "../../src/lib/pdf/firstPage.ts";
+import { allPagesInfo, allPagesText } from "../../src/lib/pdf/firstPage.ts";
 import {
   DRAW_SCHEMA, DRAW_SYSTEM, drawPrompt, PAPER_SCHEMA, PAPER_SCHEMA_GEMINI, PAPER_SYSTEM, paperPrompt,
   retryPrompt, TOPIC_SCHEMA, TOPIC_SCHEMA_GEMINI, TOPIC_SYSTEM, topicPrompt,
 } from "../../src/lib/brain/prompts.ts";
-import { blankPages, cleanPaper, cleanSvg, keptPages, mergeReading, paperFlags, placeOnPages, remapPages, type PaperContent, type PaperKind } from "../../src/lib/brain/paper.ts";
+import { blankPages, cleanPaper, cleanSvg, keptPages, mergeReading, paperFlags, picturePages, placeOnPages, remapPages, textPagesBlock, type PaperContent, type PaperKind } from "../../src/lib/brain/paper.ts";
 import {
   checkNumbers, checkWords, cleanDraft, compareDrafts, isReady, missingHeadings, retryNotes, textIndex,
   type Draft, type Problem, type TextIndex, type TreeReport,
@@ -26,6 +26,7 @@ import { geminiStatus, modelsToTry, retryDelayMs, type ModelStatus, type ModelTr
 type Limits = {
   attempts: number; claudeMaxTokens: number; claudeEffort: "low" | "medium" | "high" | "xhigh" | "max"; geminiMaxTokens: number; maxPdfBytes: number;
   geminiTries: number; geminiMaxWaitMs: number; checkModels: number; checkDelayMs: number; geminiRetryWaitsMs: number[];
+  paperEffort?: "low" | "medium" | "high" | "xhigh" | "max"; drawEffort?: "low" | "medium" | "high" | "xhigh" | "max";
 };
 type Job =
   | { task: "topics"; subject: string; pdfBytes: number; models: { claude: string; gemini: string; drawing?: string }; limits: Limits }
@@ -122,6 +123,8 @@ type Reading = { raw: unknown; tokensIn: number; tokensOut: number };
 
 type ClaudeAsk = {
   model: string; system: string; schema: unknown; prompt: string; pdf64: string; pages: number; limits: Limits;
+  /** Thinking effort for this question (else the limits' Claude effort); extra text sent before the prompt. */
+  effort?: Limits["claudeEffort"]; extraText?: string;
   /** The live panel's row and words ("Claude is reading the paper"). */
   stage: Stage; label: string; task?: "drawing";
 };
@@ -137,13 +140,14 @@ async function askClaude(client: Anthropic, a: ClaudeAsk): Promise<Reading> {
     betas: ["server-side-fallback-2026-07-01"],
     fallbacks: "default",
     thinking: { type: "adaptive" },
-    output_config: { effort: a.limits.claudeEffort, format: { type: "json_schema", schema: a.schema as Record<string, unknown> } },
+    output_config: { effort: a.effort ?? a.limits.claudeEffort, format: { type: "json_schema", schema: a.schema as Record<string, unknown> } },
     system: a.system,
     messages: [{
       role: "user",
       content: [
-        { type: "document", source: { type: "base64", media_type: "application/pdf", data: a.pdf64 } },
-        { type: "text", text: a.prompt },
+        ...(a.pdf64 ? [{ type: "document" as const, source: { type: "base64" as const, media_type: "application/pdf" as const, data: a.pdf64 } }] : []),
+        ...(a.extraText ? [{ type: "text" as const, text: a.extraText }] : []),
+        { type: "text" as const, text: a.prompt },
       ],
     }],
   });
@@ -458,7 +462,9 @@ async function runPaper(job: PaperJob) {
   const doc = await api("/api/brain/doc", {});
   if (!doc.bytes?.length) throw new Stop("no_paper");
   const inflate = async (d: Uint8Array) => new Uint8Array(inflateSync(d, { finishFlush: zlibConstants.Z_SYNC_FLUSH }));
-  const pages = await allPagesText(doc.bytes, inflate);
+  // Each page's text, and the drawings and images on it (which pages Claude must see as pictures).
+  const info = await allPagesInfo(doc.bytes, inflate);
+  const pages = info.map((p) => p.text);
   await note(`The paper has ${pages.length} pages`, { stage: "pdf", state: "done" });
   // Readers get the paper without its blank pages; their page numbers are put back on the paper's own (remapPages).
   const slim = await withoutBlankPages(doc.bytes, pages);
@@ -488,8 +494,22 @@ async function runPaper(job: PaperJob) {
 
   let content = prior;
   if (!figuresOnly) {
+    // Claude sees only the figure pages as pictures; every other page goes as its text (far fewer tokens). A paper
+    // whose text cannot be read goes whole, as before.
+    const readable = pages.join("").replace(/\s/g, "").length >= BRAIN.minPaperTextChars;
+    const blank = blankPages(pages);
+    const pics = picturePages(pages, blank, info);
+    const textOnly = keptPages(pages.length, [...blank, ...pics]);
+    const mixed = readable && textOnly.length > 0;
+    const claudePdf = mixed ? (pics.length ? (await slimPdf(doc.bytes, pics, pages.length)).pdf64 : "") : pdf64;
+    if (mixed) await note(`Claude gets ${pics.length} page${pics.length === 1 ? "" : "s"} with figures as pictures and ${textOnly.length} as text`, { stage: "claude", state: "start", model: job.models.claude });
     const r = await timed("claude", job.models.claude, job.scope.items.length ? `Claude is reading ${job.scope.items.join(", ")} again` : "Claude is reading the paper", () =>
-      askClaude(client, { model: job.models.claude, system: PAPER_SYSTEM, schema: PAPER_SCHEMA, prompt: paperPrompt(job.kind, job.paper, job.scope.items), pdf64, pages: sentPages, limits: job.limits, stage: "claude", label: "Claude" }));
+      askClaude(client, {
+        model: job.models.claude, system: PAPER_SYSTEM, schema: PAPER_SCHEMA, pdf64: claudePdf, pages: mixed ? pics.length : sentPages, limits: job.limits,
+        effort: job.limits.paperEffort, stage: "claude", label: "Claude",
+        prompt: paperPrompt(job.kind, job.paper, job.scope.items, mixed ? { picturePages: pics, textPages: textOnly } : undefined),
+        extraText: mixed ? textPagesBlock(pages, textOnly) : undefined,
+      }));
     const fresh = placeOnPages(remapPages(cleanPaper(r.raw, job.kind), slim.kept), pages);
     if (!fresh.items.length) throw new Stop("claude_bad_answer", "the reading had no questions");
     // Kept items are placed again too, so a page number stored wrongly before is put right.
@@ -508,7 +528,7 @@ async function runPaper(job: PaperJob) {
     const listed = toDraw.map((f) => ({ ...f, page: local(f.page) }));
     if (draw.kept.length) await note(`Drawing AI gets ${figPages.length} of ${pages.length} pages (the ones with figures)`, { stage: "drawing", state: "start", model: drawingModel });
     const r = await timed("drawing", drawingModel, `Drawing ${toDraw.length} figure${toDraw.length === 1 ? "" : "s"}`, () =>
-      askClaude(client, { model: drawingModel, system: DRAW_SYSTEM, schema: DRAW_SCHEMA, prompt: drawPrompt(job.paper, listed), pdf64: draw.pdf64, pages: draw.kept.length || pages.length, limits: job.limits, stage: "drawing", label: "Drawing AI", task: "drawing" }));
+      askClaude(client, { model: drawingModel, system: DRAW_SYSTEM, schema: DRAW_SCHEMA, prompt: drawPrompt(job.paper, listed), pdf64: draw.pdf64, pages: draw.kept.length || pages.length, limits: job.limits, effort: job.limits.drawEffort, stage: "drawing", label: "Drawing AI", task: "drawing" }));
     const drawn = new Map(((r.raw as { figures?: { id?: unknown; svg?: unknown }[] }).figures ?? []).flatMap((f) =>
       typeof f.id === "string" && typeof f.svg === "string" ? [[f.id, cleanSvg(f.svg)] as const] : []));
     content = { ...content, figures: content.figures.map((f) => (drawn.get(f.id) ? { ...f, svg: drawn.get(f.id)! } : f)) };

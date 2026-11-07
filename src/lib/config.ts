@@ -119,6 +119,10 @@ export const BRAIN = {
   /** Reading papers (step 2b, owner 7 Nov 2026): size limits on one paper's reading, the drawing of each figure, and the
    * least readable text for the word check to run. */
   maxPaperItems: 400,
+  /** Thinking effort for reading a paper (copying, checked by code and Gemini) and for drawing figures (owner chose the
+   * lower effort after the 7 Nov 2026 dry run). Topic trees keep `claudeEffort`. */
+  paperEffort: "low",
+  drawEffort: "medium",
   maxItemText: 4_000,
   maxOptions: 8,
   maxFigures: 60,

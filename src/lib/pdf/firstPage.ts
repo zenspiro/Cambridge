@@ -346,6 +346,15 @@ const skipWs = (s: string, i: number) => {
 /** How a font turns string bytes into text. */
 type Font = { width: 1 | 2; map: Map<number, string> | null };
 
+/** What a page holds besides its text, for deciding whether its text can stand in for a picture of it. */
+export type PageInfo = {
+  text: string;
+  /** Path segments drawn (lines, boxes, curves: drawings and tables, but also bar codes and page furniture). */
+  paths: number;
+  /** Images drawn on the page. */
+  images: number;
+};
+
 function parseCMap(text: string): { width: 1 | 2; map: Map<number, string> } {
   const map = new Map<number, string>();
   const width: 1 | 2 = /begincodespacerange\s*<([0-9a-fA-F]+)>/.exec(text)?.[1]!.length === 2 ? 1 : 2;
@@ -409,7 +418,11 @@ function decode(font: Font, s: Uint8Array): string {
  * line moves, an estimated advance per character) so a line break goes where the text moves
  * down and a space where it jumps right, and words drawn letter by letter stay whole.
  */
-async function runContent(doc: Doc, data: Uint8Array, res: Record<string, Val>, out: { text: string; max: number }, depth: number) {
+type Out = { text: string; max: number; paths: number; images: number };
+/** Path segments: a polygon or a table counts each of its lines, so drawings stand out from page furniture. */
+const SEGMENT = new Set(["l", "c", "v", "y", "re"]);
+
+async function runContent(doc: Doc, data: Uint8Array, res: Record<string, Val>, out: Out, depth: number) {
   if (depth > 3) return;
   const fontsDict = doc.get(res.Font);
   const xobjects = doc.get(res.XObject);
@@ -489,10 +502,12 @@ async function runContent(doc: Doc, data: Uint8Array, res: Record<string, Val>, 
         if (isStr(part)) show(decode(font, part.str));
         else if (typeof part === "number") tm = [tm[0]!, tm[1]!, tm[2]!, tm[3]!, tm[4]! - (part / 1000) * scale(), tm[5]!];
       }
-    } else if (op === "Do" && isName(args[0]) && isDict(xobjects)) {
+    } else if (SEGMENT.has(op)) out.paths++;
+    else if (op === "Do" && isName(args[0]) && isDict(xobjects)) {
       const ref = xobjects.dict[args[0].name];
       const o = isRef(ref) ? doc.objs.get(ref.ref) : undefined;
       const st = o && isDict(o.value) ? doc.get(o.value.dict.Subtype) : undefined;
+      if (isName(st) && st.name === "Image") out.images++;
       if (o?.stream && isName(st) && st.name === "Form") {
         const r = isDict(o.value) ? doc.get(o.value.dict.Resources) : undefined;
         if (out.text && !out.text.endsWith("\n")) emit("\n");
@@ -522,6 +537,11 @@ const tidy = (t: string) =>
 
 /** One page's text, up to `max` characters. */
 async function pageText(doc: Doc, page: Dict, max: number): Promise<string> {
+  return (await pageInfo(doc, page, max)).text;
+}
+
+/** One page's text and what else it holds (drawings, images). */
+async function pageInfo(doc: Doc, page: Dict, max: number): Promise<PageInfo> {
   const res = doc.resources(page);
   const contents = doc.get(page.dict.Contents);
   const refs = Array.isArray(page.dict.Contents) ? page.dict.Contents : Array.isArray(contents) ? contents : [page.dict.Contents];
@@ -537,9 +557,9 @@ async function pageText(doc: Doc, page: Dict, max: number): Promise<string> {
     off += p.length;
     all[off++] = 10;
   }
-  const out = { text: "", max };
+  const out: Out = { text: "", max, paths: 0, images: 0 };
   await runContent(doc, all, res, out, 0);
-  return tidy(out.text).slice(0, max);
+  return { text: tidy(out.text).slice(0, max), paths: out.paths, images: out.images };
 }
 
 /** The text of page 1, tidied: one line per text line, single spaces. Empty when unreadable. */
@@ -568,6 +588,28 @@ export async function allPagesText(bytes: Uint8Array, inflate: Inflate, maxPages
       const t = await pageText(doc, page, Math.min(200_000, maxChars - total));
       out.push(t);
       total += t.length;
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Every page's text with what else it holds (see `PageInfo`), for deciding which pages an AI must see as pictures.
+ * Empty list when unreadable.
+ */
+export async function allPagesInfo(bytes: Uint8Array, inflate: Inflate, maxPages = 400, maxChars = 2_000_000): Promise<PageInfo[]> {
+  try {
+    const doc = await openDoc(bytes, inflate);
+    if (!doc) return [];
+    const out: PageInfo[] = [];
+    let total = 0;
+    for (const page of doc.pages(maxPages)) {
+      if (total >= maxChars) break;
+      const p = await pageInfo(doc, page, Math.min(200_000, maxChars - total));
+      out.push(p);
+      total += p.text.length;
     }
     return out;
   } catch {
