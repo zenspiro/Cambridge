@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-07: Blank pages are not sent to the AIs; the drawing AI gets only its figure pages
+
+**What:** before a paper or syllabus goes to the AIs, pages that say only "BLANK PAGE" (with the usual footer) are left out (`blankPages`, a slim copy made with pdf-lib, pinned dev dependency used only by the brain script). The cover always stays (it carries the total marks). The readers' page numbers are put back on the paper's own (`remapPages`), so the review screen still matches the PDF. The drawing AI gets only the pages its figures are on. The live panel says which pages were left out. If a PDF cannot be split, the whole PDF is sent as before.
+
+**Why:** owner asked whether blank pages cost reading tokens (they do: every page sent is billed) and chose to skip them and send the drawing AI only its pages.
+
+**Tested:** `npm run check` exits 0 (195 unit tests; new: blank page detection, kept pages, page numbers mapped back). Browser suite from a fresh database: 472 checks, with the test paper now holding a blank page: Claude is sent 3 of its 4 pages, the drawing AI 1 page, and the review screen keeps the paper's own page numbers.
+
 ## 2026-11-07: CI fix: wait for the live panel's answer
 
 **What:** merge #37 (step 2b) failed one browser check on CI's main run: right after the review page loads, the live progress panel asks the server for the run's state, and the check looked for "Finished" before that answer came back (the slower CI machine lost the race; the pull request's own run passed). The check now waits for the answer. No app code changed.

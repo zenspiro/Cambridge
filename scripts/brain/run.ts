@@ -7,6 +7,7 @@
 // and the report back. Owner decision 5 Nov 2026: no human review; code and a second AI decide.
 // Needs: APP_URL, AGENT_SECRET, JOB_ID, CLAUDE_API_KEY, GEMINI_API_KEY. Keys are never logged or sent to our site.
 import Anthropic from "@anthropic-ai/sdk";
+import { PDFDocument } from "pdf-lib";
 import { constants as zlibConstants, inflateSync } from "node:zlib";
 import { signRequest } from "../../src/lib/agent/sign.ts";
 import { allPagesText } from "../../src/lib/pdf/firstPage.ts";
@@ -14,7 +15,7 @@ import {
   DRAW_SCHEMA, DRAW_SYSTEM, drawPrompt, PAPER_SCHEMA, PAPER_SCHEMA_GEMINI, PAPER_SYSTEM, paperPrompt,
   retryPrompt, TOPIC_SCHEMA, TOPIC_SCHEMA_GEMINI, TOPIC_SYSTEM, topicPrompt,
 } from "../../src/lib/brain/prompts.ts";
-import { cleanPaper, cleanSvg, mergeReading, paperFlags, type PaperContent, type PaperKind } from "../../src/lib/brain/paper.ts";
+import { blankPages, cleanPaper, cleanSvg, keptPages, mergeReading, paperFlags, remapPages, type PaperContent, type PaperKind } from "../../src/lib/brain/paper.ts";
 import {
   checkNumbers, checkWords, cleanDraft, compareDrafts, isReady, missingHeadings, retryNotes, textIndex,
   type Draft, type Problem, type TextIndex, type TreeReport,
@@ -85,6 +86,7 @@ async function step(text: string, event?: StepEvent) {
 
 /** A progress note that must never stop the run (sent while an AI is writing). */
 async function note(text: string, event: StepEvent) {
+  log(text);
   try {
     await api("/api/brain/step", { step: text, event: { ...event, text } });
   } catch {
@@ -409,6 +411,35 @@ function checksFor(draft: Draft, idx: TextIndex | null, pages: string[], shape: 
   return [...shape, ...(idx ? checkWords(draft, idx) : []), ...checkNumbers(draft), ...missingHeadings(draft, pages)];
 }
 
+// ---------- Pages sent to the AIs ----------
+
+/**
+ * A copy of the PDF with only these pages (original numbers, 1-based), as base64 for the AIs; the whole PDF when every
+ * page is kept or the PDF cannot be split (then the AIs see all pages and the numbers need no mapping).
+ */
+async function slimPdf(bytes: Uint8Array, keep: readonly number[], total: number): Promise<{ pdf64: string; kept: number[] }> {
+  const whole = { pdf64: Buffer.from(bytes).toString("base64"), kept: [] as number[] };
+  if (!keep.length || keep.length >= total) return whole;
+  try {
+    const src = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false });
+    if (src.getPageCount() !== total) return whole;
+    const out = await PDFDocument.create();
+    for (const page of await out.copyPages(src, keep.map((p) => p - 1))) out.addPage(page);
+    return { pdf64: Buffer.from(await out.save({ useObjectStreams: false })).toString("base64"), kept: [...keep] };
+  } catch (err) {
+    log(`could not leave pages out (${err instanceof Error ? err.message.slice(0, 120) : "unknown"}); sending the whole PDF`);
+    return whole;
+  }
+}
+
+/** The PDF without its blank pages, with a note for the live panel. */
+async function withoutBlankPages(bytes: Uint8Array, pages: readonly string[]): Promise<{ pdf64: string; kept: number[] }> {
+  const blank = blankPages(pages);
+  const slim = await slimPdf(bytes, keptPages(pages.length, blank), pages.length);
+  if (slim.kept.length) await note(`Leaving out ${blank.length} blank page${blank.length === 1 ? "" : "s"} (${blank.join(", ")}): not paid for`, { stage: "pdf", state: "done" });
+  return slim;
+}
+
 // ---------- Reading a paper (step 2b) ----------
 
 /**
@@ -426,10 +457,13 @@ async function runPaper(job: PaperJob) {
   await step("Fetching the paper", { stage: "pdf", state: "start" });
   const doc = await api("/api/brain/doc", {});
   if (!doc.bytes?.length) throw new Stop("no_paper");
-  const pdf64 = Buffer.from(doc.bytes).toString("base64");
   const inflate = async (d: Uint8Array) => new Uint8Array(inflateSync(d, { finishFlush: zlibConstants.Z_SYNC_FLUSH }));
   const pages = await allPagesText(doc.bytes, inflate);
   await note(`The paper has ${pages.length} pages`, { stage: "pdf", state: "done" });
+  // Readers get the paper without its blank pages; their page numbers are put back on the paper's own (remapPages).
+  const slim = await withoutBlankPages(doc.bytes, pages);
+  const pdf64 = slim.pdf64;
+  const sentPages = slim.kept.length || pages.length;
 
   const scoped = job.scope.items.length > 0 || job.scope.figures.length > 0;
   const figuresOnly = scoped && job.scope.items.length === 0;
@@ -447,15 +481,15 @@ async function runPaper(job: PaperJob) {
   let gemini = priorGemini;
   if (!figuresOnly) {
     const g = await timed("gemini", job.models.gemini, "Gemini is reading the paper", () =>
-      askGemini({ model: job.models.gemini, system: PAPER_SYSTEM, schema: PAPER_SCHEMA_GEMINI, prompt: paperPrompt(job.kind, job.paper), pdf64, pages: pages.length, limits: job.limits }));
-    gemini = cleanPaper(g.raw, job.kind);
+      askGemini({ model: job.models.gemini, system: PAPER_SYSTEM, schema: PAPER_SCHEMA_GEMINI, prompt: paperPrompt(job.kind, job.paper), pdf64, pages: sentPages, limits: job.limits }));
+    gemini = remapPages(cleanPaper(g.raw, job.kind), slim.kept);
   } else await note("Gemini: not needed to redraw a figure", { stage: "gemini", state: "skip" });
 
   let content = prior;
   if (!figuresOnly) {
     const r = await timed("claude", job.models.claude, job.scope.items.length ? `Claude is reading ${job.scope.items.join(", ")} again` : "Claude is reading the paper", () =>
-      askClaude(client, { model: job.models.claude, system: PAPER_SYSTEM, schema: PAPER_SCHEMA, prompt: paperPrompt(job.kind, job.paper, job.scope.items), pdf64, pages: pages.length, limits: job.limits, stage: "claude", label: "Claude" }));
-    const fresh = cleanPaper(r.raw, job.kind);
+      askClaude(client, { model: job.models.claude, system: PAPER_SYSTEM, schema: PAPER_SCHEMA, prompt: paperPrompt(job.kind, job.paper, job.scope.items), pdf64, pages: sentPages, limits: job.limits, stage: "claude", label: "Claude" }));
+    const fresh = remapPages(cleanPaper(r.raw, job.kind), slim.kept);
     if (!fresh.items.length) throw new Stop("claude_bad_answer", "the reading had no questions");
     content = mergeReading(prior, fresh, new Set(job.prior.open), scoped ? job.scope : undefined);
     await step("Saving Claude's reading", { stage: "save", state: "start" });
@@ -465,8 +499,14 @@ async function runPaper(job: PaperJob) {
 
   const toDraw = content.figures.filter((f) => job.scope.figures.includes(f.id) || (!figuresOnly && !f.svg));
   if (toDraw.length) {
+    // The drawing AI gets only the pages its figures are on, numbered afresh in that small PDF.
+    const figPages = [...new Set(toDraw.map((f) => f.page))].filter((p) => p >= 1 && p <= pages.length).sort((a, b) => a - b);
+    const draw = await slimPdf(doc.bytes, figPages, pages.length);
+    const local = (p: number) => (draw.kept.length ? draw.kept.indexOf(p) + 1 || 1 : p);
+    const listed = toDraw.map((f) => ({ ...f, page: local(f.page) }));
+    if (draw.kept.length) await note(`Drawing AI gets ${figPages.length} of ${pages.length} pages (the ones with figures)`, { stage: "drawing", state: "start", model: drawingModel });
     const r = await timed("drawing", drawingModel, `Drawing ${toDraw.length} figure${toDraw.length === 1 ? "" : "s"}`, () =>
-      askClaude(client, { model: drawingModel, system: DRAW_SYSTEM, schema: DRAW_SCHEMA, prompt: drawPrompt(job.paper, toDraw), pdf64, pages: pages.length, limits: job.limits, stage: "drawing", label: "Drawing AI", task: "drawing" }));
+      askClaude(client, { model: drawingModel, system: DRAW_SYSTEM, schema: DRAW_SCHEMA, prompt: drawPrompt(job.paper, listed), pdf64: draw.pdf64, pages: draw.kept.length || pages.length, limits: job.limits, stage: "drawing", label: "Drawing AI", task: "drawing" }));
     const drawn = new Map(((r.raw as { figures?: { id?: unknown; svg?: unknown }[] }).figures ?? []).flatMap((f) =>
       typeof f.id === "string" && typeof f.svg === "string" ? [[f.id, cleanSvg(f.svg)] as const] : []));
     content = { ...content, figures: content.figures.map((f) => (drawn.get(f.id) ? { ...f, svg: drawn.get(f.id)! } : f)) };
@@ -495,9 +535,10 @@ async function main() {
   await step("Fetching the syllabus PDF", { stage: "pdf", state: "start" });
   const doc = await api("/api/brain/doc", {});
   if (!doc.bytes?.length) throw new Stop("no_syllabus");
-  const pdf64 = Buffer.from(doc.bytes).toString("base64");
   const inflate = async (d: Uint8Array) => new Uint8Array(inflateSync(d, { finishFlush: zlibConstants.Z_SYNC_FLUSH }));
   const pages = await allPagesText(doc.bytes, inflate);
+  // The AIs get the syllabus without its blank pages (a topic tree has no page numbers, so nothing to map back).
+  const { pdf64 } = await withoutBlankPages(doc.bytes, pages);
   const idx = textIndex(pages);
   const textChecked = idx.chars >= BRAIN.minTextChars;
   log(`syllabus: ${pages.length} pages, ${idx.chars} letters and digits; word check ${textChecked ? "on" : "off (text unreadable)"}`);

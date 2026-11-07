@@ -210,3 +210,16 @@ test("a reading of the wrong kind or without items is refused", async () => {
   const none: PaperContent | null = await loadContent(bucket, "doc-qp-1", "qp");
   assert.equal(none, null);
 });
+
+test("blank pages are left out for the AIs and page numbers put back", async () => {
+  const { blankPages, keptPages, remapPages } = await import("../../src/lib/brain/paper.ts");
+  const pages = ["BLANK PAGE cover never counts", "1 (a) A question [2]", "BLANK PAGE\n© UCLES 2024 0625/42/M/J/24\n3", "BLANK PAGE but with a real question about a ramp and a trolley here and more words", "2 (a) Another [2]"];
+  assert.deepEqual(blankPages(pages), [3], "only a page that says BLANK PAGE and its footer");
+  const kept = keptPages(pages.length, blankPages(pages));
+  assert.deepEqual(kept, [1, 2, 4, 5]);
+  const c = cleanPaper({ items: [{ number: "1(a)", page: 2, text: "x" }, { number: "2(a)", page: 4, text: "y" }], figures: [{ id: "F1", page: 3, caption: "" }] }, "qp");
+  const back = remapPages(c, kept);
+  assert.deepEqual(back.items.map((i) => i.page), [2, 5], "page 4 of the slim PDF is the paper's page 5");
+  assert.equal(back.figures[0]!.page, 4);
+  assert.deepEqual(remapPages(c, []).items.map((i) => i.page), [2, 4], "nothing left out: unchanged");
+});

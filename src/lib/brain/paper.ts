@@ -367,3 +367,39 @@ export function itemsByPage(c: PaperContent): { page: number; items: PaperItem[]
   for (const it of c.items) m.set(it.page, [...(m.get(it.page) ?? []), it]);
   return [...m.entries()].sort((a, b) => a[0] - b[0]).map(([page, items]) => ({ page, items }));
 }
+
+// ---------- Pages sent to the AIs (owner, 7 Nov 2026: do not pay to read blank pages) ----------
+
+/**
+ * Pages that carry nothing but "BLANK PAGE" (plus the usual footer: copyright line, paper code, page number), 1-based.
+ * The first page is never blank (a cover carries the total marks). Pure.
+ */
+export function blankPages(pages: readonly string[]): number[] {
+  const out: number[] = [];
+  pages.forEach((text, i) => {
+    if (i === 0) return;
+    const s = squash(text);
+    if (!s.includes("blankpage")) return;
+    const rest = s
+      .replace(/blankpage/g, "")
+      .replace(/ucles\d{0,4}/g, "")
+      .replace(/cambridge(university)?press(and)?(assessment)?(international)?(education)?/g, "")
+      .replace(/permissiontoreproduce\w*/g, "")
+      .replace(/\d{4}\d{2}[a-z]{1,2}\d{0,2}/g, "")
+      .replace(/\d+/g, "");
+    if (rest.length <= 40) out.push(i + 1);
+  });
+  return out;
+}
+
+/** The pages to send, in order (original page numbers), leaving out `skip`. */
+export const keptPages = (count: number, skip: readonly number[]) => Array.from({ length: count }, (_, i) => i + 1).filter((p) => !skip.includes(p));
+
+/**
+ * A reading of a slimmed PDF put back on the paper's own page numbers: page n of the slim PDF is `kept[n - 1]`. Pure.
+ */
+export function remapPages(c: PaperContent, kept: readonly number[]): PaperContent {
+  if (!kept.length) return c;
+  const map = (p: number) => kept[Math.min(Math.max(p, 1), kept.length) - 1] ?? p;
+  return { ...c, items: c.items.map((i) => ({ ...i, page: map(i.page) })), figures: c.figures.map((f) => ({ ...f, page: map(f.page) })) };
+}

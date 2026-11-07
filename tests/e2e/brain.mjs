@@ -59,6 +59,7 @@ const PAPER_LINES = [
     ...Array.from({ length: 30 }, (_, i) => `Instruction line ${i + 1}: answer all questions in the spaces provided with a dark pen`)],
   ["1 (a) State the instrument used to measure the time taken by a trolley", "rolling down a ramp. [1]",
     "(b) The trolley takes 2.5 s to travel 1.5 m. Calculate its average speed. [2]", "Fig. 1.1 shows the ramp."],
+  ["BLANK PAGE", "\u00a9 UCLES 2024 0625/42/M/J/24"],
   ["2 (a) Define the term density and state its unit. [2]"],
 ];
 const PAPER_GOOD = {
@@ -66,10 +67,12 @@ const PAPER_GOOD = {
   items: [
     { number: "1(a)", page: 2, text: "State the instrument used to measure the time taken by a trolley rolling down a ramp.", marks: 1, options: [], answerLines: 1, figures: ["F1"], guidance: "" },
     { number: "1(b)", page: 2, text: "The trolley takes 2.5 s to travel 1.5 m. Calculate its average speed.", marks: 2, options: [], answerLines: 2, figures: [], guidance: "" },
+    // Page 3 of the PDF the AIs get: the blank page 3 is left out, so this is the paper's page 4.
     { number: "2(a)", page: 3, text: "Define the term density and state its unit.", marks: 2, options: [], answerLines: 2, figures: [], guidance: "" },
   ],
   figures: [{ id: "F1", page: 2, caption: "Fig. 1.1 the ramp" }],
 };
+const pdfPages = (b64) => (Buffer.from(String(b64 ?? ""), "base64").toString("latin1").match(/\/Type\s*\/Page(?![s\w])/g) ?? []).length;
 // Claude misreads 1(b): the word check and Gemini both catch it.
 const PAPER_CLAUDE = { ...PAPER_GOOD, items: PAPER_GOOD.items.map((i) => (i.number === "1(b)" ? { ...i, text: "The trolley takes 2.5 s to travel 1.5 m. Calculate its mean speed." } : i)) };
 const DRAWN = { figures: [{ id: "F1", svg: "<svg viewBox='0 0 100 50'><script>alert(1)</script><line x1='0' y1='50' x2='100' y2='0' stroke='black' onclick='x()'/><text x='40' y='45'>ramp</text></svg>" }] };
@@ -143,6 +146,7 @@ const server = createServer((req, res) => {
         return;
       }
       ai.seq.push(isDrawing(json.system) ? "claude-draw" : isPaper(json.system) ? "claude-paper" : "claude");
+      ai.claudePages = { ...(ai.claudePages ?? {}), [ai.seq.at(-1)]: pdfPages(json.messages?.[0]?.content?.[0]?.source?.data) };
       const answer = JSON.stringify(isDrawing(json.system) ? DRAWN : isPaper(json.system) ? PAPER_CLAUDE : ai.claudeAnswers.shift() ?? GOOD);
       res.writeHead(200, { "content-type": "text/event-stream" });
       const ev = (type, data) => res.write(`event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`);
@@ -507,6 +511,9 @@ try {
   check(rp.status === 0, `the paper run exits cleanly${rp.status ? ": " + rp.out.slice(-800) : ""}`);
   const order = ai.seq.filter((x) => x !== "claude");
   check(order.join(",") === "gemini-paper,claude-paper,claude-draw", `Gemini reads first, then Claude, then the drawing AI (${order.join(",")})`);
+  check(ai.claudePages["claude-paper"] === 3, `Claude is not sent the blank page (${ai.claudePages["claude-paper"]} of 4 pages)`);
+  check(ai.claudePages["claude-draw"] === 1, `the drawing AI gets only the page with its figure (${ai.claudePages["claude-draw"]} page)`);
+  check(rp.out.includes("Leaving out 1 blank page (3)"), "the run says which blank pages it left out");
   await page.locator("#run-progress", { hasText: "Finished" }).waitFor({ timeout: 15_000 }).then(() => check(true, "the panel shows the run finished, in place"), () => check(false, "the panel shows the run finished, in place"));
   const st = await (await page.request.get(`${BASE}/admin/brain/runs/${queued}`)).json();
   check(["gemini", "claude", "drawing", "checks"].every((s) => st.events.some((e) => e.stage === s && e.state === "done")), "each step reported done, with its model and tokens");
@@ -530,9 +537,11 @@ try {
   check(svg.headers()["content-type"] === "image/svg+xml" && !svgText.includes("script") && !svgText.includes("onclick") && svgText.includes("ramp"), "the figure is served as a clean image (no scripts)");
   check((await page.locator("iframe.review-pdf").getAttribute("src"))?.endsWith("#page=2"), "the PDF opens on the first page with questions");
   await page.locator(".page-bar button", { hasText: "Next page" }).click();
-  check((await page.locator("iframe.review-pdf").getAttribute("src"))?.endsWith("#page=3") && (await page.locator("#item-2\\(a\\)").count()) === 1, "one page bar turns both sides");
+  check((await page.locator("iframe.review-pdf").getAttribute("src"))?.endsWith("#page=3") && (await page.locator("#paper-sheet").textContent())?.includes("Nothing from our reading on this page"), "one page bar turns both sides (the blank page has nothing)");
+  await page.locator(".page-bar button", { hasText: "Next page" }).click();
+  check((await page.locator("iframe.review-pdf").getAttribute("src"))?.endsWith("#page=4") && (await page.locator("#item-2\\(a\\)").count()) === 1, "page numbers are the paper's own, even with the blank page left out for the AIs");
   await page.locator(".page-bar button", { hasText: "Next flag" }).click();
-  check((await page.locator(".page-bar-count").textContent()) === "Page 2 of 3", "Next flag jumps to the flagged page");
+  check((await page.locator(".page-bar-count").textContent()) === "Page 2 of 4", "Next flag jumps to the flagged page");
   const flagsBefore = await page.locator("#paper-sheet .flag-box").count();
   await page.locator(".check-inline input").uncheck();
   check((await page.locator("#paper-sheet .flag-box").count()) === 0, "Show flags off hides them");
