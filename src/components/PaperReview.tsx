@@ -72,6 +72,7 @@ export function PaperReview({ docId, pdfUrl, kind, items, figures, flags, pageCo
   const [current, setCurrent] = useState<string | null>(null);
   const [listOpen, setListOpen] = useState(true);
   const [adjusting, setAdjusting] = useState<string | null>(null);
+  const closeEditor = useCallback(() => setAdjusting(null), []);
   const lastIndex = useRef(0);
   const restored = useRef(false);
 
@@ -133,7 +134,7 @@ export function PaperReview({ docId, pdfUrl, kind, items, figures, flags, pageCo
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
-      if (e.ctrlKey || e.metaKey || e.altKey || (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)))) return;
+      if (e.ctrlKey || e.metaKey || e.altKey || document.querySelector(".box-overlay") || (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)))) return;
       if (e.key === "j" || e.key === "n") step(1);
       else if (e.key === "k" || e.key === "p") step(-1);
       else return;
@@ -169,7 +170,6 @@ export function PaperReview({ docId, pdfUrl, kind, items, figures, flags, pageCo
             {adjusting !== id ? <button className="link" type="button" onClick={() => setAdjusting(id)}>Adjust box</button> : null}
           </span>
         </figcaption>
-        {adjusting === id ? <BoxEditor base={base} figure={id} revision={revision} onClose={() => setAdjusting(null)} /> : null}
         {ff.map((x) => box(x, undefined))}
       </figure>
     );
@@ -260,13 +260,16 @@ export function PaperReview({ docId, pdfUrl, kind, items, figures, flags, pageCo
           </div>
         </section>
       </div>
+      {adjusting ? <BoxEditor base={base} figure={adjusting} revision={revision} onClose={closeEditor} /> : null}
     </>
   );
 }
 
 /**
- * Draws a figure's box by hand on its whole page (the current box framed in red): press and drag on the page, then
- * Save this box. "Use whole page" takes the printed page. Coordinates are the PDF's points, from the page SVG.
+ * Draws a figure's box by hand on its whole page, in a large panel over the review screen (owner, 7 Nov 2026: opened
+ * inside the narrow figure column it was out of sight and too small). The current box is framed in red; press and
+ * drag on the page, then Save this box. "Use whole page" takes the printed page. Coordinates are the PDF's points,
+ * from the page SVG. A save changes the paper's revision, which closes the panel; Escape or Cancel close it too.
  */
 function BoxEditor({ base, figure, revision, onClose }: { base: string; figure: string; revision: number; onClose: () => void }) {
   const [page, setPage] = useState<{ url: string; w: number; h: number } | null>(null);
@@ -274,6 +277,21 @@ function BoxEditor({ base, figure, revision, onClose }: { base: string; figure: 
   const [drag, setDrag] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
   const down = useRef(false);
   const svg = useRef<SVGSVGElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  const opened = useRef(revision);
+
+  // Saved (the paper's revision moved on): close. Escape closes too.
+  useEffect(() => {
+    if (revision !== opened.current) onClose();
+  }, [revision, onClose]);
+  useEffect(() => {
+    panel.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
   useEffect(() => {
     let url = "";
@@ -306,56 +324,55 @@ function BoxEditor({ base, figure, revision, onClose }: { base: string; figure: 
   const box: [number, number, number, number] | null = drag ? [Math.min(drag.x0, drag.x1), Math.min(drag.y0, drag.y1), Math.max(drag.x0, drag.x1), Math.max(drag.y0, drag.y1)] : null;
   const ready = box && box[2] - box[0] >= 8 && box[3] - box[1] >= 8;
 
-  if (failed) {
-    return (
-      <div className="box-editor">
-        <p className="muted">This page&apos;s drawing is not stored yet. Read the paper again to cut its figures, then adjust the box.</p>
-        <button className="btn btn-small" type="button" onClick={onClose}>Close</button>
-      </div>
-    );
-  }
   return (
-    <div className="box-editor">
-      <p className="m-0">Press and drag on the page around figure {figure}. The red frame is its box now.</p>
-      {page ? (
-        <svg
-          ref={svg}
-          className="box-editor-page"
-          viewBox={`0 0 ${page.w} ${page.h}`}
-          role="img"
-          aria-label={`The page of figure ${figure}. Drag to draw its box.`}
-          onPointerDown={(e) => {
-            const p = point(e);
-            if (!p) return;
-            down.current = true;
-            e.currentTarget.setPointerCapture(e.pointerId);
-            setDrag({ x0: p.x, y0: p.y, x1: p.x, y1: p.y });
-          }}
-          onPointerMove={(e) => {
-            if (!down.current) return;
-            const p = point(e);
-            if (p) setDrag((d) => (d ? { ...d, x1: p.x, y1: p.y } : d));
-          }}
-          onPointerUp={() => { down.current = false; }}
-        >
-          <image href={page.url} x="0" y="0" width={page.w} height={page.h} />
-          {box ? <rect className="box-editor-new" x={box[0]} y={box[1]} width={box[2] - box[0]} height={box[3] - box[1]} /> : null}
-        </svg>
-      ) : <p className="muted">Loading the page...</p>}
-      <div className="row-actions">
-        <ActionForm action={`${base}/fix`} messages={MESSAGES}>
-          <input type="hidden" name="action" value="box" />
-          <input type="hidden" name="item" value={figure} />
-          <input type="hidden" name="box" value={box ? box.join(",") : ""} />
-          <button className="btn btn-small btn-primary" type="submit" disabled={!ready}>Save this box</button>
-        </ActionForm>
-        <ActionForm action={`${base}/fix`} messages={MESSAGES}>
-          <input type="hidden" name="action" value="box" />
-          <input type="hidden" name="item" value={figure} />
-          <input type="hidden" name="box" value="whole" />
-          <button className="btn btn-small" type="submit">Use whole page</button>
-        </ActionForm>
-        <button className="btn btn-small" type="button" onClick={onClose}>Close</button>
+    <div className="box-overlay" role="dialog" aria-modal="true" aria-label={`Draw the box of figure ${figure}`}>
+      <div className="box-panel" ref={panel} tabIndex={-1}>
+        <div className="box-panel-head">
+          <div>
+            <h2 className="subtitle m-0">Figure {figure}: draw its box</h2>
+            <p className="muted m-0">{failed ? "This page's drawing is not stored yet. Read the paper again to cut its figures, then adjust the box." : "Press and drag on the page around the figure. The red frame is its box now; yours shows in blue."}</p>
+          </div>
+          <div className="row-actions">
+            <ActionForm action={`${base}/fix`} messages={MESSAGES}>
+              <input type="hidden" name="action" value="box" />
+              <input type="hidden" name="item" value={figure} />
+              <input type="hidden" name="box" value={box ? box.join(",") : ""} />
+              <button className="btn btn-small btn-primary" type="submit" disabled={!ready}>Save this box</button>
+            </ActionForm>
+            <ActionForm action={`${base}/fix`} messages={MESSAGES}>
+              <input type="hidden" name="action" value="box" />
+              <input type="hidden" name="item" value={figure} />
+              <input type="hidden" name="box" value="whole" />
+              <button className="btn btn-small" type="submit" disabled={failed}>Use whole page</button>
+            </ActionForm>
+            <button className="btn btn-small" type="button" onClick={onClose}>Cancel</button>
+          </div>
+        </div>
+        {page ? (
+          <svg
+            ref={svg}
+            className="box-editor-page"
+            viewBox={`0 0 ${page.w} ${page.h}`}
+            role="img"
+            aria-label={`The page of figure ${figure}. Drag to draw its box.`}
+            onPointerDown={(e) => {
+              const p = point(e);
+              if (!p) return;
+              down.current = true;
+              e.currentTarget.setPointerCapture(e.pointerId);
+              setDrag({ x0: p.x, y0: p.y, x1: p.x, y1: p.y });
+            }}
+            onPointerMove={(e) => {
+              if (!down.current) return;
+              const p = point(e);
+              if (p) setDrag((d) => (d ? { ...d, x1: p.x, y1: p.y } : d));
+            }}
+            onPointerUp={() => { down.current = false; }}
+          >
+            <image href={page.url} x="0" y="0" width={page.w} height={page.h} />
+            {box ? <rect className="box-editor-new" x={box[0]} y={box[1]} width={box[2] - box[0]} height={box[3] - box[1]} /> : null}
+          </svg>
+        ) : failed ? null : <p className="muted">Loading the page...</p>}
       </div>
     </div>
   );
