@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  cleanPaper, cleanSvg, editItem, marksAgainstPaper, mergeReading, openFlags, paperFlags, pdfVersion, recheckItem, type PaperContent,
+  cleanPaper, cleanSvg, editItem, marksAgainstPaper, mergeReading, openFlags, paperFlags, pdfVersion, placeOnPages, recheckItem, type PaperContent,
 } from "../../src/lib/brain/paper.ts";
 import { applyFix, loadContent, paperDoc, paperView, savePaperReading } from "../../src/lib/brain/paperRead.ts";
 import { brainStep, claimBrainRun, cleanEvent, runState, startPaperRun } from "../../src/lib/brain/runs.ts";
@@ -213,8 +213,12 @@ test("a reading of the wrong kind or without items is refused", async () => {
 
 test("blank pages are left out for the AIs and page numbers put back", async () => {
   const { blankPages, keptPages, remapPages } = await import("../../src/lib/brain/paper.ts");
-  const pages = ["BLANK PAGE cover never counts", "1 (a) A question [2]", "BLANK PAGE\n© UCLES 2024 0625/42/M/J/24\n3", "BLANK PAGE but with a real question about a ramp and a trolley here and more words", "2 (a) Another [2]"];
+  const pages = ["BLANK PAGE cover never counts", "1 (a) A question [2]", "BLANK PAGE\n© UCLES 2024 0625/42/M/J/24\n3", "BLANK PAGE but Fig. 4.1 shows a real question [2]", "2 (a) Another [2]"];
   assert.deepEqual(blankPages(pages), [3], "only a page that says BLANK PAGE and its footer");
+  // Real text from a November 2025 Physics paper: kerned "BLANK P AGE", margin warnings, bar codes, and the last page
+  // with the copyright acknowledgements are all left out; a question page never is.
+  const real = {"blank": "2\n0625/42/O/N/25\u00a9 UCLES 2025\nBLANK P AGE\n* 0000800000002 *\nDO NOT WRITE IN THIS MARGIN DO NOT WRITE IN THIS MARGIN DO NOT WRITE IN THIS MARGIN DO NOT WRITE IN THIS MARGIN DO NOT WRITE IN THIS MARGIN\nDFD", "ack": "20\n0625/42/O/N/25\u00a9 UCLES 2025\nPermission to reproduce items where third\u2011party owned material protected by copyright is included has been sought and cleared where possible. Every\nreasonable effort has been made by the publisher (UCLES) to trace copyright holders, but if any items requiring clearance have unwittingly been included, the\npublisher will be pleased to make amends at the earliest possible opportunity.\nTo avoid the issue of disclosure of answer\u2011related information to candidates, all copyright acknowledgements are reproduced online in the Cambridge\nAssessment International Education Copyright Acknowledgements Booklet. This is produced for each series of examinations and is freely available to download\nat www .cambridgeinternational.org after the live examination series.\nCambridge Assessment International Education is part of Cambridge Assessment. Cambridge Assessment is the brand name of the University of Cambridge\nLocal Examinations Syndicate (UCLES), which is a department of the University of Cambridge.\nBLANK P AGE\n* 0000800000020 *\nDO NOT WRITE IN THIS MARGIN DO NOT WRITE IN THIS MARGIN DO NOT WRITE IN THIS MARGIN DO NOT WRITE IN THIS MARGIN DO NOT WRITE IN THIS MARGIN\nDFD", "q": "3\n0625/42/O/N/25\u00a9 UCLES 2025 [Turn over\n1 (a) (i) State the difference between a scalar quantity and a vector quantity.\n...........................................................................................................................................\n..................................................................................................................................... [1]\n(i"};
+  assert.deepEqual(blankPages(["cover", real.blank, real.q, real.ack]), [2, 4]);
   const kept = keptPages(pages.length, blankPages(pages));
   assert.deepEqual(kept, [1, 2, 4, 5]);
   const c = cleanPaper({ items: [{ number: "1(a)", page: 2, text: "x" }, { number: "2(a)", page: 4, text: "y" }], figures: [{ id: "F1", page: 3, caption: "" }] }, "qp");
@@ -222,4 +226,13 @@ test("blank pages are left out for the AIs and page numbers put back", async () 
   assert.deepEqual(back.items.map((i) => i.page), [2, 5], "page 4 of the slim PDF is the paper's page 5");
   assert.equal(back.figures[0]!.page, 4);
   assert.deepEqual(remapPages(c, []).items.map((i) => i.page), [2, 4], "nothing left out: unchanged");
+});
+
+test("items and figures are placed on their real pages by the PDF's text, whatever page the AI gave", () => {
+  const c = cleanPaper({ ...READING, items: READING.items.map((i) => ({ ...i, page: 1 })), figures: [{ id: "F1", page: 9, caption: "Fig. 1.1 the ramp" }] }, "qp");
+  const placed = placeOnPages(c, PAGES);
+  assert.deepEqual(placed.items.map((i) => i.page), [2, 2, 3]);
+  assert.equal(placed.figures[0]!.page, 2, "by its label, Fig. 1.1");
+  const lost = cleanPaper({ items: [{ number: "1(a)", page: 2, text: "Words printed nowhere in the paper at all." }] }, "qp");
+  assert.equal(placeOnPages(lost, PAGES).items[0]!.page, 2, "an item code cannot place keeps its page");
 });

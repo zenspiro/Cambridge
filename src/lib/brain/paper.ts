@@ -371,23 +371,17 @@ export function itemsByPage(c: PaperContent): { page: number; items: PaperItem[]
 // ---------- Pages sent to the AIs (owner, 7 Nov 2026: do not pay to read blank pages) ----------
 
 /**
- * Pages that carry nothing but "BLANK PAGE" (plus the usual footer: copyright line, paper code, page number), 1-based.
- * The first page is never blank (a cover carries the total marks). Pure.
+ * Pages printed "BLANK PAGE" with nothing to answer on them, 1-based: Cambridge prints the words (often kerned as
+ * "BLANK P AGE") with only boilerplate around them (page number, paper code, copyright line, "DO NOT WRITE IN THIS
+ * MARGIN", bar codes, and on the last page the copyright acknowledgements). A page with marks ("[2]"), a figure or
+ * answer lines is never left out, and neither is the cover (it carries the total marks). Pure.
  */
 export function blankPages(pages: readonly string[]): number[] {
   const out: number[] = [];
   pages.forEach((text, i) => {
-    if (i === 0) return;
-    const s = squash(text);
-    if (!s.includes("blankpage")) return;
-    const rest = s
-      .replace(/blankpage/g, "")
-      .replace(/ucles\d{0,4}/g, "")
-      .replace(/cambridge(university)?press(and)?(assessment)?(international)?(education)?/g, "")
-      .replace(/permissiontoreproduce\w*/g, "")
-      .replace(/\d{4}\d{2}[a-z]{1,2}\d{0,2}/g, "")
-      .replace(/\d+/g, "");
-    if (rest.length <= 40) out.push(i + 1);
+    if (i === 0 || !squash(text).includes("blankpage")) return;
+    if (/\[\s*\d+\s*\]/.test(text) || /\bFig\.\s*\d/i.test(text) || /\.{8,}/.test(text) || /\btable\s*\d+\.\d/i.test(text)) return;
+    out.push(i + 1);
   });
   return out;
 }
@@ -402,4 +396,41 @@ export function remapPages(c: PaperContent, kept: readonly number[]): PaperConte
   if (!kept.length) return c;
   const map = (p: number) => kept[Math.min(Math.max(p, 1), kept.length) - 1] ?? p;
   return { ...c, items: c.items.map((i) => ({ ...i, page: map(i.page) })), figures: c.figures.map((f) => ({ ...f, page: map(f.page) })) };
+}
+
+/**
+ * Puts every item and figure on its real page by the PDF's own text, whatever page number the AI gave (it may count
+ * the pages it was sent, or use the numbers printed on them). An item goes to the page that best holds its question
+ * line (its last line that is not an answer label like "momentum ="); a figure to the first page that prints its
+ * label ("Fig. 2.1") where a question or figure is. Items code cannot place keep `fallback`'s page. Pure.
+ */
+export function placeOnPages(c: PaperContent, pages: readonly string[]): PaperContent {
+  const idx = pages.map((p) => textIndex([p]));
+  if (idx.reduce((a, x) => a + x.chars, 0) < BRAIN.minPaperTextChars) return c;
+  const best = (wording: string) => {
+    if (squash(wording).length < 12) return 0;
+    let page = 0;
+    let score = 0;
+    idx.forEach((x, i) => {
+      const s = coverage(x, wording);
+      if (s > score) {
+        score = s;
+        page = i + 1;
+      }
+    });
+    return score >= 0.8 ? page : 0;
+  };
+  const items = c.items.map((it) => {
+    const lines = it.text.split("\n").map((l) => l.trim()).filter((l) => l && !/=\s*\.*\s*\S{0,6}$/.test(l) && squash(l).length >= 12);
+    const page = best(lines.at(-1) ?? it.text) || best(it.text);
+    return page ? { ...it, page } : it;
+  });
+  const figures = c.figures.map((f) => {
+    const label = /Fig\.?\s*(\d+\.\d+)/i.exec(f.caption)?.[1];
+    if (!label) return f;
+    const re = new RegExp(`Fig\\.?\\s*${label.replace(".", "\\.")}(?!\\d)`, "i");
+    const i = pages.findIndex((p) => re.test(p));
+    return i >= 0 ? { ...f, page: i + 1 } : f;
+  });
+  return { ...c, items, figures };
 }
