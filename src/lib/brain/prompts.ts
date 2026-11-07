@@ -140,13 +140,15 @@ totalMarks: the maximum mark printed, or null.`;
   const scope = only.length ? `\n\nOnly copy these items: ${only.join(", ")}. Leave every other item out.` : "";
   const how = parts && parts.textPages.length
     ? `The paper reaches you in two parts. The attached PDF holds only the pages with figures: the paper's pages ${parts.picturePages.join(", ")}, in that order${parts.picturePages.length ? "" : " (none)"}. Every other page is given below as the text taken from the PDF, under markers such as "=== Page 4 ===". Together they are the whole paper, in page order. For page, give the paper's own page number (from the marker, or from the list above for a PDF page).
-The extracted text loses superscripts and subscripts: restore them where the physics makes it clear (write "5.8 × 10–2 kg" as "5.8 × 10⁻² kg", "cm3" as "cm³", "m / s2" as "m/s²"). Dotted lines are answer lines: count them for answerLines and leave them out of text.
+The extracted text loses superscripts and subscripts: restore them where the physics makes it clear (write "5.8 × 10–2 kg" as "5.8 × 10⁻² kg", "cm3" as "cm³", "m / s2" as "m/s²"). Dotted lines are answer lines (shown as [line] in the text): count them for answerLines and leave them out of text. Words split after a capital letter are one word ("W rite" is "Write").
 
 `
     : "";
   return `${how}${how ? "This is" : "The attached PDF is"} ${paper}. Copy it into the JSON shape requested. Leave out the cover instructions, blank pages and copyright notices.
 
 ${what}
+
+Write maths in plain text, the same way every time: fractions as a/b with brackets where needed ((x + 1)/3), powers and indices as superscripts (x², 10⁻³, m³), subscripts as _ (v_1), and the signs ×, ÷, −, √, π, ≤, ≥, ≠ and °. Keep program code exactly: one line per line, with its line numbers, its indentation (spaces) and its symbols such as ←. Tables go as one line per row, cells separated by " | ".
 
 Keep the paper's order. Do not summarise, merge, split, reword, correct or answer anything.${scope}`;
 }

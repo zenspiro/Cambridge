@@ -10,7 +10,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { PDFDocument } from "pdf-lib";
 import { constants as zlibConstants, inflateSync } from "node:zlib";
 import { signRequest } from "../../src/lib/agent/sign.ts";
-import { allPagesText } from "../../src/lib/pdf/firstPage.ts";
+import { allPagesInfo, allPagesText } from "../../src/lib/pdf/firstPage.ts";
 import {
   DRAW_SCHEMA, DRAW_SYSTEM, drawPrompt, PAPER_SCHEMA, PAPER_SCHEMA_GEMINI, PAPER_SYSTEM, paperPrompt,
   retryPrompt, TOPIC_SCHEMA, TOPIC_SCHEMA_GEMINI, TOPIC_SYSTEM, topicPrompt,
@@ -462,7 +462,9 @@ async function runPaper(job: PaperJob) {
   const doc = await api("/api/brain/doc", {});
   if (!doc.bytes?.length) throw new Stop("no_paper");
   const inflate = async (d: Uint8Array) => new Uint8Array(inflateSync(d, { finishFlush: zlibConstants.Z_SYNC_FLUSH }));
-  const pages = await allPagesText(doc.bytes, inflate);
+  // Each page's text, and the drawings and images on it (which pages Claude must see as pictures).
+  const info = await allPagesInfo(doc.bytes, inflate);
+  const pages = info.map((p) => p.text);
   await note(`The paper has ${pages.length} pages`, { stage: "pdf", state: "done" });
   // Readers get the paper without its blank pages; their page numbers are put back on the paper's own (remapPages).
   const slim = await withoutBlankPages(doc.bytes, pages);
@@ -496,7 +498,7 @@ async function runPaper(job: PaperJob) {
     // whose text cannot be read goes whole, as before.
     const readable = pages.join("").replace(/\s/g, "").length >= BRAIN.minPaperTextChars;
     const blank = blankPages(pages);
-    const pics = picturePages(pages, blank);
+    const pics = picturePages(pages, blank, info);
     const textOnly = keptPages(pages.length, [...blank, ...pics]);
     const mixed = readable && textOnly.length > 0;
     const claudePdf = mixed ? (pics.length ? (await slimPdf(doc.bytes, pics, pages.length)).pdf64 : "") : pdf64;

@@ -246,3 +246,37 @@ test("a power or unit that lost its superscript is flagged amber (the word check
   const c = cleanPaper({ items: [{ number: "1(b)(ii)", page: 2, text: "The trolley takes 2.5 s to travel 1.5 m × 10 5. Calculate its average speed.", marks: 2 }] }, "qp");
   assert.ok(paperFlags({ content: c, pages: PAGES, gemini: null }).some((f) => f.key === "numbers:1(b)(ii):sup" && f.colour === "amber"));
 });
+
+test("pages Claude must see as pictures: figures, drawings, formulas and code; prose and answer lines go as text", async () => {
+  const { picturePages, aiPageText } = await import("../../src/lib/brain/paper.ts");
+  const furniture = { paths: 10 };
+  const pages = [
+    "cover",
+    "4 (a) A truck moves with a constant acceleration. Calculate the resultant force. [3]", // prose
+    "(b) Fig. 2.1 shows a car on a track. [1]", // figure label
+    "5 (a) The diagram shows a regular decagon. Work out the value of d. [3]", // drawing, no label
+    "16 Expand and simplify.\n(a) () ()xx72 43 5++ -\n[2]", // scrambled formula
+    "3 Gm n\n5\n4 2=\nFind the value of G when m = 6 and n = 15. [1]", // formula fragments
+    "01 Counter 0\n02 N ROUND(RANDOM() * 99, 1) + 1\n03 REPEAT\n04 OUTPUT \"Please enter a guess\"\n05 INPUT G [4]", // code
+    "(b) Explain how you could change the algorithm. [3]\n" + ".".repeat(130) + "\n" + ".".repeat(130), // prose and answer lines
+  ];
+  const drawn = [furniture, furniture, { paths: 40 }, { paths: 39 }, furniture, furniture, furniture, furniture];
+  assert.deepEqual(picturePages(pages, [], drawn), [3, 4, 5, 6, 7]);
+  assert.deepEqual(picturePages(pages, [4], drawn), [3, 5, 6, 7], "a blank page is never a picture");
+  assert.equal(aiPageText(pages[7]!), "(b) Explain how you could change the algorithm. [3]\n[line]\n[line]", "answer lines shrink to a marker");
+});
+
+test("the word check accepts a formula read from the picture, scrambled in the text layer, but not invented words", async () => {
+  const { isFormula } = await import("../../src/lib/brain/paper.ts");
+  assert.ok(isFormula("(3x − y)(5x + 2y)"));
+  assert.ok(!isFormula("Still made up."));
+  const text = [PAGES[0]!, "16 Expand and simplify.\n(a) () ()xx72 43 5++ -\n[2]\n(b) () ()xy xy35 2-+\n[2]\nMake t the subject of the formula.\nx\nt\nt\n5\n7\n=\n-\nt = [3]"];
+  const c = cleanPaper({ items: [
+    { number: "16(a)", page: 2, text: "Expand and simplify.\n7(x + 2) + 4(3x − 5)", marks: 2 },
+    { number: "16(b)", page: 2, text: "(3x − y)(5x + 2y)", marks: 2 },
+    { number: "17", page: 2, text: "Make t the subject of the formula.\nx = 7t/(5 − t)", marks: 3 },
+    { number: "18", page: 2, text: "Factorise the expression completely using brackets.\n(2x + 9)(x − 4)", marks: 2 },
+  ] }, "qp");
+  const flags = paperFlags({ content: c, pages: text, gemini: null }).filter((f) => f.kind === "words").map((f) => f.item);
+  assert.deepEqual(flags, ["18"], "only the invented part");
+});
