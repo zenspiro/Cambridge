@@ -614,6 +614,24 @@ try {
   await page.locator("#reading .pill", { hasText: "Ready (marked ready)" }).waitFor({ timeout: 15_000 }).then(() => check(true, "the admin can mark it ready with flags left (recorded)"), () => check(false, "the admin can mark it ready with flags left (recorded)"));
   check(rows(`SELECT COUNT(*) AS n FROM audit_log WHERE action = 'paper.override'`)[0].n >= 1, "the override is audited");
 
+  // Cutting figures again is free: no AI is asked, the words stay, a box drawn by hand stays.
+  const cutBtn = page.locator("#reading button", { hasText: "Cut figures from the PDF (free)" });
+  check((await cutBtn.count()) === 1, "a read paper offers Cut figures from the PDF (free)");
+  await cutBtn.click();
+  await page.locator("#reading button", { hasText: "Yes" }).click();
+  await page.locator("#reading .action-note", { hasText: "GITHUB_TOKEN" }).waitFor({ timeout: 10_000 }).then(() => check(true, "cutting figures is not stopped by the cost check (only by the missing GitHub token here)"), () => check(false, "cutting figures is not stopped by the cost check (only by the missing GitHub token here)"));
+  const cutRun = `e2ec${Date.now()}`;
+  sql(`INSERT INTO job (id, type, status, params, created_by, created_at) VALUES ('${cutRun}', 'brain', 'queued', '{"task":"paper","docId":"${paperId}","scope":{"items":[],"figures":["F1","F2"]}}', 'platform-admin', ${Date.now()})`);
+  sql(`UPDATE paper_read SET job_id = '${cutRun}' WHERE doc_id = '${paperId}'`);
+  ai.seq.length = 0;
+  const rc = await runBrain(cutRun);
+  check(rc.status === 0 && rc.out.includes("Cut 2 of 2 figures"), `the figures are cut again${rc.status ? ": " + rc.out.slice(-600) : ""}`);
+  check(ai.seq.length === 0, `no AI is asked to cut figures (${ai.seq.join(",") || "none"})`);
+  check(rows(`SELECT COUNT(*) AS n FROM ai_spend WHERE job_id = '${cutRun}'`)[0].n === 0, "cutting figures records no spend");
+  await page.reload();
+  await page.locator("#paper-sheet").waitFor({ timeout: 10_000 });
+  await page.locator("#item-1\\(b\\)").scrollIntoViewIfNeeded().catch(() => {});
+
   // A figure's box drawn by hand on its page.
   await page.locator(".flag-filter", { hasText: "Figures" }).click();
   await page.locator(".flag-list .flag-row").first().click();
