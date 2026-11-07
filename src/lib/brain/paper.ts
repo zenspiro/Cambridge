@@ -168,6 +168,15 @@ export function fingerprint(...parts: string[]): string {
 /** Everything of an item that must be in the PDF: its wording and its options. */
 export const itemWording = (it: PaperItem) => [it.text, ...it.options.map((o) => o.text)].join(" ");
 
+/**
+ * A power of ten or a unit written flat, as the PDF's text layer gives it ("× 10–2", "10 5", "cm3", "m / s2"), which
+ * the word check cannot see (it compares letters and digits only). Returns the first one found, else "". Pure.
+ */
+export function lostSuperscript(s: string): string {
+  const m = /×\s*10\s*[–\-−]?\s*\d+/.exec(s) ?? /\b(?:c?m|mm|km)[23]\b/.exec(s) ?? /\/\s*s2\b/.exec(s);
+  return m ? m[0] : "";
+}
+
 const numbersIn = (s: string) => [...new Set(s.match(/\d+(?:\.\d+)?/g) ?? [])];
 
 /** The PDF's numbers, as printed ("3.5", "120"), for the numbers check. */
@@ -238,6 +247,8 @@ export function paperFlags({ content, pages, gemini }: CheckInput): Flag[] {
           break;
         }
       }
+      const lost = lostSuperscript(wording);
+      if (lost) add("numbers", it.number, `"${lost}" looks like a power or unit that lost its superscript (10⁻², cm³).`, `${lost}|${wording}`, "", ":sup");
       if (content.kind === "qp" && it.marks !== null && it.marks > 0 && !raw.includes(`[${it.marks}]`) && !raw.includes(`[Total: ${it.marks}]`)) {
         add("marks", it.number, `[${it.marks}] is not printed in the PDF.`, `${it.marks}|${wording}`);
       }
@@ -433,4 +444,34 @@ export function placeOnPages(c: PaperContent, pages: readonly string[]): PaperCo
     return i >= 0 ? { ...f, page: i + 1 } : f;
   });
   return { ...c, items, figures };
+}
+
+// ---------- Text instead of pictures where a page has no figure (owner, 7 Nov 2026: dry-run optimisation) ----------
+
+/**
+ * Pages that need to be seen as a picture: a printed figure label ("Fig. 2.1"), or so little text that the page is
+ * probably a picture. Blank pages are left out; every other page goes to Claude as its text. Pure.
+ */
+export function picturePages(pages: readonly string[], blank: readonly number[]): number[] {
+  return pages.flatMap((text, i) => {
+    const p = i + 1;
+    if (blank.includes(p)) return [];
+    if (/\bFig\.?\s*\d+\.\d+/i.test(text)) return [p];
+    // Very little text and no [marks]: probably a page that is mostly a picture.
+    return squash(aiPageText(text)).length < 80 && !/\[\s*\d+\s*\]/.test(text) && p !== 1 ? [p] : [];
+  });
+}
+
+/** A page's text as Claude gets it: the margin warnings, bar codes and footers that Cambridge prints on every page left out. */
+export function aiPageText(text: string): string {
+  return text
+    .split("\n")
+    .map((l) => l.replace(/(DO NOT WRITE IN THIS MARGIN\s*)+/g, "").trim())
+    .filter((l) => l && !/^\*\s*\d{6,}\s*\*$/.test(l) && !/^[A-Z]{2,4}$/.test(l) && !/^\d{1,2}$/.test(l) && !/^\d{4}\/\d{2}\/[A-Z/]+\/\d{2}\s*©\s*UCLES\s*\d{4}/.test(l))
+    .join("\n");
+}
+
+/** The text pages laid out for Claude, each under a marker with the paper's own page number. */
+export function textPagesBlock(pages: readonly string[], textPages: readonly number[]): string {
+  return textPages.map((p) => `=== Page ${p} ===\n${aiPageText(pages[p - 1] ?? "")}`).join("\n\n");
 }

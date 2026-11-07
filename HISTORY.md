@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-07: Cheaper paper reading: text for pages without figures, lower thinking effort
+
+**What:** owner chose optimisations 1 and 2 from the dry run. Claude now gets only the pages with figures as pictures (`picturePages`: a printed "Fig. N.N", or a page with almost no text and no marks); every other page goes as its text from the PDF, without the margin warnings, bar codes and footers (`aiPageText`, `textPagesBlock`), under page markers, and the prompt says how the two parts fit together and to restore superscripts the text layer loses. Paper reading runs at low thinking effort and drawing at medium (`BRAIN.paperEffort`, `drawEffort`); topic trees keep high. Gemini still gets the pages as pictures, so the two readers see the paper differently. A new amber check flags a power of ten or unit written flat ("× 10–2", "cm3", "/ s2"), which the word check cannot see (`lostSuperscript`). A PDF whose text cannot be read still goes whole.
+
+**Why:** owner, after the dry run: "1 and 2 now".
+
+**Tested:** dry run again on the real 0625_w25_qp_42: Claude got 8 of 17 pages as pictures and 9 as text (about 11,000 characters), effort low; drawing 8 pages at medium; all 39 parts placed on their right pages. `npm run check` exits 0 (197 unit tests; new: lost superscripts). Browser suite from a fresh database: 474 checks (Claude gets only the figure page as a picture, the rest as text without the blank page, low effort).
+
 ## 2026-11-07: Dry run on a real paper: two fixes before any money is spent
 
 **What:** owner asked for a dry run before paying for real readings. The real November 2025 Physics Paper 4 (variant 2) was read in this session the way Claude would read it (39 parts, 80 marks, 8 figures redrawn as SVG) and put through the real brain script, checks and review screen, with that reading standing in for the paid answers. All 39 parts passed the word, number and marks checks against the PDF's own text. It found two bugs, now fixed: (1) the blank page rule missed both real blank pages (Cambridge prints "BLANK P AGE" with margin warnings and bar codes) and could swallow a page whole; it now leaves out any page printed BLANK PAGE that has no marks, figure, table or answer lines (pages 2, 19 and 20 of this paper). (2) Questions showed one page late, because leaving out a blank page shifts the page numbers the AI sees (and an AI may use the printed numbers instead); code now places every part and figure on its page by the PDF's own text (`placeOnPages`), including parts kept from an earlier reading. The live panel now marks saving done. The owner's rule from now on: every paid AI job is dry-run in a dev session first (`CLAUDE.md`).

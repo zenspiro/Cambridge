@@ -236,3 +236,13 @@ test("items and figures are placed on their real pages by the PDF's text, whatev
   const lost = cleanPaper({ items: [{ number: "1(a)", page: 2, text: "Words printed nowhere in the paper at all." }] }, "qp");
   assert.equal(placeOnPages(lost, PAGES).items[0]!.page, 2, "an item code cannot place keeps its page");
 });
+
+test("a power or unit that lost its superscript is flagged amber (the word check cannot see it)", async () => {
+  const { lostSuperscript } = await import("../../src/lib/brain/paper.ts");
+  assert.equal(lostSuperscript("mass is 5.8 × 10–2 kg"), "× 10–2");
+  assert.equal(lostSuperscript("volume of 240 cm3"), "cm3");
+  assert.equal(lostSuperscript("9.8 m / s2"), "/ s2");
+  assert.equal(lostSuperscript("mass is 5.8 × 10⁻² kg, 240 cm³, 9.8 m/s²"), "", "restored ones pass");
+  const c = cleanPaper({ items: [{ number: "1(b)(ii)", page: 2, text: "The trolley takes 2.5 s to travel 1.5 m × 10 5. Calculate its average speed.", marks: 2 }] }, "qp");
+  assert.ok(paperFlags({ content: c, pages: PAGES, gemini: null }).some((f) => f.key === "numbers:1(b)(ii):sup" && f.colour === "amber"));
+});

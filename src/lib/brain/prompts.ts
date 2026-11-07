@@ -110,7 +110,10 @@ export const PAPER_SYSTEM = [
   "Code will check every word and number of your answer against the PDF's text, and an independent reader will copy the same paper.",
 ].join(" ");
 
-export function paperPrompt(kind: "qp" | "ms", paper: string, only: readonly string[] = []): string {
+/** How the paper reaches Claude when pages without figures go as text (owner, 7 Nov 2026). */
+export type PaperParts = { picturePages: readonly number[]; textPages: readonly number[] };
+
+export function paperPrompt(kind: "qp" | "ms", paper: string, only: readonly string[] = [], parts?: PaperParts): string {
   const what = kind === "qp"
     ? `items: every question and question part that asks something, in order.
 - number: as printed, joined: "1", "1(a)", "3(b)(ii)". A question with parts has no item of its own unless it asks something itself; put its opening words (the stem) at the start of its first part's text.
@@ -135,7 +138,13 @@ totalMarks: the total printed on the cover ("The total mark for this paper is 80
 figures: any figure the mark scheme prints, as { id, page, caption }, else [].
 totalMarks: the maximum mark printed, or null.`;
   const scope = only.length ? `\n\nOnly copy these items: ${only.join(", ")}. Leave every other item out.` : "";
-  return `The attached PDF is ${paper}. Copy it into the JSON shape requested. Leave out the cover instructions, blank pages and copyright notices.
+  const how = parts && parts.textPages.length
+    ? `The paper reaches you in two parts. The attached PDF holds only the pages with figures: the paper's pages ${parts.picturePages.join(", ")}, in that order${parts.picturePages.length ? "" : " (none)"}. Every other page is given below as the text taken from the PDF, under markers such as "=== Page 4 ===". Together they are the whole paper, in page order. For page, give the paper's own page number (from the marker, or from the list above for a PDF page).
+The extracted text loses superscripts and subscripts: restore them where the physics makes it clear (write "5.8 × 10–2 kg" as "5.8 × 10⁻² kg", "cm3" as "cm³", "m / s2" as "m/s²"). Dotted lines are answer lines: count them for answerLines and leave them out of text.
+
+`
+    : "";
+  return `${how}${how ? "This is" : "The attached PDF is"} ${paper}. Copy it into the JSON shape requested. Leave out the cover instructions, blank pages and copyright notices.
 
 ${what}
 
