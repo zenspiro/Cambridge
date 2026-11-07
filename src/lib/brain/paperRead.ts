@@ -8,7 +8,7 @@ import { randomId } from "../auth/crypto.ts";
 import { audit } from "../auth/session.ts";
 import { BRAIN } from "../config.ts";
 import { cleanArt, cleanBox, cropSvg, pageSvg, wholePage, type PageArt } from "./figures.ts";
-import { cleanPaper, editItem, marksAgainstPaper, openFlags, recheckItem, type Flag, type FlagKind, type PaperContent, type PaperKind } from "./paper.ts";
+import { cleanPaper, editItem, paperScore, storedScore, type PaperScore, marksAgainstPaper, openFlags, recheckItem, type Flag, type FlagKind, type PaperContent, type PaperKind } from "./paper.ts";
 
 export const PAPER_KINDS: readonly PaperKind[] = ["qp", "ms"];
 const KINDS: readonly FlagKind[] = ["words", "numbers", "marks", "numbering", "figure", "agree", "missing", "text"];
@@ -66,13 +66,29 @@ const list = (s: string | null) => {
 export type PaperRow = {
   docId: string; jobId: string | null; items: number; figures: number; flags: Flag[]; dismissed: string[]; revision: number;
   readAt: number | null; overrideAt: number | null; overrideBy: string | null;
+  /** Read accuracy from the first full reading (estimated from the saved flags for papers read before it was kept). */
+  score: PaperScore | null;
+};
+
+/** A paper_read row's read accuracy: the stored first reading, else estimated from its saved flags. */
+export function rowScore(r: { items: number; flags: string | Flag[]; read_at: number | null; first_items: number | null; first_clean: number | null; first_red: number | null }): PaperScore | null {
+  if (!r.read_at) return null;
+  return storedScore(r.first_items, r.first_clean, r.first_red) ?? paperScore(r.items, typeof r.flags === "string" ? cleanFlags(safeJson(r.flags)) : r.flags, true);
+}
+
+const safeJson = (s: string): unknown => {
+  try {
+    return JSON.parse(s);
+  } catch {
+    return [];
+  }
 };
 
 export async function loadPaperRow(db: Db, docId: string): Promise<PaperRow | null> {
   const r = await db
-    .prepare(`SELECT doc_id, job_id, items, figures, flags, dismissed, revision, read_at, override_at, override_by FROM paper_read WHERE doc_id = ?1`)
+    .prepare(`SELECT doc_id, job_id, items, figures, flags, dismissed, revision, read_at, override_at, override_by, first_items, first_clean, first_red FROM paper_read WHERE doc_id = ?1`)
     .bind(docId)
-    .first<{ doc_id: string; job_id: string | null; items: number; figures: number; flags: string; dismissed: string; revision: number; read_at: number | null; override_at: number | null; override_by: string | null }>();
+    .first<{ doc_id: string; job_id: string | null; items: number; figures: number; flags: string; dismissed: string; revision: number; read_at: number | null; override_at: number | null; override_by: string | null; first_items: number | null; first_clean: number | null; first_red: number | null }>();
   if (!r) return null;
   let flags: Flag[] = [];
   try {
@@ -83,6 +99,7 @@ export async function loadPaperRow(db: Db, docId: string): Promise<PaperRow | nu
   return {
     docId: r.doc_id, jobId: r.job_id, items: r.items, figures: r.figures, flags, dismissed: list(r.dismissed), revision: r.revision,
     readAt: r.read_at, overrideAt: r.override_at, overrideBy: r.override_by,
+    score: rowScore(r),
   };
 }
 
@@ -166,6 +183,11 @@ export async function savePaperReading(db: Db, bucket: Bucket, jobId: string, do
   await putJson(bucket, key(docId, "content"), content);
   if (pages && pages.join("").length <= BRAIN.maxPaperBytes) await putJson(bucket, key(docId, "pages"), pages);
   if (raw.gemini) await putJson(bucket, key(docId, "gemini"), cleanPaper(raw.gemini, doc.docType as PaperKind));
+  // The first full reading is kept as the paper's read accuracy (never a figures-only run, never overwritten).
+  if (final && raw.read !== false) {
+    const sc = paperScore(content.items.length, flags);
+    if (sc) await db.prepare(`UPDATE paper_read SET first_items = ?2, first_clean = ?3, first_red = ?4, first_at = ?5 WHERE doc_id = ?1 AND first_items IS NULL`).bind(docId, sc.items, sc.clean, sc.red, now).run();
+  }
   if (final) {
     await db.prepare(`UPDATE job SET status = 'succeeded', progress = 100, finished_at = ?2, step = NULL WHERE id = ?1 AND type = 'brain' AND status = 'running'`).bind(jobId, now).run();
     await audit(db, { actorId: "brain", action: "brain.paper_saved", entity: "source_document", entityId: docId, detail: { items: content.items.length, figures: content.figures.length, flags: flags.length } }, now);

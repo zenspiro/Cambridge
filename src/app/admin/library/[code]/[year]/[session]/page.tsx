@@ -11,6 +11,8 @@ import { loadHeader, loadSyllabus } from "@/lib/library/catalog";
 import { loadPapers } from "@/lib/library/papers";
 import { sessionFromSlug, sessionHref } from "@/lib/library/slugs";
 import type { Cell } from "@/lib/library/checklist";
+import { ScoreBadge } from "@/components/ScoreBadge";
+import { rowScore } from "@/lib/brain/paperRead";
 
 export const metadata: Metadata = { title: "Exam session" };
 
@@ -47,8 +49,8 @@ export default async function SessionPage({
     return c?.doc ? [{ row: r, cell: c as Cell & { doc: NonNullable<Cell["doc"]> } }] : [];
   }));
   const readRows = toRead.length
-    ? (await env.DB.prepare(`SELECT doc_id, read_at, override_at FROM paper_read WHERE doc_id IN (${toRead.map((_, k) => `?${k + 1}`).join(", ")})`)
-      .bind(...toRead.map((x) => x.cell.doc.id)).all<{ doc_id: string; read_at: number | null; override_at: number | null }>()).results
+    ? (await env.DB.prepare(`SELECT doc_id, items, flags, read_at, override_at, first_items, first_clean, first_red FROM paper_read WHERE doc_id IN (${toRead.map((_, k) => `?${k + 1}`).join(", ")})`)
+      .bind(...toRead.map((x) => x.cell.doc.id)).all<{ doc_id: string; items: number; flags: string; read_at: number | null; override_at: number | null; first_items: number | null; first_clean: number | null; first_red: number | null }>()).results
     : [];
   const readState = new Map(readRows.map((r) => [r.doc_id, r]));
 
@@ -83,6 +85,7 @@ export default async function SessionPage({
                 <li key={cell.doc.id} className="review-list-row">
                   <span>Paper {row.paper}{row.variant !== null ? `, variant ${row.variant}` : ""}: {cell.docType === "qp" ? "question paper" : "mark scheme"}{row.essential ? "" : " (extra)"}</span>
                   <span className={`pill${st?.read_at ? " pill-ok" : ""}`}>{words}</span>
+                  {st ? <ScoreBadge score={rowScore(st)} /> : <span />}
                   {/* A full page load: the review page's own security policy frames the PDF. */}
                   <a className="btn btn-small" href={`/admin/library/review/${encodeURIComponent(cell.doc.id)}`}>Review</a>
                 </li>

@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  cleanPaper, cleanSvg, editItem, marksAgainstPaper, mergeReading, openFlags, paperFlags, pdfVersion, placeOnPages, recheckItem, type PaperContent,
+  cleanPaper, cleanSvg, editItem, marksAgainstPaper, mergeReading, openFlags, paperFlags, paperScore, pdfVersion, placeOnPages, recheckItem, storedScore, type PaperContent,
 } from "../../src/lib/brain/paper.ts";
 import { applyFix, loadContent, paperDoc, paperView, savePaperReading } from "../../src/lib/brain/paperRead.ts";
 import { brainStep, claimBrainRun, cleanEvent, runState, startPaperRun } from "../../src/lib/brain/runs.ts";
@@ -286,4 +286,41 @@ test("the word check accepts a formula read from the picture, scrambled in the t
   ] }, "qp");
   const flags = paperFlags({ content: c, pages: text, gemini: null }).filter((f) => f.kind === "words").map((f) => f.item);
   assert.deepEqual(flags, ["18"], "only the invented part");
+});
+
+test("read accuracy: clean parts over all parts; red for a wording flag or under 80%, green from 95%", () => {
+  const f = (item: string, kind: "words" | "marks" | "figure", colour: "red" | "amber" | "blue") => ({ item, kind, colour });
+  assert.equal(paperScore(0, []), null);
+  assert.deepEqual(paperScore(40, []), { items: 40, clean: 40, red: 0, pct: 100, colour: "green", estimated: false });
+  assert.equal(paperScore(40, [f("1(a)", "marks", "amber"), f("1(a)", "marks", "amber")])!.colour, "green", "97%: one part, flagged twice");
+  assert.equal(paperScore(40, [f("1(a)", "marks", "amber"), f("2", "marks", "amber"), f("3", "marks", "amber")])!.colour, "amber", "92%");
+  assert.equal(paperScore(40, [f("1(a)", "words", "red")])!.colour, "red", "any wording flag is red");
+  assert.equal(paperScore(10, [f("1", "marks", "amber"), f("2", "marks", "amber"), f("3", "marks", "amber")])!.colour, "red", "70%");
+  const figs = paperScore(10, [f("F1", "figure", "blue"), f("paper", "marks", "amber")])!;
+  assert.equal(figs.clean, 10, "figure boxes and whole-paper flags do not count against a part");
+  assert.equal(storedScore(null, 1, 0), null);
+  assert.equal(storedScore(39, 36, 0)!.pct, 92);
+});
+
+test("read accuracy is kept from the first full reading, not from a figures-only run or a later one", async () => {
+  const db = testDb();
+  const bucket = testBucket();
+  seedDoc(db, "doc-qp-score");
+  const read = async (raw: Record<string, unknown>, at: number) => {
+    const id = (await startPaperRun(db, "doc-qp-score", { items: [], figures: [] }, "platform-admin", at))!;
+    await claimBrainRun(db, id, null, at + 1);
+    return savePaperReading(db, bucket, id, "doc-qp-score", raw, true, at + 2);
+  };
+  const content = cleanPaper(READING, "qp");
+  const one = [{ key: "words:1(b)", item: "1(b)", kind: "words", colour: "red", reason: "x", pdfText: "", fingerprint: "aaaaaaaa" }];
+  assert.equal(await read({ content, flags: one, pages: PAGES, read: false }, NOW), "ok");
+  const row = () => db.raw.prepare(`SELECT first_items, first_clean, first_red FROM paper_read WHERE doc_id = 'doc-qp-score'`).get() as { first_items: number | null; first_clean: number | null; first_red: number | null };
+  assert.equal(row().first_items, null, "a figures-only run sets no score");
+  assert.equal(await read({ content, flags: one, pages: PAGES }, NOW + 100), "ok");
+  assert.deepEqual({ ...row() }, { first_items: 3, first_clean: 2, first_red: 1 });
+  assert.equal(await read({ content, flags: [], pages: PAGES }, NOW + 200), "ok");
+  assert.equal(row().first_clean, 2, "a later reading leaves the first score");
+  const view = await paperView(db, bucket, (await paperDoc(db, "doc-qp-score"))!);
+  assert.equal(view.row?.score?.colour, "red");
+  assert.equal(view.row?.score?.estimated, false);
 });

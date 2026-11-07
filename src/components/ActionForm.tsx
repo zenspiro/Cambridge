@@ -14,6 +14,9 @@ type Props = {
   messages: Readonly<Record<string, string>>;
   /** Ask inline before sending, with this question. */
   confirm?: string;
+  /** The answer buttons' words (default "Yes" and "Never mind"). */
+  yes?: string;
+  no?: string;
   className?: string;
   /** Add the folder counts from the redirect ("Added 2, already listed 0, not a folder link 1."). */
   counts?: boolean;
@@ -24,7 +27,7 @@ function folderCounts(q: URLSearchParams): string {
   return q.has("added") ? `Added ${n("added")}, already listed ${n("dupes")}, not a folder link ${n("bad")}.` : "";
 }
 
-export function ActionForm({ action, children, messages, confirm, className, counts }: Props) {
+export function ActionForm({ action, children, messages, confirm, className, counts, yes = "Yes", no = "Never mind" }: Props) {
   const router = useRouter();
   const form = useRef<HTMLFormElement>(null);
   const [asking, setAsking] = useState<FormData | null>(null);
@@ -69,8 +72,8 @@ export function ActionForm({ action, children, messages, confirm, className, cou
       {asking ? (
         <span className="confirm" role="group" aria-label={confirm}>
           <span>{confirm}</span>
-          <button className="btn btn-small btn-danger" type="button" disabled={busy} onClick={() => void send(asking)}>Yes</button>
-          <button className="btn btn-small" type="button" disabled={busy} onClick={() => setAsking(null)}>Never mind</button>
+          <button className="btn btn-small btn-danger" type="button" disabled={busy} onClick={() => void send(asking)}>{yes}</button>
+          <button className="btn btn-small" type="button" disabled={busy} onClick={() => setAsking(null)}>{no}</button>
         </span>
       ) : (
         <fieldset className="action-fields" disabled={busy}>{children}</fieldset>

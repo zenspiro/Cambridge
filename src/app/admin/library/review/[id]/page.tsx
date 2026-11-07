@@ -13,6 +13,7 @@ import { loadReviewDoc, relatedDocs } from "@/lib/library/review";
 import { sessionHref, versionHref, type ExamSession } from "@/lib/library/slugs";
 import { ActionForm } from "@/components/ActionForm";
 import { PaperReview } from "@/components/PaperReview";
+import { ScoreBadge } from "@/components/ScoreBadge";
 import { RunProgress } from "@/components/RunProgress";
 import { loadPages, PAPER_KINDS, paperDoc, paperView, type PaperView } from "@/lib/brain/paperRead";
 import { isActive, runState } from "@/lib/brain/runs";
@@ -162,19 +163,22 @@ function ReadingCard({ docId, view, cost, run, busy, facts }: {
       <div className="reading-head">
         <h2 className="subtitle">Reading</h2>
         {pill}
+        <ScoreBadge score={view.row?.score ?? null} long />
         {read ? <span className="muted">{view.content!.items.length} items, {view.content!.figures.length} figures{view.row?.readAt ? `, read ${dateFmt.format(view.row.readAt)}` : ""}</span> : null}
       </div>
       {/* Live while it runs; afterwards the steps stay for a while (or until the next run), and a stopped run says why. */}
       {run && (busy || run.status === "failed" || (run.finishedAt !== null && Date.now() - run.finishedAt < RECENT_MS)) ? <RunProgress runId={run.id} stages={PAPER_STAGES} /> : null}
       <div className="row-actions">
         {!busy ? (
-          <ActionForm action={`${base}/read`} messages={MESSAGES} confirm={read ? "Read the paper again? This uses AI tokens (the rough cost is below). Confirmed items stay as they are; only flagged and missing ones are read again." : undefined}>
+          <ActionForm action={`${base}/read`} messages={MESSAGES} yes="Yes, proceed" no="No"
+            confirm={`${read ? "Read the paper again? Confirmed items stay; flagged and missing ones are read again." : "Read this paper?"} This uses AI tokens: ${cost.estimate.usd === null ? "cost unknown" : `about ${usdWords(cost.estimate.usd)}`}. Proceed?`}>
             <button className="btn btn-primary" type="submit">{read ? "Read it again" : "Read this paper"}</button>
           </ActionForm>
         ) : null}
         {/* Free (owner, 7 Nov 2026): cuts every figure again from the PDF with no AI; words, fixes and hand-drawn boxes stay. */}
         {!busy && cutAgain.length ? (
-          <ActionForm action={`${base}/read`} messages={MESSAGES} confirm={`Cut ${cutAgain.length} figure${cutAgain.length === 1 ? "" : "s"} again from the PDF? No AI is used, so it costs nothing; boxes you drew by hand stay.`}>
+          <ActionForm action={`${base}/read`} messages={MESSAGES} yes="Yes, proceed" no="No"
+            confirm={`Cut ${cutAgain.length} figure${cutAgain.length === 1 ? "" : "s"} again from the PDF? No AI is used, so it costs nothing; boxes you drew by hand stay. Proceed?`}>
             {cutAgain.map((id) => <input key={id} type="hidden" name="figure" value={id} />)}
             <button className="btn" type="submit">Cut figures from the PDF (free)</button>
           </ActionForm>

@@ -536,7 +536,8 @@ async function runPaper(job: PaperJob) {
   const save = async (content: PaperContent, gemini: PaperContent | null, final: boolean) => {
     const flags = paperFlags({ content, pages, gemini });
     if (final) await step(`Checks done: ${flags.length} flag${flags.length === 1 ? "" : "s"} for the review screen`, { stage: "checks", state: "done" });
-    const r = await api("/api/brain/paper", { content, gemini, pages, flags, final });
+    // `read`: a full reading (not a figures-only run), so the first one sets the paper's read accuracy.
+    const r = await api("/api/brain/paper", { content, gemini, pages, flags, final, read: !figuresOnly });
     if (r.status !== 200) throw new Stop(`save_${r.status}`);
     if (final) await note("Saved", { stage: "save", state: "done" });
   };

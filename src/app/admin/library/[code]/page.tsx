@@ -14,6 +14,8 @@ import { describeFile, duration, loadPapers, paperLookup, routeText, TIER_LABELS
 import { type ExamSession } from "@/lib/library/slugs";
 import { buildSubjectMap } from "@/lib/library/map";
 import { SubjectMapVersion } from "@/components/SubjectMap";
+import { ScoreBadge } from "@/components/ScoreBadge";
+import { rowScore } from "@/lib/brain/paperRead";
 
 export const metadata: Metadata = { title: "Library" };
 
@@ -78,6 +80,14 @@ export default async function SyllabusOverview({
   const ownVariants = essentialFor(list.versions[0]?.version, lib);
   const allVariants = q.variants === "all";
   const map = buildSubjectMap(list, papers, { allVariants });
+  // Papers read so far, with their read accuracy (owner, 7 Nov 2026), weakest first so they stand out.
+  const { results: readRows } = await env.DB
+    .prepare(`SELECT p.doc_id, p.items, p.flags, p.read_at, p.first_items, p.first_clean, p.first_red, d.file_name, d.syllabus_id
+              FROM paper_read p JOIN source_document d ON d.id = p.doc_id
+              WHERE p.read_at IS NOT NULL AND d.syllabus_id LIKE ?1 ORDER BY p.read_at DESC LIMIT 200`)
+    .bind(`${code}-%`)
+    .all<{ doc_id: string; items: number; flags: string; read_at: number; first_items: number | null; first_clean: number | null; first_red: number | null; file_name: string; syllabus_id: string }>();
+  const read = readRows.map((r) => ({ ...r, score: rowScore(r) })).sort((a, b) => (a.score?.pct ?? 101) - (b.score?.pct ?? 101));
 
   return (
     <AdminShell current="/admin/library" title={`${header.subject_name} ${code}`}>
@@ -99,6 +109,24 @@ export default async function SyllabusOverview({
           <Link className="btn btn-small" href={`/admin/library/${code}/topics`}>Topic tree</Link>
         </p>
       </section>
+
+      {read.length ? (
+        <section className="card stack" id="papers-read">
+          <h2 className="subtitle">Papers read ({read.length})</h2>
+          <p className="muted m-0">Read accuracy: how well the AIs read each paper by themselves on its first reading. Weakest first.</p>
+          <ul className="review-list">
+            {read.map((r) => (
+              <li key={r.doc_id} className="review-list-row">
+                <span>{describeFile(r.file_name, r.syllabus_id, look)}</span>
+                <ScoreBadge score={r.score} />
+                <span />
+                {/* A full page load: the review page's own security policy frames the PDF. */}
+                <a className="btn btn-small" href={`/admin/library/review/${encodeURIComponent(r.doc_id)}`}>Review</a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       {!view.filtered ? (
         <>

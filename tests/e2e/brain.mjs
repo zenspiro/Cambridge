@@ -522,6 +522,8 @@ try {
   check((await page.locator("#reading .pill").textContent()) === "Not read", "a paper not read yet says so");
   check((await page.locator("#reading").textContent())?.includes("Rough cost"), "Read this paper shows the rough cost first");
   await page.locator("#reading button", { hasText: "Read this paper" }).click();
+  check((await page.locator("#reading .confirm").textContent())?.includes("This uses AI tokens") && (await page.locator("#reading .confirm button", { hasText: "No" }).count()) === 1, "Read this paper asks first, with the cost (Yes, proceed / No)");
+  await page.locator("#reading button", { hasText: "Yes, proceed" }).click();
   await page.locator("#reading .action-note", { hasText: "GITHUB_TOKEN" }).waitFor({ timeout: 10_000 }).then(() => check(true, "Read this paper without a GitHub token says what is missing"), () => check(false, "Read this paper without a GitHub token says what is missing"));
 
   // A queued run shows the live progress panel (no page reloads).
@@ -554,6 +556,8 @@ try {
   await page.locator("#paper-sheet").waitFor({ timeout: 10_000 });
   const pill = await page.locator("#reading .pill").textContent();
   check(/flag/.test(pill ?? ""), `the misread is flagged (${pill})`);
+  const score = (await page.locator("#reading .score").textContent()) ?? "";
+  check(/^Red \d+%/.test(score) && score.includes("read accuracy") && (await page.locator("#reading .score-red").count()) === 1, `the paper's read accuracy shows as a red badge with words (${score.slice(0, 60)})`);
   check((await page.locator("#item-1\\(a\\)").textContent())?.includes("State the instrument"), "the paper is rebuilt from our reading, page by page");
   check((await page.locator("#item-1\\(a\\) .pq-marks").textContent()) === "[1]", "marks show as on the paper");
   check((await page.locator("#item-1\\(b\\).pq-red").count()) === 1, "the misread part is boxed in red");
@@ -653,6 +657,12 @@ try {
   check(await noSideways(), "review screen with the rebuilt paper: no sideways scroll at 1400 px");
   const halves2 = await page.evaluate(() => [...document.querySelectorAll(".review-pane")].map((e) => Math.round(e.getBoundingClientRect().width)));
   check(halves2.length === 2 && Math.abs(halves2[0] - halves2[1]) < 4, "the PDF and the rebuilt paper each take half");
+
+  await page.goto(`${BASE}/admin/library/0625`);
+  check((await page.locator(`#papers-read a[href="/admin/library/review/${paperId}"]`).count()) === 1 && (await page.locator("#papers-read .score-red").count()) === 1, "the subject overview lists papers read with their read accuracy");
+  await page.goto(`${BASE}/admin/library/0625/2024/june`);
+  check((await page.locator("#to-review .score-red").count()) === 1, "the session page shows the read accuracy beside Review");
+  check(rows(`SELECT first_items, first_clean FROM paper_read WHERE doc_id = '${paperId}'`)[0].first_items === 3, "the first reading's numbers are kept, unchanged by the free figure cut");
 
   // 11. Signed endpoints refuse unsigned calls.
   const unsigned = await fetch(`${BASE}/api/brain/job`, { method: "POST", body: "{}" });

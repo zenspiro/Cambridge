@@ -351,6 +351,35 @@ export function figureFlag(f: PaperFigure): { reason: string; what: string } | n
   return { reason: `Figure ${f.id} could not be found on page ${f.page}. Draw its box on the page.`, what: `none:${f.id}:${f.page}:${f.caption}` };
 }
 
+export type ScoreColour = "green" | "amber" | "red";
+export type PaperScore = { items: number; clean: number; red: number; pct: number; colour: ScoreColour; estimated: boolean };
+
+/**
+ * Read accuracy (owner, 7 Nov 2026): parts with no flag of their own over all parts, from the first full reading.
+ * Figure boxes (the cutter, not the AI) and whole-paper flags do not count against a part. Green at BRAIN.scoreGreen%
+ * with no red flag; red under BRAIN.scoreAmber% or with any red (wording) flag; amber between. Pure.
+ */
+export function scoreColour(pct: number, red: number): ScoreColour {
+  if (red > 0 || pct < BRAIN.scoreAmber) return "red";
+  return pct >= BRAIN.scoreGreen ? "green" : "amber";
+}
+
+export function paperScore(items: number, flags: readonly Pick<Flag, "item" | "kind" | "colour">[], estimated = false): PaperScore | null {
+  if (items <= 0) return null;
+  const flagged = new Set(flags.filter((f) => f.kind !== "figure" && f.item !== "paper").map((f) => f.item));
+  const clean = Math.max(0, items - flagged.size);
+  const red = flags.filter((f) => f.colour === "red" && f.kind !== "figure").length;
+  const pct = Math.floor((clean / items) * 100);
+  return { items, clean, red, pct, colour: scoreColour(pct, red), estimated };
+}
+
+/** The stored first-read numbers as a score; null when not stored yet. */
+export function storedScore(items: number | null, clean: number | null, red: number | null): PaperScore | null {
+  if (items === null || clean === null || red === null || items <= 0) return null;
+  const pct = Math.floor((clean / items) * 100);
+  return { items, clean, red, pct, colour: scoreColour(pct, red), estimated: false };
+}
+
 export function openFlags(flags: readonly Flag[], dismissed: ReadonlySet<string>, rules: ReadonlySet<string>): Flag[] {
   return flags.filter((f) => !dismissed.has(f.fingerprint) && !rules.has(f.fingerprint));
 }

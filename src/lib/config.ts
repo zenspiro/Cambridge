@@ -122,6 +122,9 @@ export const BRAIN = {
   /** Thinking effort for reading a paper (copying, checked by code and Gemini) and for drawing figures (owner chose the
    * lower effort after the 7 Nov 2026 dry run). Topic trees keep `claudeEffort`. */
   paperEffort: "low",
+  /** Read accuracy colours (owner, 7 Nov 2026): green from this % with no red flag, amber from scoreAmber, else red. */
+  scoreGreen: 95,
+  scoreAmber: 80,
   drawEffort: "medium",
   maxItemText: 4_000,
   maxOptions: 8,

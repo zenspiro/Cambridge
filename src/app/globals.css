@@ -243,8 +243,18 @@
   .flag-reason, .flag-pdf { @apply m-0 break-words; }
   .flag-tag { @apply mr-1 rounded bg-wash px-1.5 py-0.5 text-sm font-semibold; }
   .flag-edit textarea { @apply font-sans; }
+  /* Read accuracy badge (owner, 7 Nov 2026). */
+  .score { @apply inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-sm font-semibold; }
+  .score-dot { @apply h-2.5 w-2.5 rounded-full; }
+  .score-green { @apply border-green-300 bg-green-50 text-green-800; }
+  .score-green .score-dot { @apply bg-green-600; }
+  .score-amber { @apply border-amber-300 bg-amber-50 text-amber-900; }
+  .score-amber .score-dot { @apply bg-amber-500; }
+  .score-red { @apply border-red-300 bg-red-50 text-red-800; }
+  .score-red .score-dot { @apply bg-red-600; }
+  .score-detail { @apply font-normal; }
   .review-list { @apply m-0 flex list-none flex-col gap-2 p-0; }
-  .review-list-row { @apply grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 text-base; }
+  .review-list-row { @apply grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-3 text-base; }
   .flag-current { @apply ring-2 ring-blue-600 ring-offset-2; }
   /* Flag list (owner, 7 Nov 2026): every open flag by page, filters by colour, jump with a click or J / K. */
   .flag-panel { @apply mt-3 flex flex-col gap-2 rounded-lg border border-line bg-paper px-4 py-3; }
