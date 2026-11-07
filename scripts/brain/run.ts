@@ -9,13 +9,18 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { PDFDocument } from "pdf-lib";
 import { constants as zlibConstants, inflateSync } from "node:zlib";
+import { execFile } from "node:child_process";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { assignBoxes, findBoxes, pageArt, textLines, type Box, type FigureCut } from "../../src/lib/brain/figures.ts";
 import { signRequest } from "../../src/lib/agent/sign.ts";
 import { allPagesInfo, allPagesText } from "../../src/lib/pdf/firstPage.ts";
 import {
-  DRAW_SCHEMA, DRAW_SYSTEM, drawPrompt, PAPER_SCHEMA, PAPER_SCHEMA_GEMINI, PAPER_SYSTEM, paperPrompt,
+  PAPER_SCHEMA, PAPER_SCHEMA_GEMINI, PAPER_SYSTEM, paperPrompt,
   retryPrompt, TOPIC_SCHEMA, TOPIC_SCHEMA_GEMINI, TOPIC_SYSTEM, topicPrompt,
 } from "../../src/lib/brain/prompts.ts";
-import { blankPages, cleanPaper, cleanSvg, keptPages, mergeReading, paperFlags, picturePages, placeOnPages, remapPages, textPagesBlock, type PaperContent, type PaperKind } from "../../src/lib/brain/paper.ts";
+import { blankPages, cleanPaper, keptPages, mergeReading, paperFlags, picturePages, placeOnPages, remapPages, textPagesBlock, type PaperContent, type PaperKind } from "../../src/lib/brain/paper.ts";
 import {
   checkNumbers, checkWords, cleanDraft, compareDrafts, isReady, missingHeadings, retryNotes, textIndex,
   type Draft, type Problem, type TextIndex, type TreeReport,
@@ -37,7 +42,7 @@ type PaperJob = {
   scope: { items: string[]; figures: string[] }; prior: { content: unknown; gemini?: unknown; open: string[] };
   models: { claude: string; gemini: string; drawing: string }; limits: Limits;
 };
-type Stage = "pdf" | "gemini" | "claude" | "retry" | "drawing" | "checks" | "save";
+type Stage = "pdf" | "gemini" | "claude" | "retry" | "figures" | "checks" | "save";
 type StepEvent = { stage: Stage; state: "start" | "wait" | "done" | "fail" | "skip"; model?: string; tokens?: number };
 
 const APP_URL = (process.env.APP_URL ?? "").replace(/\/$/, "");
@@ -446,17 +451,69 @@ async function withoutBlankPages(bytes: Uint8Array, pages: readonly string[]): P
 
 // ---------- Reading a paper (step 2b) ----------
 
+const run = (cmd: string, args: string[]) => new Promise<string>((resolve, reject) => {
+  execFile(cmd, args, { maxBuffer: 64 * 1024 * 1024, timeout: 60_000 }, (err, out) => (err ? reject(err) : resolve(out)));
+});
+
+/**
+ * Cuts the figures out of the PDF as SVG (owner, 7 Nov 2026: no AI drawing). Poppler turns each figure page into SVG
+ * and its text lines with boxes; figures.ts finds every figure's box (above its printed label, else the drawing that
+ * matches its description); each page's art is stored so the admin can move a box by hand. Figures that already have
+ * a box keep it unless the run names them. Free, about a second a paper.
+ */
+async function cutFigures(job: PaperJob, content: PaperContent, bytes: Uint8Array): Promise<PaperContent> {
+  const need = content.figures.filter((f) => f.cut !== "manual" && (!f.box || job.scope.figures.includes(f.id)));
+  if (!need.length) {
+    await note("Figures: nothing to cut", { stage: "figures", state: "skip" });
+    return content;
+  }
+  await step(`Cutting ${need.length} figure${need.length === 1 ? "" : "s"} from the PDF (no AI)`, { stage: "figures", state: "start" });
+  try {
+    await run("pdftocairo", ["-v"]).catch((e: { code?: string }) => {
+      if (e.code === "ENOENT") throw e;
+    });
+  } catch {
+    await note("Figures: the PDF tool (Poppler) is not installed here, so figures are left to draw by hand", { stage: "figures", state: "fail" });
+    return content;
+  }
+  const dir = await mkdtemp(join(tmpdir(), "paper-"));
+  const boxes = new Map<string, { box: Box; cut: FigureCut }>();
+  try {
+    const pdf = join(dir, "paper.pdf");
+    await writeFile(pdf, bytes);
+    const pages = [...new Set(need.map((f) => f.page))].sort((a, b) => a - b);
+    for (const page of pages) {
+      const out = join(dir, `p${page}.svg`);
+      await run("pdftocairo", ["-svg", "-f", String(page), "-l", String(page), pdf, out]);
+      const art = pageArt(await readFile(out, "utf8"), page);
+      const lines = textLines(await run("pdftotext", ["-f", String(page), "-l", String(page), "-bbox-layout", pdf, "-"]));
+      const onPage = content.figures.filter((f) => f.page === page);
+      const got = assignBoxes(onPage, findBoxes(art, lines), lines);
+      for (const f of need) if (f.page === page && got.has(f.id)) boxes.set(f.id, got.get(f.id)!);
+      const r = await api("/api/brain/figpage", { page, art });
+      if (r.status !== 200) throw new Stop(`save_${r.status}`, "the page's drawing could not be stored");
+    }
+  } catch (e) {
+    if (e instanceof Stop) throw e;
+    log(`figures: ${e instanceof Error ? e.message : String(e)}`);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+  const lost = need.length - boxes.size;
+  await note(`Cut ${boxes.size} of ${need.length} figure${need.length === 1 ? "" : "s"}${lost ? `; ${lost} to draw by hand on the review screen` : ""}`, { stage: "figures", state: "done" });
+  return { ...content, figures: content.figures.map((f) => (boxes.has(f.id) ? { ...f, ...boxes.get(f.id)!, svg: "" } : f)) };
+}
+
 /**
  * Reads one question paper or mark scheme: Gemini first (free), then Claude, whose reading is merged with what was
- * stored (confirmed items stay) and saved at once; then the drawing AI redraws the figures that need it and the
- * reading is saved again with them. A scope reads only some items again, or only redraws some figures.
+ * stored (confirmed items stay) and saved at once; then the figures are cut from the PDF by code and the reading is
+ * saved again with them. A scope reads only some items again, or only cuts some figures again.
  */
 async function runPaper(job: PaperJob) {
   if (!CLAUDE_KEY) throw new Stop("claude_key", "the GitHub secret CLAUDE_API_KEY is not set");
   if (!GEMINI_KEY) throw new Stop("gemini_key", "the GitHub secret GEMINI_API_KEY is not set");
   if (!job.models.claude || !job.models.gemini) throw new Stop("models", "no Claude or Gemini model is set (AI setup page or wrangler.jsonc)");
   if (job.pdfBytes > job.limits.maxPdfBytes) throw new Stop("pdf_too_big");
-  const drawingModel = job.models.drawing || job.models.claude;
 
   await step("Fetching the paper", { stage: "pdf", state: "start" });
   const doc = await api("/api/brain/doc", {});
@@ -490,7 +547,7 @@ async function runPaper(job: PaperJob) {
     const g = await timed("gemini", job.models.gemini, "Gemini is reading the paper", () =>
       askGemini({ model: job.models.gemini, system: PAPER_SYSTEM, schema: PAPER_SCHEMA_GEMINI, prompt: paperPrompt(job.kind, job.paper), pdf64, pages: sentPages, limits: job.limits }));
     gemini = placeOnPages(remapPages(cleanPaper(g.raw, job.kind), slim.kept), pages);
-  } else await note("Gemini: not needed to redraw a figure", { stage: "gemini", state: "skip" });
+  } else await note("Gemini: not needed to cut a figure again", { stage: "gemini", state: "skip" });
 
   let content = prior;
   if (!figuresOnly) {
@@ -516,23 +573,10 @@ async function runPaper(job: PaperJob) {
     content = placeOnPages(mergeReading(prior, fresh, new Set(job.prior.open), scoped ? job.scope : undefined), pages);
     await step("Saving Claude's reading", { stage: "save", state: "start" });
     await save(content, gemini, false);
-  } else await note("Claude: not needed to redraw a figure", { stage: "claude", state: "skip" });
-  if (!content) throw new Stop("no_reading", "there is no reading to draw figures for");
+  } else await note("Claude: not needed to cut a figure again", { stage: "claude", state: "skip" });
+  if (!content) throw new Stop("no_reading", "there is no reading to cut figures for");
 
-  const toDraw = content.figures.filter((f) => job.scope.figures.includes(f.id) || (!figuresOnly && !f.svg));
-  if (toDraw.length) {
-    // The drawing AI gets only the pages its figures are on, numbered afresh in that small PDF.
-    const figPages = [...new Set(toDraw.map((f) => f.page))].filter((p) => p >= 1 && p <= pages.length).sort((a, b) => a - b);
-    const draw = await slimPdf(doc.bytes, figPages, pages.length);
-    const local = (p: number) => (draw.kept.length ? draw.kept.indexOf(p) + 1 || 1 : p);
-    const listed = toDraw.map((f) => ({ ...f, page: local(f.page) }));
-    if (draw.kept.length) await note(`Drawing AI gets ${figPages.length} of ${pages.length} pages (the ones with figures)`, { stage: "drawing", state: "start", model: drawingModel });
-    const r = await timed("drawing", drawingModel, `Drawing ${toDraw.length} figure${toDraw.length === 1 ? "" : "s"}`, () =>
-      askClaude(client, { model: drawingModel, system: DRAW_SYSTEM, schema: DRAW_SCHEMA, prompt: drawPrompt(job.paper, listed), pdf64: draw.pdf64, pages: draw.kept.length || pages.length, limits: job.limits, effort: job.limits.drawEffort, stage: "drawing", label: "Drawing AI", task: "drawing" }));
-    const drawn = new Map(((r.raw as { figures?: { id?: unknown; svg?: unknown }[] }).figures ?? []).flatMap((f) =>
-      typeof f.id === "string" && typeof f.svg === "string" ? [[f.id, cleanSvg(f.svg)] as const] : []));
-    content = { ...content, figures: content.figures.map((f) => (drawn.get(f.id) ? { ...f, svg: drawn.get(f.id)! } : f)) };
-  } else await note("Drawing: no figures to draw", { stage: "drawing", state: "skip" });
+  content = await cutFigures(job, content, doc.bytes);
 
   await step("Saving the reading", { stage: "save", state: "start" });
   await save(content, gemini, true);

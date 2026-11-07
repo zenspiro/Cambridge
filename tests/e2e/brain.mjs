@@ -57,10 +57,13 @@ const LINES = [
 const PAPER_LINES = [
   ["Cambridge IGCSE PHYSICS 0625/42", "Paper 4 Theory (Extended) May/June 2024", "The total mark for this paper is 5.",
     ...Array.from({ length: 30 }, (_, i) => `Instruction line ${i + 1}: answer all questions in the spaces provided with a dark pen`)],
-  ["1 (a) State the instrument used to measure the time taken by a trolley", "rolling down a ramp. [1]",
+  // A ramp drawn above its printed label "Fig. 1.1" (cut by its label, no flag).
+  { lines: ["1 (a) State the instrument used to measure the time taken by a trolley", "rolling down a ramp. [1]",
     "(b) The trolley takes 2.5 s to travel 1.5 m. Calculate its average speed. [2]", "Fig. 1.1 shows the ramp."],
+    draw: "1 w 150 600 m 400 700 l 400 600 l h S", at: [[410, 650, "ramp"], [260, 570, "Fig. 1.1"]] },
   ["BLANK PAGE", "\u00a9 UCLES 2024 0625/42/M/J/24"],
-  ["2 (a) Define the term density and state its unit. [2]"],
+  // A block drawn with no label (cut by position: flagged blue, its box can be drawn by hand).
+  { lines: ["2 (a) Define the term density and state its unit. [2]"], draw: "1 w 200 500 120 80 re S", at: [[330, 540, "2 cm"]] },
 ];
 const PAPER_GOOD = {
   totalMarks: 5,
@@ -68,14 +71,16 @@ const PAPER_GOOD = {
     { number: "1(a)", page: 2, text: "State the instrument used to measure the time taken by a trolley rolling down a ramp.", marks: 1, options: [], answerLines: 1, figures: ["F1"], guidance: "" },
     { number: "1(b)", page: 2, text: "The trolley takes 2.5 s to travel 1.5 m. Calculate its average speed.", marks: 2, options: [], answerLines: 2, figures: [], guidance: "" },
     // Page 3 of the PDF the AIs get: the blank page 3 is left out, so this is the paper's page 4.
-    { number: "2(a)", page: 3, text: "Define the term density and state its unit.", marks: 2, options: [], answerLines: 2, figures: [], guidance: "" },
+    { number: "2(a)", page: 3, text: "Define the term density and state its unit.", marks: 2, options: [], answerLines: 2, figures: ["F2"], guidance: "" },
   ],
-  figures: [{ id: "F1", page: 2, caption: "Fig. 1.1 the ramp" }],
+  figures: [
+    { id: "F1", page: 2, caption: "Fig. 1.1 the ramp", description: "A ramp labelled ramp." },
+    { id: "F2", page: 3, caption: "a block", description: "A rectangular block with a side of 2 cm." },
+  ],
 };
 const pdfPages = (b64) => (Buffer.from(String(b64 ?? ""), "base64").toString("latin1").match(/\/Type\s*\/Page(?![s\w])/g) ?? []).length;
 // Claude misreads 1(b): the word check and Gemini both catch it.
 const PAPER_CLAUDE = { ...PAPER_GOOD, items: PAPER_GOOD.items.map((i) => (i.number === "1(b)" ? { ...i, text: "The trolley takes 2.5 s to travel 1.5 m. Calculate its mean speed." } : i)) };
-const DRAWN = { figures: [{ id: "F1", svg: "<svg viewBox='0 0 100 50'><script>alert(1)</script><line x1='0' y1='50' x2='100' y2='0' stroke='black' onclick='x()'/><text x='40' y='45'>ramp</text></svg>" }] };
 
 function pagesPdf(pages) {
   const enc = (s) => new TextEncoder().encode(s);
@@ -83,15 +88,27 @@ function pagesPdf(pages) {
   const bodies = [];
   const add = (b) => (bodies.push(b), bodies.length);
   const font = add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
-  const contents = pages.map((lines) => {
-    const ops = ["BT", "/F1 9 Tf", ...lines.map((l, i) => `1 0 0 1 40 ${800 - i * 11} Tm (${esc(l)}) Tj`), "ET"].join("\n");
+  const contents = pages.map((pg) => {
+    // A page is its lines, or { lines, draw (PDF path operators), at: [[x, y, text]] (labels placed on the page) }.
+    const { lines, draw = "", at = [] } = Array.isArray(pg) ? { lines: pg } : pg;
+    const ops = [draw, "BT", "/F1 9 Tf", ...lines.map((l, i) => `1 0 0 1 40 ${800 - i * 11} Tm (${esc(l)}) Tj`), ...at.map(([x, y, t]) => `1 0 0 1 ${x} ${y} Tm (${esc(t)}) Tj`), "ET"].filter(Boolean).join("\n");
     return add(`<< /Length ${enc(ops).length} >>\nstream\n${ops}\nendstream`);
   });
   const root = bodies.length + pages.length + 1;
   const ids = contents.map((c) => add(`<< /Type /Page /Parent ${root} 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 ${font} 0 R >> >> /Contents ${c} 0 R >>`));
   add(`<< /Type /Pages /Kids [${ids.map((p) => `${p} 0 R`).join(" ")}] /Count ${ids.length} >>`);
   add(`<< /Type /Catalog /Pages ${root} 0 R >>`);
-  return enc(`%PDF-1.7\n${bodies.map((b, i) => `${i + 1} 0 obj\n${b}\nendobj`).join("\n")}\ntrailer\n<< >>\n%%EOF\n`);
+  // A real cross-reference table and trailer, so other PDF tools (Poppler, which cuts the figures) can open it.
+  let out = "%PDF-1.7\n";
+  const offsets = bodies.map((b, i) => {
+    const at = enc(out).length;
+    out += `${i + 1} 0 obj\n${b}\nendobj\n`;
+    return at;
+  });
+  const xref = enc(out).length;
+  out += `xref\n0 ${bodies.length + 1}\n0000000000 65535 f \n${offsets.map((o) => `${String(o).padStart(10, "0")} 00000 n \n`).join("")}`;
+  out += `trailer\n<< /Size ${bodies.length + 1} /Root ${bodies.length} 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return enc(out);
 }
 
 const GOOD = {
@@ -116,6 +133,7 @@ const copy = (d) => JSON.parse(JSON.stringify(d));
 const ai = { claude: [], gemini: [], claudeAnswers: [], geminiAnswer: GOOD, busyOnce: false, down503: 0, claudeFailOnce: false, seq: [] };
 const isPaper = (system) => /exam paper/.test(String(system ?? ""));
 const isDrawing = (system) => /redraw figures/.test(String(system ?? ""));
+const DRAWN = { figures: [] };
 // Models the fake Google lists for the key; tiny questions to gemini-2.5-pro come back "not on your plan".
 const LISTED = ["gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-2.5-pro", "gemini-embedding-001"];
 const server = createServer((req, res) => {
@@ -497,6 +515,9 @@ try {
   }, paperPdf);
   check(storedPaper.ok === true, `test question paper stored${storedPaper.ok ? "" : ": " + JSON.stringify(storedPaper)}`);
   const paperId = rows(`SELECT id FROM source_document WHERE file_name = '0625_s24_qp_42.pdf'`)[0]?.id;
+  await page.goto(`${BASE}/admin/library/0625/2024/june`);
+  const reviewLink = page.locator(`#to-review a[href="/admin/library/review/${paperId}"]`);
+  check((await reviewLink.count()) === 1 && (await page.locator("#to-review").textContent())?.includes("Paper 4, variant 2: question paper") && (await page.locator("#to-review").textContent())?.includes("Not read"), "the session page lists the paper with a Review button and Not read");
   await page.goto(`${BASE}/admin/library/review/${paperId}`);
   check((await page.locator("#reading .pill").textContent()) === "Not read", "a paper not read yet says so");
   check((await page.locator("#reading").textContent())?.includes("Rough cost"), "Read this paper shows the rough cost first");
@@ -509,23 +530,25 @@ try {
   sql(`UPDATE paper_read SET job_id = '${queued}' WHERE doc_id = '${paperId}'`);
   await page.reload();
   await page.locator("#run-progress", { hasText: "Waiting for GitHub" }).waitFor({ timeout: 10_000 }).then(() => check(true, "a waiting run shows the live progress panel"), () => check(false, "a waiting run shows the live progress panel"));
-  check((await page.locator("#run-progress .run-step").count()) === 6, "the panel lists each step: PDF, Gemini, Claude, drawing, checks, saving");
+  check((await page.locator("#run-progress .run-step").count()) === 6, "the panel lists each step: PDF, Gemini, Claude, figures, checks, saving");
   check((await page.locator("meta[http-equiv=refresh]").count()) === 0, "no page reloads while it runs");
   ai.seq.length = 0;
   const rp = await runBrain(queued);
   check(rp.status === 0, `the paper run exits cleanly${rp.status ? ": " + rp.out.slice(-800) : ""}`);
   const order = ai.seq.filter((x) => x !== "claude");
-  check(order.join(",") === "gemini-paper,claude-paper,claude-draw", `Gemini reads first, then Claude, then the drawing AI (${order.join(",")})`);
+  check(order.join(",") === "gemini-paper,claude-paper", `Gemini reads first, then Claude; no drawing AI (${order.join(",")})`);
   check(ai.claudePages["claude-paper"] === 1, `Claude gets only the page with a figure as a picture (${ai.claudePages["claude-paper"]} of 4 pages)`);
   check(ai.claudeText.includes("=== Page 4 ===") && ai.claudeText.includes("=== Page 1 ===") && !ai.claudeText.includes("=== Page 3 ==="), "the other pages go as text, without the blank page");
   check(ai.claudeEffort === "low", `Claude reads papers at low effort (${ai.claudeEffort})`);
-  check(ai.claudePages["claude-draw"] === 1, `the drawing AI gets only the page with its figure (${ai.claudePages["claude-draw"]} page)`);
+  check(rp.out.includes("Cut 2 of 2 figures"), `both figures are cut from the PDF${rp.out.includes("Cut ") ? "" : ": " + rp.out.slice(-600)}`);
   check(rp.out.includes("Leaving out 1 blank page (3)"), "the run says which blank pages it left out");
   await page.locator("#run-progress", { hasText: "Finished" }).waitFor({ timeout: 15_000 }).then(() => check(true, "the panel shows the run finished, in place"), () => check(false, "the panel shows the run finished, in place"));
   const st = await (await page.request.get(`${BASE}/admin/brain/runs/${queued}`)).json();
-  check(["gemini", "claude", "drawing", "checks"].every((s) => st.events.some((e) => e.stage === s && e.state === "done")), "each step reported done, with its model and tokens");
+  const notDone = ["gemini", "claude", "figures", "checks"].filter((s) => !st.events.some((e) => e.stage === s && e.state === "done"));
+  check(!notDone.length, `each step reported done, with its model and tokens${notDone.length ? ` (not: ${notDone.join(", ")}; ${st.events.map((e) => `${e.stage}:${e.state}`).join(" ")})` : ""}`);
   check(st.events.some((e) => e.stage === "claude" && e.model === "claude-sonnet-5-5" && e.tokens > 0), "Claude's step shows its model and tokens");
-  check(rows(`SELECT COUNT(*) AS n FROM ai_spend WHERE job_id = '${queued}' AND task = 'drawing'`)[0].n === 1, "the drawing counts as its own job on the dashboard");
+  check(rows(`SELECT COUNT(*) AS n FROM ai_spend WHERE job_id = '${queued}' AND task = 'drawing'`)[0].n === 0, "no drawing AI is paid for");
+  await page.locator("#run-progress .run-step-done[data-stage=\"save\"]").waitFor({ timeout: 15_000 }).then(() => check(true, "the saving step shows done once the run has finished"), () => check(false, "the saving step shows done once the run has finished"));
 
   await page.goto(`${BASE}/admin/library/review/${paperId}`);
   await page.locator("#paper-sheet").waitFor({ timeout: 10_000 });
@@ -538,10 +561,12 @@ try {
   await page.locator("#run-progress", { hasText: "Finished" }).waitFor({ timeout: 15_000 }).then(() => check(true, "the finished run's steps stay on the page for a while"), () => check(false, "the finished run's steps stay on the page for a while"));
   check((await page.locator("#item-1\\(b\\) .flag-pdf").first().textContent())?.includes("Calculate its average speed"), "the flag shows the PDF's own words");
   const img = page.locator("#figure-F1 img");
-  check((await img.count()) === 1 && (await page.locator("#figure-F1.pq-blue").count()) === 1, "our drawing of the figure shows, boxed in blue");
+  check((await img.count()) === 1 && (await page.locator("#figure-F1.pq-blue").count()) === 0, "the figure cut above its printed label shows, with no flag");
+  check((await page.locator("#figure-F1").textContent())?.includes("Cut from the PDF above its label"), "it says how it was cut");
   const svg = await page.request.get(BASE + (await img.getAttribute("src")));
   const svgText = await svg.text();
-  check(svg.headers()["content-type"] === "image/svg+xml" && !svgText.includes("script") && !svgText.includes("onclick") && svgText.includes("ramp"), "the figure is served as a clean image (no scripts)");
+  check(svg.headers()["content-type"] === "image/svg+xml" && svgText.startsWith("<svg") && !/script|onclick|xlink/.test(svgText) && svgText.includes("<use href=\"#g"), "the figure is the PDF's own drawing as a clean SVG (letters as outlines)");
+  check(rows(`SELECT COUNT(*) AS n FROM paper_read WHERE doc_id = '${paperId}'`)[0].n === 1, "the reading is saved");
   check((await page.locator("iframe.review-pdf").getAttribute("src"))?.endsWith("#page=2"), "the PDF opens on the first page with questions");
   await page.locator(".page-bar button", { hasText: "Next page" }).click();
   check((await page.locator("iframe.review-pdf").getAttribute("src"))?.endsWith("#page=3") && (await page.locator("#paper-sheet").textContent())?.includes("Nothing from our reading on this page"), "one page bar turns both sides (the blank page has nothing)");
@@ -549,6 +574,20 @@ try {
   check((await page.locator("iframe.review-pdf").getAttribute("src"))?.endsWith("#page=4") && (await page.locator("#item-2\\(a\\)").count()) === 1, "page numbers are the paper's own, even with the blank page left out for the AIs");
   await page.locator(".page-bar button", { hasText: "Next flag" }).click();
   check((await page.locator(".page-bar-count").textContent()) === "Page 2 of 4", "Next flag jumps to the flagged page");
+  check(/^Flag 1 of \d+$/.test((await page.locator(".flag-count").textContent()) ?? ""), "the bar says which flag of how many");
+  const listed = await page.locator(".flag-list .flag-row").count();
+  check(listed >= 2 && (await page.locator(".flag-list .flag-row-current").count()) === 1, `the flag list shows every open flag, the chosen one marked (${listed})`);
+  await page.locator(".flag-filter", { hasText: "Figures" }).click();
+  check((await page.locator(".flag-list .flag-row").count()) === 1 && (await page.locator(".flag-row-item").first().textContent()) === "F2", "the colour filter shows only the figure flag");
+  await page.locator(".flag-list .flag-row").first().click();
+  check((await page.locator(".page-bar-count").textContent()) === "Page 4 of 4" && (await page.locator("#figure-F2 .flag-current").count()) === 1, "a click on a flag jumps to its page and marks it");
+  await page.locator(".flag-filter", { hasText: "All" }).click();
+  await page.keyboard.press("j");
+  check((await page.locator(".page-bar-count").textContent()) === "Page 2 of 4", "J moves to the next flag (round to the first)");
+  await page.reload();
+  await page.locator("#paper-sheet").waitFor({ timeout: 10_000 });
+  await page.locator(".flag-row-current").waitFor({ timeout: 5_000 }).catch(() => {});
+  check((await page.locator(".page-bar-count").textContent()) === "Page 2 of 4" && (await page.locator(".flag-row-current").count()) === 1, "after a reload the page and flag you were on come back");
   const flagsBefore = await page.locator("#paper-sheet .flag-box").count();
   await page.locator(".check-inline input").uncheck();
   check((await page.locator("#paper-sheet .flag-box").count()) === 0, "Show flags off hides them");
@@ -556,9 +595,14 @@ try {
   check((await page.locator("#paper-sheet .flag-box").count()) === flagsBefore, "and on shows them again");
 
   await page.locator('#item-1\\(b\\) .flag-box[data-flag="words:1(b)"] button', { hasText: "Use the PDF's version" }).click();
+  // The fixed flag was the chosen one: once its flags clear, the next open flag (the figure on page 4) is picked.
+  await page.locator(".page-bar-count", { hasText: "Page 4 of 4" }).waitFor({ timeout: 15_000 }).then(() => check(true, "after a fix the next open flag is picked"), () => check(false, "after a fix the next open flag is picked"));
+  await page.locator(".page-bar button", { hasText: "Previous page" }).click();
+  await page.locator(".page-bar button", { hasText: "Previous page" }).click();
   await page.locator("#item-1\\(b\\) .pq-text", { hasText: "Calculate its average speed" }).waitFor({ timeout: 15_000 }).then(() => check(true, "Use the PDF's version copies the PDF's words, in place"), () => check(false, "Use the PDF's version copies the PDF's words, in place"));
-  await page.locator("#item-1\\(b\\).pq-red").waitFor({ state: "detached", timeout: 15_000 }).then(() => check(true, "the wording and Gemini flags clear once it matches the PDF"), () => check(false, "the wording and Gemini flags clear once it matches the PDF"));
-  await page.locator("#figure-F1 button", { hasText: "Looks right" }).click();
+  check((await page.locator("#item-1\\(b\\).pq-red").count()) === 0, "the wording and Gemini flags clear once it matches the PDF");
+  check((await page.locator("#figure-F2.pq-blue").count()) === 1, "the figure cut without a label is boxed in blue");
+  await page.locator("#figure-F2 button", { hasText: "Looks right" }).click();
   await page.locator("#reading .pill", { hasText: "Ready" }).waitFor({ timeout: 15_000 }).then(() => check(true, "every flag cleared: the paper is Ready"), () => check(false, "every flag cleared: the paper is Ready"));
   await page.locator("#reading summary", { hasText: "Fixes on this paper" }).click();
   await page.locator("#reading .fix-list li", { hasText: "Looks right" }).locator("button", { hasText: "Undo" }).click();
@@ -567,6 +611,23 @@ try {
   await page.locator("#reading button", { hasText: "Yes" }).click();
   await page.locator("#reading .pill", { hasText: "Ready (marked ready)" }).waitFor({ timeout: 15_000 }).then(() => check(true, "the admin can mark it ready with flags left (recorded)"), () => check(false, "the admin can mark it ready with flags left (recorded)"));
   check(rows(`SELECT COUNT(*) AS n FROM audit_log WHERE action = 'paper.override'`)[0].n >= 1, "the override is audited");
+
+  // A figure's box drawn by hand on its page.
+  await page.locator(".flag-filter", { hasText: "Figures" }).click();
+  await page.locator(".flag-list .flag-row").first().click();
+  await page.locator("#figure-F2 .flag-box button", { hasText: "Adjust box" }).click();
+  const sheet = page.locator("#figure-F2 .box-editor-page");
+  await sheet.waitFor({ timeout: 10_000 });
+  const bb = (await sheet.boundingBox());
+  await page.mouse.move(bb.x + bb.width * 0.3, bb.y + bb.height * 0.3);
+  await page.mouse.down();
+  await page.mouse.move(bb.x + bb.width * 0.6, bb.y + bb.height * 0.45, { steps: 5 });
+  await page.mouse.up();
+  await page.locator("#figure-F2 button", { hasText: "Save this box" }).click();
+  await page.locator("#figure-F2", { hasText: "Box drawn by hand" }).waitFor({ timeout: 15_000 }).then(() => check(true, "a box drawn by hand is saved, in place"), () => check(false, "a box drawn by hand is saved, in place"));
+  check((await page.locator("#figure-F2.pq-blue").count()) === 0, "and the figure's flag clears");
+  const box = JSON.parse(rows(`SELECT after FROM paper_fix WHERE doc_id = '${paperId}' AND item = 'F2' ORDER BY at DESC LIMIT 1`)[0]?.after ?? "{}").box ?? [];
+  check(box.length === 4 && box[0] > 150 && box[2] < 450 && box[1] > 200 && box[3] < 450, `the box is in the PDF's own points (${box.join(", ")})`);
   check(await noSideways(), "review screen with the rebuilt paper: no sideways scroll at 1400 px");
   const halves2 = await page.evaluate(() => [...document.querySelectorAll(".review-pane")].map((e) => Math.round(e.getBoundingClientRect().width)));
   check(halves2.length === 2 && Math.abs(halves2[0] - halves2[1]) < 4, "the PDF and the rebuilt paper each take half");
@@ -577,6 +638,7 @@ try {
   check((await fetch(`${BASE}/api/brain/check`, { method: "POST", body: "{}" })).status === 401, "the check endpoint refuses unsigned requests");
   check((await fetch(`${BASE}/api/brain/usage`, { method: "POST", body: "{}" })).status === 401, "the usage endpoint refuses unsigned requests");
   check((await fetch(`${BASE}/api/brain/paper`, { method: "POST", body: "{}" })).status === 401, "the paper endpoint refuses unsigned requests");
+  check((await fetch(`${BASE}/api/brain/figpage`, { method: "POST", body: "{}" })).status === 401, "the figure page endpoint refuses unsigned requests");
   const anon = await fetch(`${BASE}/admin/brain/runs/${queued}`, { redirect: "manual" });
   check(anon.status !== 200 && !(anon.headers.get("content-type") ?? "").includes("json"), "run state needs the admin");
   check((await fetch(`${BASE}/api/brain/reading`, { method: "POST", body: "{}" })).status === 401 && (await fetch(`${BASE}/api/brain/saved`, { method: "POST", body: "{}" })).status === 401, "the kept-reading endpoints refuse unsigned requests");

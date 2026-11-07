@@ -11,8 +11,8 @@ import type { PaperKind } from "@/lib/brain/paper";
 const ITEM_RE = /^[0-9]{1,3}(\([a-z]{1,4}\)){0,3}$/;
 const FIG_RE = /^[A-Za-z0-9_.-]{1,20}$/;
 
-// "Read this paper" (or "Read it again" for one question, or "Redraw" for one figure): a brain run on GitHub for one
-// question paper or mark scheme, inside the monthly spending cap.
+// "Read this paper" (or "Read it again" for one question, or "Cut it again" for one figure): a brain run on GitHub for
+// one question paper or mark scheme, inside the monthly spending cap (cutting figures uses no AI, so it is not capped).
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const back = /^[A-Za-z0-9_-]{10,64}$/.test(id) ? `/admin/library/review/${id}` : "/admin/library";
@@ -22,8 +22,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const items = form.getAll("item").map(String).filter((x) => ITEM_RE.test(x)).slice(0, 50);
     const figures = form.getAll("figure").map(String).filter((x) => FIG_RE.test(x)).slice(0, 50);
     const size = await db.prepare(`SELECT size_bytes FROM source_document WHERE id = ?1`).bind(id).first<{ size_bytes: number }>();
-    const cost = await paperCostCheck(db, env, size?.size_bytes ?? 0);
-    if (cost.verdict !== "ok") return cost.verdict;
+    if (items.length || !figures.length) {
+      const cost = await paperCostCheck(db, env, size?.size_bytes ?? 0);
+      if (cost.verdict !== "ok") return cost.verdict;
+    }
     if (!(await allow(db, await limitKey("brain-run", actorId), BRAIN.runsPerHour, 3_600_000))) return "busy";
     const jobId = await startPaperRun(db, id, { items, figures }, actorId);
     if (!jobId) return "running";

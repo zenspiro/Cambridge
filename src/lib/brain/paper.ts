@@ -1,11 +1,13 @@
 // Reading the papers (Phase 2, step 2b; owner 6 and 7 Nov 2026). A question paper or mark scheme is read by Claude
-// into numbered items (questions and parts, or mark scheme answers) with their marks, options and figures; the drawing
-// AI redraws each figure as our own SVG; Gemini reads the same paper separately. Code then checks every item against
-// the PDF's own text and the two readings against each other, and raises flags for the review screen: red when the
-// wording differs, amber when numbers or marks differ, blue for every figure we drew (compared by eye).
+// into numbered items (questions and parts, or mark scheme answers) with their marks, options and figures (each
+// figure described in words; the picture itself is cut from the PDF by code, figures.ts); Gemini reads the same paper
+// separately. Code then checks every item against the PDF's own text and the two readings against each other, and
+// raises flags for the review screen: red when the wording differs, amber when numbers or marks differ, blue for a
+// figure whose box code is not sure of (no printed label) or could not find.
 // Pure, strip-only TypeScript: shared by the brain script (GitHub Actions) and the Worker. No Next imports.
 import { BRAIN } from "../config.ts";
 import { coverage, similarity, squash, textIndex, type TextIndex } from "./topics.ts";
+import type { Box, FigureCut } from "./figures.ts";
 
 export type PaperKind = "qp" | "ms";
 export type PaperOption = { letter: string; text: string };
@@ -26,7 +28,19 @@ export type PaperItem = {
   /** Mark scheme guidance (accept, ignore, allow), word for word. */
   guidance: string;
 };
-export type PaperFigure = { id: string; page: number; caption: string; svg: string };
+export type PaperFigure = {
+  id: string;
+  page: number;
+  caption: string;
+  /** What it shows in words (labels, values), for the brain: the picture is Cambridge's own. */
+  description: string;
+  /** Older readings only: a figure the drawing AI redrew. */
+  svg: string;
+  /** Where the figure is on its page, in PDF points (y down), cut from the PDF; null when not found yet. */
+  box: Box | null;
+  /** How the box was found: by its printed label, by matching labels, by order, by hand, the whole page. */
+  cut: FigureCut;
+};
 export type PaperContent = { kind: PaperKind; totalMarks: number | null; items: PaperItem[]; figures: PaperFigure[] };
 
 export type FlagKind = "words" | "numbers" | "marks" | "numbering" | "figure" | "agree" | "missing" | "text";
@@ -52,6 +66,7 @@ const COLOUR: Record<FlagKind, FlagColour> = {
 
 const NUMBER_RE = /^[0-9]{1,3}(\s?\([a-z]{1,4}\)){0,3}$/;
 const FIGURE_ID_RE = /^[A-Za-z0-9_.-]{1,20}$/;
+const CUTS: readonly FigureCut[] = ["caption", "match", "order", "manual", "page"];
 
 const str = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/\r\n?/g, "\n").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "").trim().slice(0, max) : "");
 const int = (v: unknown, min: number, max: number) => (typeof v === "number" && Number.isInteger(v) && v >= min && v <= max ? v : null);
@@ -66,7 +81,12 @@ export function cleanPaper(raw: unknown, kind: PaperKind): PaperContent {
   const figures: PaperFigure[] = (Array.isArray(o.figures) ? o.figures : []).slice(0, BRAIN.maxFigures).flatMap((x): PaperFigure[] => {
     const r = obj(x);
     const id = str(r.id, 20);
-    return FIGURE_ID_RE.test(id) ? [{ id, page: int(r.page, 1, 500) ?? 1, caption: str(r.caption, 300), svg: cleanSvg(str(r.svg, BRAIN.maxSvgBytes * 2)) }] : [];
+    const b = Array.isArray(r.box) && r.box.length === 4 && r.box.every((n) => typeof n === "number" && Number.isFinite(n) && n >= -50 && n <= 5000) ? (r.box as Box) : null;
+    const cut = CUTS.find((c) => c === r.cut) ?? "";
+    return FIGURE_ID_RE.test(id) ? [{
+      id, page: int(r.page, 1, 500) ?? 1, caption: str(r.caption, 300), description: str(r.description, 1_000),
+      svg: cleanSvg(str(r.svg, BRAIN.maxSvgBytes * 2)), box: b && b[2] > b[0] && b[3] > b[1] ? b : null, cut: b ? cut : "",
+    }] : [];
   });
   const figureIds = new Set(figures.map((f) => f.id));
   const items: PaperItem[] = (Array.isArray(o.items) ? o.items : []).slice(0, BRAIN.maxPaperItems).flatMap((x): PaperItem[] => {
@@ -91,7 +111,7 @@ export function cleanPaper(raw: unknown, kind: PaperKind): PaperContent {
     }];
   });
   // Figures named by an item but not drawn still get an entry (flagged "not drawn yet").
-  for (const it of items) for (const f of it.figures) if (!figures.some((x) => x.id === f)) figures.push({ id: f, page: it.page, caption: "", svg: "" });
+  for (const it of items) for (const f of it.figures) if (!figures.some((x) => x.id === f)) figures.push({ id: f, page: it.page, caption: "", description: "", svg: "", box: null, cut: "" });
   return { kind, totalMarks: int(o.totalMarks, 1, 1_000), items, figures: figures.slice(0, BRAIN.maxFigures) };
 }
 
@@ -272,7 +292,8 @@ export function paperFlags({ content, pages, gemini }: CheckInput): Flag[] {
     if (textOk && !nums.has(String(content.totalMarks))) add("numbers", "paper", `The total of ${content.totalMarks} marks is not printed in the PDF.`, `total ${content.totalMarks}`);
   }
   for (const f of content.figures) {
-    add("figure", f.id, f.svg ? `Figure ${f.id}: our own drawing. Compare it with the PDF.` : `Figure ${f.id} is not drawn yet.`, f.svg || `none:${f.id}:${f.caption}`);
+    const flag = figureFlag(f);
+    if (flag) add("figure", f.id, flag.reason, flag.what);
   }
   if (gemini) {
     const theirs = new Map(gemini.items.map((g) => [g.number, g]));
@@ -317,6 +338,19 @@ export function marksAgainstPaper(ms: PaperContent, qp: PaperContent): Flag[] {
 }
 
 /** Flags still open: not settled by the admin ("It's fine", "Looks right") and not ruled out for the subject. */
+/**
+ * A figure's blue flag, or null when its box needs no look: cut above its printed label ("Fig. 2.1"), drawn by hand
+ * or the whole page. A box found without a label, an older AI drawing, or no box at all is flagged.
+ */
+export function figureFlag(f: PaperFigure): { reason: string; what: string } | null {
+  if (f.box) {
+    if (f.cut === "match" || f.cut === "order") return { reason: `Figure ${f.id} has no printed label, so it was cut out by where it sits on page ${f.page}. Check its box.`, what: `cut:${f.id}:${f.page}:${f.box.join(",")}` };
+    return null;
+  }
+  if (f.svg) return { reason: `Figure ${f.id}: an older AI drawing. Compare it with the PDF, or draw its box on the page.`, what: f.svg };
+  return { reason: `Figure ${f.id} could not be found on page ${f.page}. Draw its box on the page.`, what: `none:${f.id}:${f.page}:${f.caption}` };
+}
+
 export function openFlags(flags: readonly Flag[], dismissed: ReadonlySet<string>, rules: ReadonlySet<string>): Flag[] {
   return flags.filter((f) => !dismissed.has(f.fingerprint) && !rules.has(f.fingerprint));
 }
@@ -344,8 +378,13 @@ export function mergeReading(old: PaperContent | null, fresh: PaperContent, open
   for (const id of figIds) {
     const o = old.figures.find((f) => f.id === id);
     const f = fresh.figures.find((x) => x.id === id);
-    const takeFresh = only ? only.figures.includes(id) || only.items.some((n) => fresh.items.find((x) => x.number === n)?.figures.includes(id)) : !o || !o.svg || open.has(id);
-    figures.push(takeFresh && f && (f.svg || !o) ? f : o ?? f!);
+    // A box drawn by hand is never replaced; a new reading's words come in, its box is cut again by the script.
+    if (o && f && o.cut === "manual") {
+      figures.push({ ...o, caption: f.caption || o.caption, description: f.description || o.description });
+      continue;
+    }
+    const takeFresh = only ? only.figures.includes(id) || only.items.some((n) => fresh.items.find((x) => x.number === n)?.figures.includes(id)) : !o || (!o.box && !o.svg) || open.has(id);
+    figures.push(takeFresh && f ? f : o ?? f!);
   }
   return { kind: fresh.kind, totalMarks: fresh.totalMarks ?? old.totalMarks, items, figures };
 }
@@ -451,11 +490,16 @@ export function placeOnPages(c: PaperContent, pages: readonly string[]): PaperCo
     return page ? { ...it, page } : it;
   });
   const figures = c.figures.map((f) => {
+    if (f.cut === "manual" || f.cut === "page") return f;
     const label = /Fig\.?\s*(\d+\.\d+)/i.exec(f.caption)?.[1];
-    if (!label) return f;
+    // No printed label (Maths, Computer Science): the page of the first part that shows it, placed by its text.
+    if (!label) {
+      const first = items.find((it) => it.figures.includes(f.id));
+      return first && first.page !== f.page ? { ...f, page: first.page, box: null, cut: "" as const } : f;
+    }
     const re = new RegExp(`Fig\\.?\\s*${label.replace(".", "\\.")}(?!\\d)`, "i");
     const i = pages.findIndex((p) => re.test(p));
-    return i >= 0 ? { ...f, page: i + 1 } : f;
+    return i >= 0 && i + 1 !== f.page ? { ...f, page: i + 1, box: null, cut: "" as const } : f;
   });
   return { ...c, items, figures };
 }

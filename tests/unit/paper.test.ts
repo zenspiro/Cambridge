@@ -101,8 +101,14 @@ test("merging: confirmed items stay, flagged ones are read again; a scope replac
   assert.ok(m.items[1]!.text.endsWith("(new)"), "1(b) was flagged: read again");
   const only = mergeReading(old, cleanPaper({ items: [{ ...READING.items[2], text: "redone" }] }, "qp"), new Set(), { items: ["2(a)"], figures: [] });
   assert.deepEqual(only.items.map((i) => i.text.slice(0, 6)), ["A stud", "The tr", "redone"]);
-  const redraw = mergeReading(old, { ...old, figures: [{ id: "F1", page: 2, caption: "", svg: "<svg></svg>" }] }, new Set(), { items: [], figures: ["F1"] });
-  assert.equal(redraw.figures[0]!.svg, "<svg></svg>");
+  const recut = mergeReading(old, { ...old, figures: [{ id: "F1", page: 2, caption: "", description: "", svg: "", box: [1, 2, 30, 40], cut: "order" }] }, new Set(), { items: [], figures: ["F1"] });
+  assert.deepEqual(recut.figures[0]!.box, [1, 2, 30, 40]);
+  // A box drawn by hand is never replaced by a new reading; its words are.
+  const hand = { ...old, figures: [{ ...old.figures[0]!, box: [5, 5, 50, 50] as [number, number, number, number], cut: "manual" as const }] };
+  const kept = mergeReading(hand, { ...old, figures: [{ id: "F1", page: 2, caption: "Fig. 1.1 new words", description: "a ramp", svg: "", box: null, cut: "" }] }, new Set(["F1"]));
+  assert.deepEqual(kept.figures[0]!.box, [5, 5, 50, 50]);
+  assert.equal(kept.figures[0]!.cut, "manual");
+  assert.equal(kept.figures[0]!.description, "a ramp");
 });
 
 test("one item rechecked after a fix; open flags leave out settled ones and the subject's rules", () => {
