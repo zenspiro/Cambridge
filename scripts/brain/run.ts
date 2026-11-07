@@ -15,7 +15,7 @@ import {
   DRAW_SCHEMA, DRAW_SYSTEM, drawPrompt, PAPER_SCHEMA, PAPER_SCHEMA_GEMINI, PAPER_SYSTEM, paperPrompt,
   retryPrompt, TOPIC_SCHEMA, TOPIC_SCHEMA_GEMINI, TOPIC_SYSTEM, topicPrompt,
 } from "../../src/lib/brain/prompts.ts";
-import { blankPages, cleanPaper, cleanSvg, keptPages, mergeReading, paperFlags, remapPages, type PaperContent, type PaperKind } from "../../src/lib/brain/paper.ts";
+import { blankPages, cleanPaper, cleanSvg, keptPages, mergeReading, paperFlags, placeOnPages, remapPages, type PaperContent, type PaperKind } from "../../src/lib/brain/paper.ts";
 import {
   checkNumbers, checkWords, cleanDraft, compareDrafts, isReady, missingHeadings, retryNotes, textIndex,
   type Draft, type Problem, type TextIndex, type TreeReport,
@@ -475,6 +475,7 @@ async function runPaper(job: PaperJob) {
     if (final) await step(`Checks done: ${flags.length} flag${flags.length === 1 ? "" : "s"} for the review screen`, { stage: "checks", state: "done" });
     const r = await api("/api/brain/paper", { content, gemini, pages, flags, final });
     if (r.status !== 200) throw new Stop(`save_${r.status}`);
+    if (final) await note("Saved", { stage: "save", state: "done" });
   };
 
   // Gemini first: free on the owner's plan, so a failure here costs nothing. A figure redraw needs no reading.
@@ -482,16 +483,17 @@ async function runPaper(job: PaperJob) {
   if (!figuresOnly) {
     const g = await timed("gemini", job.models.gemini, "Gemini is reading the paper", () =>
       askGemini({ model: job.models.gemini, system: PAPER_SYSTEM, schema: PAPER_SCHEMA_GEMINI, prompt: paperPrompt(job.kind, job.paper), pdf64, pages: sentPages, limits: job.limits }));
-    gemini = remapPages(cleanPaper(g.raw, job.kind), slim.kept);
+    gemini = placeOnPages(remapPages(cleanPaper(g.raw, job.kind), slim.kept), pages);
   } else await note("Gemini: not needed to redraw a figure", { stage: "gemini", state: "skip" });
 
   let content = prior;
   if (!figuresOnly) {
     const r = await timed("claude", job.models.claude, job.scope.items.length ? `Claude is reading ${job.scope.items.join(", ")} again` : "Claude is reading the paper", () =>
       askClaude(client, { model: job.models.claude, system: PAPER_SYSTEM, schema: PAPER_SCHEMA, prompt: paperPrompt(job.kind, job.paper, job.scope.items), pdf64, pages: sentPages, limits: job.limits, stage: "claude", label: "Claude" }));
-    const fresh = remapPages(cleanPaper(r.raw, job.kind), slim.kept);
+    const fresh = placeOnPages(remapPages(cleanPaper(r.raw, job.kind), slim.kept), pages);
     if (!fresh.items.length) throw new Stop("claude_bad_answer", "the reading had no questions");
-    content = mergeReading(prior, fresh, new Set(job.prior.open), scoped ? job.scope : undefined);
+    // Kept items are placed again too, so a page number stored wrongly before is put right.
+    content = placeOnPages(mergeReading(prior, fresh, new Set(job.prior.open), scoped ? job.scope : undefined), pages);
     await step("Saving Claude's reading", { stage: "save", state: "start" });
     await save(content, gemini, false);
   } else await note("Claude: not needed to redraw a figure", { stage: "claude", state: "skip" });

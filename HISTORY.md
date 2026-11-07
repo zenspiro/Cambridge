@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-07: Dry run on a real paper: two fixes before any money is spent
+
+**What:** owner asked for a dry run before paying for real readings. The real November 2025 Physics Paper 4 (variant 2) was read in this session the way Claude would read it (39 parts, 80 marks, 8 figures redrawn as SVG) and put through the real brain script, checks and review screen, with that reading standing in for the paid answers. All 39 parts passed the word, number and marks checks against the PDF's own text. It found two bugs, now fixed: (1) the blank page rule missed both real blank pages (Cambridge prints "BLANK P AGE" with margin warnings and bar codes) and could swallow a page whole; it now leaves out any page printed BLANK PAGE that has no marks, figure, table or answer lines (pages 2, 19 and 20 of this paper). (2) Questions showed one page late, because leaving out a blank page shifts the page numbers the AI sees (and an AI may use the printed numbers instead); code now places every part and figure on its page by the PDF's own text (`placeOnPages`), including parts kept from an earlier reading. The live panel now marks saving done. The owner's rule from now on: every paid AI job is dry-run in a dev session first (`CLAUDE.md`).
+
+**Why:** owner: test before burning money on tokens.
+
+**Tested:** `npm run check` exits 0 (196 unit tests; new: real blank page text from this paper, placing by text). Browser suite from a fresh database: 472 checks.
+
 ## 2026-11-07: Blank pages are not sent to the AIs; the drawing AI gets only its figure pages
 
 **What:** before a paper or syllabus goes to the AIs, pages that say only "BLANK PAGE" (with the usual footer) are left out (`blankPages`, a slim copy made with pdf-lib, pinned dev dependency used only by the brain script). The cover always stays (it carries the total marks). The readers' page numbers are put back on the paper's own (`remapPages`), so the review screen still matches the PDF. The drawing AI gets only the pages its figures are on. The live panel says which pages were left out. If a PDF cannot be split, the whole PDF is sent as before.
