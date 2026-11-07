@@ -2,6 +2,12 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-07: "Cut figures from the PDF (free)" button
+
+**What:** owner asked whether "Read it again" would spend tokens to get figures for a paper read before the figure build (it would: Claude reads every page again). The reading card now has "Cut figures from the PDF (free)": a brain run scoped to the paper's figures (all but boxes drawn by hand), which skips Gemini and Claude, cuts every figure again with Poppler and stores the pages for Adjust box. The read route already skipped the cost check for a figures-only run. "Read it again" now says it uses AI tokens in its confirm.
+
+**Tested:** `npm run check` exits 0. Browser suite from a fresh database: 497 checks, all passing (new: the button shows on a read paper, is not stopped by the cost check, the run cuts both figures with no AI question and no spend).
+
 ## 2026-11-07: Adjust box opens as a large panel
 
 **What:** owner: "adjust box function is bugged, its not doing anything". The page to draw on opened inside the narrow figure column, low in the scrolling paper sheet: out of sight and too small to drag on. Now it opens as a panel over the review screen (`.box-overlay`, the page as tall as the screen), with Save this box, Use whole page and Cancel at the top; Escape closes it, a save closes it (the paper's revision moves on), and J/K are ignored while it is open.

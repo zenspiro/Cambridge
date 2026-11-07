@@ -152,6 +152,7 @@ function ReadingCard({ docId, view, cost, run, busy, facts }: {
   const base = `/admin/library/review/${encodeURIComponent(docId)}`;
   const read = !!view.content;
   const override = !!view.row?.overrideAt;
+  const cutAgain = (view.content?.figures ?? []).filter((f) => f.cut !== "manual").map((f) => f.id).slice(0, 50);
   const pill = !read ? <span className="pill">Not read</span>
     : view.open.length === 0 ? <span className="pill pill-ok">Ready</span>
       : override ? <span className="pill pill-ok">Ready (marked ready)</span>
@@ -167,8 +168,15 @@ function ReadingCard({ docId, view, cost, run, busy, facts }: {
       {run && (busy || run.status === "failed" || (run.finishedAt !== null && Date.now() - run.finishedAt < RECENT_MS)) ? <RunProgress runId={run.id} stages={PAPER_STAGES} /> : null}
       <div className="row-actions">
         {!busy ? (
-          <ActionForm action={`${base}/read`} messages={MESSAGES} confirm={read ? "Read the paper again? Confirmed items stay as they are; only flagged and missing ones are read again." : undefined}>
+          <ActionForm action={`${base}/read`} messages={MESSAGES} confirm={read ? "Read the paper again? This uses AI tokens (the rough cost is below). Confirmed items stay as they are; only flagged and missing ones are read again." : undefined}>
             <button className="btn btn-primary" type="submit">{read ? "Read it again" : "Read this paper"}</button>
+          </ActionForm>
+        ) : null}
+        {/* Free (owner, 7 Nov 2026): cuts every figure again from the PDF with no AI; words, fixes and hand-drawn boxes stay. */}
+        {!busy && cutAgain.length ? (
+          <ActionForm action={`${base}/read`} messages={MESSAGES} confirm={`Cut ${cutAgain.length} figure${cutAgain.length === 1 ? "" : "s"} again from the PDF? No AI is used, so it costs nothing; boxes you drew by hand stay.`}>
+            {cutAgain.map((id) => <input key={id} type="hidden" name="figure" value={id} />)}
+            <button className="btn" type="submit">Cut figures from the PDF (free)</button>
           </ActionForm>
         ) : null}
         {read && view.open.length > 0 && !override ? (
