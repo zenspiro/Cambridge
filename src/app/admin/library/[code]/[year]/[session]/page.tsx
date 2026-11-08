@@ -5,7 +5,7 @@ import { requireAdmin } from "@/lib/auth/guard";
 import { getEnv } from "@/lib/env";
 import { AdminShell, Notice } from "@/components/AdminShell";
 import { StatusLine } from "@/components/LibraryBits";
-import { Crumbs, DocChips, Legend, PaperTable } from "@/components/LibraryTables";
+import { DocChips, Legend, PaperTable } from "@/components/LibraryTables";
 import { PAPER_TYPES } from "@/lib/library/map";
 import { loadHeader, loadSyllabus } from "@/lib/library/catalog";
 import { loadPapers } from "@/lib/library/papers";
@@ -55,18 +55,24 @@ export default async function SessionPage({
   const readState = new Map(readRows.map((r) => [r.doc_id, r]));
 
   return (
-    <AdminShell current="/admin/library" title={g.label}>
-      <Crumbs items={[
+    <AdminShell
+      current="/admin/library"
+      title={g.label}
+      crumbs={[
         { label: "Library", href: "/admin/library" },
         { label: header.qualification_name },
         { label: `${header.subject_name} ${code}`, href: `/admin/library/${code}` },
         { label: g.label },
-      ]} />
+      ]}
+      actions={
+        <nav className="page-actions" aria-label="Other sessions">
+          {older ? <Link className="btn" href={sessionHref(code, older.year, older.session)}>‹ {older.label}</Link> : null}
+          {newer ? <Link className="btn" href={sessionHref(code, newer.year, newer.session)}>{newer.label} ›</Link> : null}
+          <Link className="btn btn-primary" href={`/admin/library/folder?code=${code}`}>Upload a folder</Link>
+        </nav>
+      }
+    >
       <Notice code={q.e} messages={{ ok_added: "File added to the library." }} />
-      <nav className="pager" aria-label="Other sessions">
-        {older ? <Link className="btn btn-small" href={sessionHref(code, older.year, older.session)}>‹ {older.label}</Link> : <span />}
-        {newer ? <Link className="btn btn-small" href={sessionHref(code, newer.year, newer.session)}>{newer.label} ›</Link> : <span />}
-      </nav>
 
       <section className="card stack">
         <StatusLine status={g.status} />

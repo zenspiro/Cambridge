@@ -62,7 +62,15 @@ export default async function AiSetupPage({ searchParams }: { searchParams: Prom
   const priceModels = [...new Set([models.claude, models.gemini, models.reading, models.drawing, ...Object.keys(prices), ...summary.byModel.map((m) => m.model)])].filter(Boolean);
 
   return (
-    <AdminShell current="/admin/ai" title="AI setup">
+    <AdminShell
+      current="/admin/ai"
+      title="AI setup"
+      intro="Which AI models the subject brain uses, checks that each key works, and what the AIs cost this month against your cap."
+      actions={<>
+        <a className="btn" href="#usage">Usage and spend</a>
+        <a className="btn" href="#cap">Monthly cap</a>
+      </>}
+    >
       {active ? <meta httpEquiv="refresh" content={String(BRAIN.refreshSeconds)} /> : null}
       <Notice code={q.e} messages={MESSAGES} errorRef={q.ref} />
       <section className="card stack" id="in-use">

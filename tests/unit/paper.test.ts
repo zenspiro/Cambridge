@@ -4,7 +4,8 @@ import assert from "node:assert/strict";
 import {
   cleanPaper, cleanSvg, editItem, marksAgainstPaper, mergeReading, openFlags, paperFlags, paperScore, pdfVersion, placeOnPages, recheckItem, storedScore, type PaperContent,
 } from "../../src/lib/brain/paper.ts";
-import { applyFix, loadContent, paperDoc, paperView, savePaperReading } from "../../src/lib/brain/paperRead.ts";
+import { applyFix, cleanScores, loadContent, loadPaperRow, paperDoc, paperView, savePaperReading } from "../../src/lib/brain/paperRead.ts";
+import { modelName } from "../../src/lib/brain/labels.ts";
 import { brainStep, claimBrainRun, cleanEvent, runState, startPaperRun } from "../../src/lib/brain/runs.ts";
 import { BRAIN } from "../../src/lib/config.ts";
 import { testBucket, testDb } from "./helpers/d1.ts";
@@ -205,6 +206,41 @@ test("a mark scheme shows its marks checked against the stored question paper", 
   assert.equal(await savePaperReading(db, bucket, msRun, "doc-ms-1", { content: ms, flags: [], pages: PAGES }, true, NOW + 3), "ok");
   const view = await paperView(db, bucket, (await paperDoc(db, "doc-ms-1"))!);
   assert.ok(view.open.some((f) => f.key === "marks:1:qp"), "question 1: 2 marks in the scheme, 3 in the paper");
+});
+
+test("each full reading keeps its own score with its models; a mark scheme's marks against its paper count", async () => {
+  const db = testDb();
+  const bucket = testBucket();
+  seedDoc(db);
+  seedDoc(db, "doc-ms-1", "0625_s24_ms_42.pdf");
+  const run = async (doc: string, raw: Record<string, unknown>, at: number) => {
+    const id = (await startPaperRun(db, doc, { items: [], figures: [] }, "platform-admin", at))!;
+    await claimBrainRun(db, id, null, at);
+    return savePaperReading(db, bucket, id, doc, raw, true, at + 1);
+  };
+  await run("doc-qp-1", { content: READING, flags: [], pages: PAGES }, NOW);
+  const ms = { items: [{ number: "1(a)", page: 2, text: "stopwatch", marks: 1 }, { number: "1(b)", page: 2, text: "0.6", marks: 2 }] };
+  // A cheaper model reads question 1 as 2 marks in all (the paper says 3): the marks flag counts against it.
+  const cheap = { items: [{ number: "1(a)", marks: 1 }, { number: "1(b)", marks: 1 }], flags: [] };
+  assert.equal(await run("doc-ms-1", { content: ms, flags: [], pages: PAGES, fresh: cheap, models: { claude: "claude-haiku-5-5", gemini: "gemini-3.5-flash" } }, NOW + 10), "ok");
+  // The model in use reads it right.
+  const good = { items: [{ number: "1(a)", marks: 1 }, { number: "1(b)", marks: 2 }], flags: [] };
+  assert.equal(await run("doc-ms-1", { content: ms, flags: [], pages: PAGES, fresh: good, models: { claude: "claude-sonnet-5-5", gemini: "bad model" } }, NOW + 20), "ok");
+  // A run that read only some items again (no fresh reading sent) adds no score.
+  assert.equal(await run("doc-ms-1", { content: ms, flags: [], pages: PAGES }, NOW + 30), "ok");
+  const row = (await loadPaperRow(db, "doc-ms-1"))!;
+  assert.equal(row.scores.length, 2);
+  assert.deepEqual(row.scores.map((s) => [s.claude, s.gemini, s.score.clean, s.score.items]), [["claude-haiku-5-5", "gemini-3.5-flash", 1, 2], ["claude-sonnet-5-5", "", 2, 2]]);
+  assert.equal(row.scores[0]!.score.colour, "red", "half the parts flagged");
+  assert.equal(row.score?.clean, 1, "the first reading's score counts the marks check too and stays");
+  assert.deepEqual(cleanScores([{ at: 1, items: 2, clean: 3, red: 0 }, "x", { at: 2, items: 4, clean: 4, red: 0, claude: "claude-x" }]).map((s) => s.at), [2], "more clean parts than parts, or not an object, is dropped");
+});
+
+test("model ids in words", () => {
+  assert.equal(modelName("claude-haiku-5-5"), "Claude Haiku 5.5");
+  assert.equal(modelName("claude-sonnet-5"), "Claude Sonnet 5");
+  assert.equal(modelName("gemini-3.5-flash"), "Gemini 3.5 Flash");
+  assert.equal(modelName("other"), "other");
 });
 
 test("a reading of the wrong kind or without items is refused", async () => {

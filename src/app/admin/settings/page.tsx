@@ -19,7 +19,11 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const env = await getEnv();
   const lib = await getLibrarySettings(env.DB);
   return (
-    <AdminShell current="/admin/settings" title="Library settings">
+    <AdminShell
+      current="/admin/settings"
+      title="Library settings"
+      intro="Which years the library holds and the default essential variants. Limits that protect the site stay in code."
+    >
       <Notice code={q.e} messages={MESSAGES} errorRef={q.ref} />
       <form className="card stack" method="post" action="/admin/settings/save">
         <h2 className="subtitle">Library years</h2>

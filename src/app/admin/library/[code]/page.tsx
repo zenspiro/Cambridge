@@ -5,7 +5,7 @@ import { requireAdmin } from "@/lib/auth/guard";
 import { getEnv } from "@/lib/env";
 import { AdminShell, Notice } from "@/components/AdminShell";
 import { CellLink, StatusLine } from "@/components/LibraryBits";
-import { Crumbs, Legend } from "@/components/LibraryTables";
+import { Legend } from "@/components/LibraryTables";
 import { DOC_TYPE_LABELS, SESSION_LABELS } from "@/lib/config";
 import { getLibrarySettings, libraryYears } from "@/lib/settings";
 import { loadHeader, loadSyllabus } from "@/lib/library/catalog";
@@ -90,11 +90,27 @@ export default async function SyllabusOverview({
   const read = readRows.map((r) => ({ ...r, score: rowScore(r) })).sort((a, b) => (a.score?.pct ?? 101) - (b.score?.pct ?? 101));
 
   return (
-    <AdminShell current="/admin/library" title={`${header.subject_name} ${code}`}>
-      <Crumbs items={[{ label: "Library", href: "/admin/library" }, { label: header.qualification_name }, { label: `${header.subject_name} ${code}` }]} />
+    <AdminShell
+      current="/admin/library"
+      title={`${header.subject_name} ${code}`}
+      crumbs={[{ label: "Library", href: "/admin/library" }, { label: header.qualification_name }, { label: `${header.subject_name} ${code}` }]}
+      actions={<>
+        <Link className="btn btn-primary" href={`/admin/library/folder?code=${code}`}>Upload a folder</Link>
+        <Link className="btn" href={`/admin/agent?code=${code}`}>Run the agent</Link>
+        <Link className="btn" href={`/admin/library/${code}/topics`}>Topic tree</Link>
+      </>}
+    >
       <Notice code={q.e} messages={MESSAGES} errorRef={q.ref} />
+      <nav className="jump" aria-label="On this page">
+        <span className="muted">On this page:</span>
+        {read.length ? <a className="link" href="#papers-read">Papers read</a> : null}
+        {!view.filtered ? <a className="link" href="#map">Subject map</a> : null}
+        <a className="link" href="#find">Search the files</a>
+        <a className="link" href="#papers">Papers and routes</a>
+        <a className="link" href="#variants">Essential variants</a>
+      </nav>
 
-      <section className="card stack">
+      <section className="card stack" id="status">
         <StatusLine status={list.status} />
         {missing > 0 ? (
           <p>
@@ -104,10 +120,6 @@ export default async function SyllabusOverview({
         ) : (
           <p className="notice">Every essential file is in.</p>
         )}
-        <p className="row-actions">
-          <Link className="btn btn-small" href={`/admin/agent?code=${code}`}>Run the agent for this subject</Link>
-          <Link className="btn btn-small" href={`/admin/library/${code}/topics`}>Topic tree</Link>
-        </p>
       </section>
 
       {read.length ? (
@@ -130,8 +142,8 @@ export default async function SyllabusOverview({
 
       {!view.filtered ? (
         <>
-        <section className="card stack">
-          <div className="row-between">
+        <section className="card stack" id="map">
+          <div className="card-head">
             <h2 className="subtitle">Subject map</h2>
             <span className="map-actions">
               {allVariants
@@ -150,7 +162,7 @@ export default async function SyllabusOverview({
         </>
       ) : null}
 
-      <form className="card filters filters-compact" method="get" role="search">
+      <form className="card filters filters-compact" method="get" role="search" id="find">
         <label className="field field-search">
           <span className="sr-only">Search this syllabus</span>
           <input className="input" name="q" type="search" maxLength={100} defaultValue={filter.q ?? ""} placeholder="Search, e.g. mark scheme 2024 paper 4" />
@@ -223,7 +235,7 @@ export default async function SyllabusOverview({
       ) : (
         <>
           {newest && newestPapers.length > 0 ? (
-            <section className="card stack">
+            <section className="card stack" id="papers">
               <h2 className="subtitle">Papers ({newest.version.valid_from_year} to {newest.version.valid_to_year} syllabus)</h2>
               <table className="info-table">
                 <thead>
@@ -271,7 +283,7 @@ export default async function SyllabusOverview({
             </details>
           ) : null}
 
-          <form className="card stack" method="post" action="/admin/library/variants">
+          <form className="card stack" method="post" action="/admin/library/variants" id="variants">
             <h2 className="subtitle">Essential variants for {code}</h2>
             <p className="muted">Which variants of each paper must be stored for a session to be complete. Pakistan sits variant 2.</p>
             <input type="hidden" name="code" value={code} />

@@ -4,7 +4,6 @@ import { notFound, redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/auth/guard";
 import { getEnv } from "@/lib/env";
 import { AdminShell } from "@/components/AdminShell";
-import { Crumbs } from "@/components/LibraryTables";
 import { TreeStatusLine, TreeView } from "@/components/TopicTree";
 import { BRAIN } from "@/lib/config";
 import { loadHeader } from "@/lib/library/catalog";
@@ -33,15 +32,18 @@ export default async function TreePage({ params }: { params: Promise<{ code: str
   const supp = draft.goals.filter((g) => g.tier === "supplement").length;
 
   return (
-    <AdminShell current="/admin/library" title={`Topic tree: ${header.subject_name} ${code}, ${row.fromYear} to ${row.toYear}`}>
-      {isActive(row.run) ? <meta httpEquiv="refresh" content={String(BRAIN.refreshSeconds)} /> : null}
-      <Crumbs items={[
+    <AdminShell
+      current="/admin/library"
+      title={`Topic tree: ${header.subject_name} ${code}, ${row.fromYear} to ${row.toYear}`}
+      crumbs={[
         { label: "Library", href: "/admin/library" },
         { label: header.qualification_name },
         { label: `${header.subject_name} ${code}`, href: `/admin/library/${code}` },
         { label: "Topic tree", href: `/admin/library/${code}/topics` },
         { label },
-      ]} />
+      ]}
+    >
+      {isActive(row.run) ? <meta httpEquiv="refresh" content={String(BRAIN.refreshSeconds)} /> : null}
       <section className="card stack">
         <TreeStatusLine row={row} now={Date.now()} />
         <h2 className="subtitle">Checks</h2>

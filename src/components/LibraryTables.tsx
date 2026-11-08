@@ -1,22 +1,9 @@
+export { Crumbs } from "@/components/AdminShell";
 import Link from "next/link";
 import { CellLink } from "@/components/LibraryBits";
 import { DOC_TYPE_LABELS } from "@/lib/config";
 import type { Cell, PaperRow } from "@/lib/library/checklist";
 import { TIER_LABELS, type Paper } from "@/lib/library/papers";
-
-/** Breadcrumb: Library > qualification > subject > ... */
-export function Crumbs({ items }: { items: { label: string; href?: string }[] }) {
-  return (
-    <nav className="crumbs" aria-label="Breadcrumb">
-      {items.map((it, i) => (
-        <span className="crumb" key={i}>
-          {i > 0 ? <span aria-hidden="true">›</span> : null}
-          {it.href ? <Link className="link" href={it.href}>{it.label}</Link> : <span aria-current="page">{it.label}</span>}
-        </span>
-      ))}
-    </nav>
-  );
-}
 
 /** Version-level and session-level documents as labelled chips. */
 export function DocChips({ cells }: { cells: Cell[] }) {

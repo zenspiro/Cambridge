@@ -24,7 +24,11 @@ export default async function ApprovalPage({ searchParams }: { searchParams: Pro
   const consent = await getConsentSettings(env.DB);
   const overrides = Object.entries(consent.byCountry).sort((a, b) => countryName(a[0]).localeCompare(countryName(b[0])));
   return (
-    <AdminShell current="/admin/approval" title="Parent approval">
+    <AdminShell
+      current="/admin/approval"
+      title="Parent approval"
+      intro="The age under which a student needs a parent or guardian to approve their account, with a different age per country where the law asks for one."
+    >
       <Notice code={q.e} messages={CONSENT_MESSAGES} errorRef={q.ref} />
       <section className="card stack" id="consent">
         <p className="muted">

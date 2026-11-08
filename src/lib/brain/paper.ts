@@ -317,9 +317,9 @@ export function paperFlags({ content, pages, gemini }: CheckInput): Flag[] {
 }
 
 /** Flags a mark scheme raises against its question paper: the marks per question must match. */
-export function marksAgainstPaper(ms: PaperContent, qp: PaperContent): Flag[] {
+export function marksAgainstPaper(ms: Pick<PaperContent, "items"> | { items: readonly { number: string; marks: number | null }[] }, qp: Pick<PaperContent, "items">): Flag[] {
   const top = (n: string) => n.match(/^\d+/)?.[0] ?? n;
-  const sum = (c: PaperContent) => {
+  const sum = (c: { items: readonly { number: string; marks: number | null }[] }) => {
     const m = new Map<string, number>();
     for (const it of c.items) if (it.marks !== null) m.set(top(it.number), (m.get(top(it.number)) ?? 0) + it.marks);
     return m;

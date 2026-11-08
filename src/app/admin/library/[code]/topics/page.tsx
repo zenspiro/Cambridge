@@ -5,7 +5,6 @@ import { requireAdmin } from "@/lib/auth/guard";
 import { getEnv } from "@/lib/env";
 import { AdminShell, Notice } from "@/components/AdminShell";
 import { ActionForm } from "@/components/ActionForm";
-import { Crumbs } from "@/components/LibraryTables";
 import { TreeStatusLine } from "@/components/TopicTree";
 import { loadHeader } from "@/lib/library/catalog";
 import { isActive, treesForCode } from "@/lib/brain/runs";
@@ -41,18 +40,19 @@ export default async function TopicsPage({ params, searchParams }: { params: Pro
   const costs = new Map(await Promise.all(rows.filter((r) => r.pdf).map(async (r) => [r.syllabusId, await topicsCostCheck(env.DB, env, r.pdfBytes, now)] as const)));
 
   return (
-    <AdminShell current="/admin/library" title={`Topic tree: ${header.subject_name} ${code}`}>
-      <Crumbs items={[
+    <AdminShell
+      current="/admin/library"
+      title={`Topic tree: ${header.subject_name} ${code}`}
+      crumbs={[
         { label: "Library", href: "/admin/library" },
         { label: header.qualification_name },
         { label: `${header.subject_name} ${code}`, href: `/admin/library/${code}` },
         { label: "Topic tree" },
-      ]} />
+      ]}
+      intro="Claude copies each syllabus's topics and learning goals. Code checks every word against the syllabus PDF and the numbering, and Gemini copies it separately to compare. A tree goes live only when every check passes."
+      actions={<Link className="btn" href="/admin/topics">All topic trees</Link>}
+    >
       <Notice code={q.e} messages={MESSAGES} errorRef={q.ref} />
-      <p className="muted">
-        Claude copies each syllabus&apos;s topics and learning goals. Code checks every word against the syllabus PDF and the numbering, and
-        Gemini copies it separately to compare. A tree goes live only when every check passes. Nothing here needs a subject expert.
-      </p>
       {rows.map((r) => {
         const label = `Syllabus ${r.fromYear} to ${r.toYear}`;
         const running = isActive(r.run);

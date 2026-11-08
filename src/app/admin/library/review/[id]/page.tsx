@@ -4,7 +4,6 @@ import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/auth/guard";
 import { getEnv } from "@/lib/env";
 import { AdminShell } from "@/components/AdminShell";
-import { Crumbs } from "@/components/LibraryTables";
 import { docTypeLabel } from "@/lib/config";
 import { listSubjects, subjectLabel } from "@/lib/library/catalog";
 import { describeFile, loadPapers, paperLookup } from "@/lib/library/papers";
@@ -17,6 +16,7 @@ import { ScoreBadge } from "@/components/ScoreBadge";
 import { RunProgress } from "@/components/RunProgress";
 import { loadPages, PAPER_KINDS, paperDoc, paperView, type PaperView } from "@/lib/brain/paperRead";
 import { isActive, runState } from "@/lib/brain/runs";
+import { modelName } from "@/lib/brain/labels";
 import { estimateWords, paperCostCheck, usdWords, type CostCheck } from "@/lib/brain/spend";
 import type { PaperKind } from "@/lib/brain/paper";
 
@@ -82,8 +82,16 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
   );
 
   return (
-    <AdminShell current="/admin/library" title={title}>
-      <Crumbs items={[{ label: "Library", href: "/admin/library" }, { label: subject, href: `/admin/library/${doc.code}` }, where, { label: "Review" }]} />
+    <AdminShell
+      current="/admin/library"
+      title={title}
+      keepHead={false}
+      crumbs={[{ label: "Library", href: "/admin/library" }, { label: subject, href: `/admin/library/${doc.code}` }, where, { label: "Review" }]}
+      actions={<>
+        <a className="btn" href={pdf} target="_blank" rel="noopener">Open the PDF in a new tab</a>
+        <a className="btn" href={`/admin/library/file/${encodeURIComponent(doc.id)}`}>Download</a>
+      </>}
+    >
       <div className="review-bar">
         {related.paper.length > 0 ? (
           <nav className="review-switch" aria-label="Files of the same paper">
@@ -93,10 +101,6 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
             ))}
           </nav>
         ) : <span />}
-        <div className="row-actions">
-          <a className="btn btn-small" href={pdf} target="_blank" rel="noopener">Open the PDF in a new tab</a>
-          <a className="btn btn-small" href={`/admin/library/file/${encodeURIComponent(doc.id)}`}>Download</a>
-        </div>
       </div>
       {view && cost ? <ReadingCard docId={doc.id} view={view} cost={cost} run={run} busy={busy} facts={facts} /> : null}
       {view?.content ? (
@@ -202,6 +206,21 @@ function ReadingCard({ docId, view, cost, run, busy, facts }: {
           {cost.cap > 0 ? ` This month: ${usdWords(cost.spent)} of your ${usdWords(cost.cap)} cap.` : ""}
           {cost.verdict === "over_cap" ? " This would go past the cap, so it will not start." : cost.verdict === "no_price" ? " With a cap set, runs need a price for every model in use." : ""}
         </p>
+      ) : null}
+      {/* One score per full reading with the models that read it (owner, 8 Nov 2026: compare a cheaper Claude). */}
+      {view.row?.scores.length ? (
+        <div className="stack-tight">
+          <h3 className="label-inline">Read accuracy of each reading</h3>
+          <ul className="score-list">
+            {[...view.row.scores].reverse().map((s) => (
+              <li key={s.at}>
+                <ScoreBadge score={s.score} />{" "}
+                <span>{s.claude ? modelName(s.claude) : "Claude"}{s.gemini ? `, checked by ${modelName(s.gemini)}` : ""}</span>{" "}
+                <span className="muted">{dateFmt.format(s.at)}, {s.score.clean} of {s.score.items} parts with no flag</span>
+              </li>
+            ))}
+          </ul>
+        </div>
       ) : null}
       {view.fixes.length ? (
         <details>

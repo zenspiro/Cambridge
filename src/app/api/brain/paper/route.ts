@@ -6,7 +6,7 @@ import { savePaperReading } from "@/lib/brain/paperRead";
 // A paper's reading from the brain script (merged with what was stored, flags worked out): first after Claude's
 // reading, then again with the drawings (`final`). Signed only, a running paper run only.
 export async function POST(request: Request) {
-  const a = await agentRequest(request, BRAIN.maxPaperBytes * 3);
+  const a = await agentRequest(request, BRAIN.maxPaperBytes * 4);
   if (!a.ok) return a.response;
   const b = parseJson(a.body);
   const jobId = b?.jobId;

@@ -84,15 +84,19 @@ export default async function SourcesPage({ searchParams }: { searchParams: Prom
   };
 
   return (
-    <AdminShell current="/admin/sources" title="Sources">
+    <AdminShell
+      current="/admin/sources"
+      title="Sources"
+      intro="Where each subject's files come from: Cambridge's own pages and shared Google Drive folders. The agent only uses sources that are switched on, and follows each website's robots.txt."
+      actions={<>
+        <a className="btn" href="#sites">Websites and Google Drive</a>
+        <Link className="btn btn-primary" href="/admin/agent">Run the agent</Link>
+      </>}
+    >
       <Notice code={q.e} messages={MESSAGES} errorRef={q.ref} />
       {q.e === "ok_folders" || q.e === "folder_exists" ? (
         <p className="muted">Added {counts(q.added)}, already listed {counts(q.dupes)}, not a folder link {counts(q.bad)}.</p>
       ) : null}
-      <p className="muted">
-        Where each subject&apos;s files come from: Cambridge&apos;s own pages and shared Google Drive folders. The agent only
-        uses sources that are switched on (bottom of the page), and follows each website&apos;s robots.txt.
-      </p>
 
       {quals.map((qual) => (
         <section className="stack" key={qual}>

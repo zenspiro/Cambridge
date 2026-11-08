@@ -86,7 +86,7 @@ try {
   check((await page.locator("h2.subtitle").first().textContent())?.startsWith("IGCSE Physics (0625): "), "run page names its subject");
   // The subject's library page links to a run for that subject.
   await page.goto(BASE + "/admin/library/0478");
-  await page.click("text=Run the agent for this subject");
+  await page.click(".page-actions >> text=Run the agent");
   await page.waitForURL(/\/admin\/agent\?code=0478/);
   check((await page.locator("#run-code").inputValue()) === "0478", "a subject's run link picks that subject");
   await page.click("form[action='/admin/agent/start'] button[type=submit]");
