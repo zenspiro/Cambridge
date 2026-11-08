@@ -2,6 +2,8 @@
 
 Current state, kept short. The full brief (product, copyright rules, standards) is `docs/BRIEF.md`; read it first. Section 15 applies to every change.
 
+Picking up in a new session or account: `docs/HANDOVER.md` (where things stand, what is next, the workflow).
+
 Product and commercial decisions (AI engine, accounts and portals, pricing, payments, student interface, scale) are in `docs/PLAN.md`; they win over the brief where they differ. Read it before planning any student, parent, teacher or payment work.
 
 ## Owner preferences
@@ -163,4 +165,4 @@ Product and commercial decisions (AI engine, accounts and portals, pricing, paym
 See README.md. Before every push: `npm run check`, `npm run build:worker`, `npm run db:migrate:local`, then with `npx wrangler dev --local` running (local mode: no Cloudflare login, so the AI endpoint answers 503 and the agent uses its rules), `npm run test:e2e`. Full list: `DEV-CHECKLIST.md`.
 
 ## Docs to keep current (same commit as the code)
-`CLAUDE.md` (this), `HISTORY.md`, `FEATURES.md`, `DEV-CHECKLIST.md`, `tests/README.md`, `docs/guides/`.
+`CLAUDE.md` (this), `HISTORY.md`, `FEATURES.md`, `DEV-CHECKLIST.md`, `tests/README.md`, `docs/guides/`, `docs/HANDOVER.md` (keep its "Where things stand" and "What is next" current).
