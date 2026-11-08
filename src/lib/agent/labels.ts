@@ -105,3 +105,18 @@ export function reasonText(reason: string | undefined): string {
   if (reason === "download_failed") return "the download did not finish";
   return reason.replace(/_/g, " ");
 }
+
+/** Why an agent run stopped, by its error code (run page and the admin home). */
+export const AGENT_ERRORS: Record<string, string> = {
+  not_set_up: "The agent is not set up yet: the GITHUB_TOKEN secret is missing in Cloudflare.",
+  github_401: "GitHub refused the token (401). Check the GITHUB_TOKEN secret.",
+  github_403: "GitHub refused the token (403). It needs Actions: read and write on this repository.",
+  github_404: "GitHub could not find the agent workflow (404). Check the token's repository access.",
+  github_422: "GitHub refused the run (422). The agent workflow may not be on the main branch yet.",
+  github_unreachable: "GitHub could not be reached. Please try again.",
+  timeout: "The agent went quiet for 15 minutes, so the run was closed. The GitHub log shows what happened.",
+  never_started:
+    "GitHub never started the agent, or it stopped before it could report. Most often the AGENT_SECRET repository secret in GitHub (Settings, Secrets and variables, Actions) is missing or differs from Cloudflare's.",
+  cancelled: "You cancelled this run.",
+  agent: "The agent stopped with an error. See the details below.",
+};

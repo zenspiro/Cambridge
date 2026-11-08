@@ -28,7 +28,9 @@ A plain list of what the platform does today, for non-developers.
 - Me page: change your name and country, pick your theme, add your exam sessions (the home page asks once), download all your data or delete your account.
 - Student themes: Bold, Playful and Clean. Same pages and words, three looks. The Themes page in admin shows every part of the student pages in each theme, in a phone-sized box, with a switch.
 - Topic tree (admin, the first part of the subject brain): Library > subject > Topic tree. Press Draft and Claude copies each syllabus's topics and learning goals while Gemini copies it separately; code checks every word against the syllabus PDF. Ready trees are what later steps (question making, marking) are built on. Needs the two AI keys (see `docs/guides/topic-tree-setup.md`).
-- Admin sidebar: the menu sits on the left in groups and pages use the whole screen.
+- Admin sidebar: the menu sits on the left in groups and pages use the whole screen. It also lists every run going on now, with a link to watch it.
+- Standard admin pages: every page has the same header (where you are, what the page is for, its main buttons at the top right, kept in view). Buttons show a spinner while working and cannot send twice; results also pop up in the corner.
+- Admin home "Needs you": runs that stopped and why, papers with flags to review, files stored, papers read, AI spend against the cap, and recent activity in plain words.
 - Review screen: click any green tick to see the stored PDF beside what we hold about it, switch between the paper's question paper, mark scheme and insert, and download. Next: the paper rebuilt from our database with problem parts flagged.
 - AI setup: check Claude and Gemini separately, see which models each key can use, and pick each AI's model from a dropdown (Claude Sonnet 5.5 by default).
 - AI usage dashboard: spend today and this month, questions, pages, tokens and spend per model and per job, the latest runs; prices per model typed on the page.

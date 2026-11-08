@@ -39,14 +39,12 @@ export default async function AddPage({ searchParams }: { searchParams: Promise<
   const back = `/admin/library/${p.code}`;
 
   return (
-    <AdminShell current="/admin/library" title="Add a file">
-      <nav className="crumbs" aria-label="Breadcrumb">
-        <Link className="link" href="/admin/library">Library</Link>
-        <span aria-hidden="true">›</span>
-        <Link className="link" href={back}>{p.code}</Link>
-        <span aria-hidden="true">›</span>
-        <span aria-current="page">Add</span>
-      </nav>
+    <AdminShell
+      current="/admin/library"
+      title="Add a file"
+      crumbs={[{ label: "Library", href: "/admin/library" }, { label: p.code, href: back }, { label: "Add" }]}
+      intro="Upload the file, or fetch it from a link on a switched-on source. It is stored under the library's name for it."
+    >
       <Notice code={q.e} messages={MESSAGES} errorRef={q.ref} />
 
       <section className="card stack">

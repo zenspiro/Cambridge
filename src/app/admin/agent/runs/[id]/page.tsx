@@ -1,3 +1,4 @@
+import { AGENT_ERRORS as ERRORS } from "@/lib/agent/labels";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -20,19 +21,6 @@ import { dateFmt, REASON_LABELS, timeFmt } from "@/lib/library/labels";
 
 export const metadata: Metadata = { title: "Agent run" };
 
-const ERRORS: Record<string, string> = {
-  not_set_up: "The agent is not set up yet: the GITHUB_TOKEN secret is missing in Cloudflare.",
-  github_401: "GitHub refused the token (401). Check the GITHUB_TOKEN secret.",
-  github_403: "GitHub refused the token (403). It needs Actions: read and write on this repository.",
-  github_404: "GitHub could not find the agent workflow (404). Check the token's repository access.",
-  github_422: "GitHub refused the run (422). The agent workflow may not be on the main branch yet.",
-  github_unreachable: "GitHub could not be reached. Please try again.",
-  timeout: "The agent went quiet for 15 minutes, so the run was closed. The GitHub log shows what happened.",
-  never_started:
-    "GitHub never started the agent, or it stopped before it could report. Most often the AGENT_SECRET repository secret in GitHub (Settings, Secrets and variables, Actions) is missing or differs from Cloudflare's.",
-  cancelled: "You cancelled this run.",
-  agent: "The agent stopped with an error. See the details below.",
-};
 
 type Describe = (fileName: string) => string;
 
@@ -139,13 +127,18 @@ export default async function RunPage({
   const logUrl = run.run_url && /^https:\/\/github\.com\//.test(run.run_url) ? run.run_url : actionsUrl;
 
   return (
-    <AdminShell current="/admin/agent" title="Agent run">
+    <AdminShell
+      current="/admin/agent"
+      title="Agent run"
+      crumbs={[{ label: "Agent", href: "/admin/agent" }, { label: "Run" }]}
+      actions={<Link className="btn" href={`/admin/library/${encodeURIComponent(p.code)}`}>Open the subject</Link>}
+    >
       {/* Reloads the page while the run is active, so progress shows without clicking. No script needed. */}
       {!done ? <meta httpEquiv="refresh" content={String(AGENT.refreshSeconds)} /> : null}
       <section className="card stack">
         <div className="row-between">
           <h2 className="subtitle">{subjectName}: {describeRun(p)}</h2>
-          <span className={run.status === "succeeded" ? "pill pill-ok" : run.status === "failed" ? "pill pill-gap" : "pill"}>
+          <span className={run.status === "succeeded" ? "pill pill-ok" : run.status === "failed" ? "pill pill-bad" : run.status === "running" || run.status === "queued" ? "pill pill-busy" : "pill"}>
             {STATUS_LABELS[run.status] ?? run.status}
           </span>
         </div>

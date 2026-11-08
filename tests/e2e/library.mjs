@@ -95,7 +95,7 @@ for (const width of [DESKTOP]) {
   check((await page.locator("h2", { hasText: "Essential: variant 2" }).count()) === 1, `${width}px variant 2 is essential`);
   check((await page.locator("table.grid-table tbody tr").first().textContent())?.includes("Multiple Choice (Core)"), `${width}px rows carry paper names`);
   check((await page.locator(".tag-extended").count()) > 0, `${width}px Extended papers are tagged`);
-  check((await page.locator("nav.pager a").count()) >= 1, `${width}px session pager links to other sessions`);
+  check((await page.locator("nav[aria-label=\"Other sessions\"] a").count()) >= 1, `${width}px session pager links to other sessions`);
   await noOverflow("session page");
   check((await page.request.get(BASE + "/admin/library/0625/2024/autumn")).status() === 404, `${width}px unknown session name is not found`);
   await page.goto(BASE + "/admin/library/0625/version/2023");

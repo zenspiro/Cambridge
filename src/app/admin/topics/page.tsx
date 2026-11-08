@@ -19,10 +19,11 @@ export default async function TopicTreesPage() {
   for (const r of rows) byCode.set(r.code, [...(byCode.get(r.code) ?? []), r]);
   const ready = rows.filter((r) => r.status === "ready").length;
   return (
-    <AdminShell current="/admin/topics" title="Topic trees">
-      <p className="muted">
-        {ready} of {rows.length} syllabus versions have a ready topic tree. Open a subject to draft or redraft its trees.
-      </p>
+    <AdminShell
+      current="/admin/topics"
+      title="Topic trees"
+      intro={<>{ready} of {rows.length} syllabus versions have a ready topic tree. Open a subject to draft or redraft its trees.</>}
+    >
       <section className="card">
         <table className="info-table">
           <thead>

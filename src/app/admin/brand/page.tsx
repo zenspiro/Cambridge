@@ -29,11 +29,12 @@ export default async function BrandPage() {
   await requireAdmin();
   const brand = await currentBrand();
   return (
-    <AdminShell current="/admin/brand" title="Brand">
-      <p className="muted">
-        The name, wording and pictures every student, parent and teacher page uses. Changes show at once. See them on the{" "}
-        <Link className="link" href="/admin/themes">theme gallery</Link>.
-      </p>
+    <AdminShell
+      current="/admin/brand"
+      title="Brand"
+      intro="The name, wording and pictures every student, parent and teacher page uses. Changes show at once."
+      actions={<Link className="btn" href="/admin/themes">See them in the theme gallery</Link>}
+    >
 
       <ActionForm className="card stack" action="/admin/brand/save" messages={TEXT_MESSAGES}>
         <h2 className="subtitle">Name and wording</h2>

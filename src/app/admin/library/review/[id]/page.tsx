@@ -4,7 +4,6 @@ import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/auth/guard";
 import { getEnv } from "@/lib/env";
 import { AdminShell } from "@/components/AdminShell";
-import { Crumbs } from "@/components/LibraryTables";
 import { docTypeLabel } from "@/lib/config";
 import { listSubjects, subjectLabel } from "@/lib/library/catalog";
 import { describeFile, loadPapers, paperLookup } from "@/lib/library/papers";
@@ -83,8 +82,16 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
   );
 
   return (
-    <AdminShell current="/admin/library" title={title}>
-      <Crumbs items={[{ label: "Library", href: "/admin/library" }, { label: subject, href: `/admin/library/${doc.code}` }, where, { label: "Review" }]} />
+    <AdminShell
+      current="/admin/library"
+      title={title}
+      keepHead={false}
+      crumbs={[{ label: "Library", href: "/admin/library" }, { label: subject, href: `/admin/library/${doc.code}` }, where, { label: "Review" }]}
+      actions={<>
+        <a className="btn" href={pdf} target="_blank" rel="noopener">Open the PDF in a new tab</a>
+        <a className="btn" href={`/admin/library/file/${encodeURIComponent(doc.id)}`}>Download</a>
+      </>}
+    >
       <div className="review-bar">
         {related.paper.length > 0 ? (
           <nav className="review-switch" aria-label="Files of the same paper">
@@ -94,10 +101,6 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
             ))}
           </nav>
         ) : <span />}
-        <div className="row-actions">
-          <a className="btn btn-small" href={pdf} target="_blank" rel="noopener">Open the PDF in a new tab</a>
-          <a className="btn btn-small" href={`/admin/library/file/${encodeURIComponent(doc.id)}`}>Download</a>
-        </div>
       </div>
       {view && cost ? <ReadingCard docId={doc.id} view={view} cost={cost} run={run} busy={busy} facts={facts} /> : null}
       {view?.content ? (

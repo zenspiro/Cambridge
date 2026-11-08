@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { Metadata } from "next";
 import { requireAdmin } from "@/lib/auth/guard";
 import { getEnv } from "@/lib/env";
@@ -36,11 +37,12 @@ export default async function FolderPage({ searchParams }: { searchParams: Promi
   const label = subjects.find((s) => s.code === code)?.label ?? code;
 
   return (
-    <AdminShell current="/admin/library/upload" title="Upload a folder">
-      <p className="muted">
-        For a folder downloaded from Google Drive (unzip it first). Every file is worked out from its names, its first page
-        and the AI, and you see the result before anything is uploaded.
-      </p>
+    <AdminShell
+      current="/admin/library/upload"
+      title="Upload a folder"
+      intro="For a folder downloaded from Google Drive (unzip it first). Every file is worked out from its names, its first page and the AI, and you see the result before anything is uploaded."
+      actions={<Link className="btn" href="/admin/library/upload">Upload single files instead</Link>}
+    >
       <FolderUpload
         code={code}
         subjectLabel={label}

@@ -4,7 +4,7 @@ import { requireAdmin } from "@/lib/auth/guard";
 import { getEnv } from "@/lib/env";
 import { AdminShell } from "@/components/AdminShell";
 import { StatusLine } from "@/components/LibraryBits";
-import { Crumbs, DocChips, Legend, PaperTable } from "@/components/LibraryTables";
+import { DocChips, Legend, PaperTable } from "@/components/LibraryTables";
 import { loadHeader, loadSyllabus } from "@/lib/library/catalog";
 import { loadPapers } from "@/lib/library/papers";
 
@@ -23,13 +23,16 @@ export default async function VersionPage({ params }: { params: Promise<{ code: 
   const label = `Syllabus ${g.version.valid_from_year} to ${g.version.valid_to_year}`;
 
   return (
-    <AdminShell current="/admin/library" title={label}>
-      <Crumbs items={[
+    <AdminShell
+      current="/admin/library"
+      title={label}
+      crumbs={[
         { label: "Library", href: "/admin/library" },
         { label: header.qualification_name },
         { label: `${header.subject_name} ${code}`, href: `/admin/library/${code}` },
         { label },
-      ]} />
+      ]}
+    >
       <section className="card stack">
         <StatusLine status={g.status} />
         <h2 className="label-inline">Syllabus documents</h2>

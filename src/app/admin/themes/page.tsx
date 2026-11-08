@@ -14,7 +14,11 @@ export default async function ThemesPage() {
   const brand = await currentBrand();
   const parent = THEMES.find((t) => t.id === PARENT_THEME)?.label;
   return (
-    <AdminShell current="/admin/themes" title="Themes">
+    <AdminShell
+      current="/admin/themes"
+      title="Themes"
+      actions={<Link className="btn" href="/admin/themes/phone">Open as a full page</Link>}
+    >
       <div className="gallery-row">
         <ThemeGallery brand={frameBrand(brand)} initial={brand.defaultTheme} boxed />
         <div className="gallery-side">

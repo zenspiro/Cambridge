@@ -44,12 +44,15 @@ export function ActionForm({ action, children, messages, confirm, className, cou
       const ok = code.startsWith("ok");
       const text = [messages[code] ?? (ok ? "Done." : "That did not work. Please try again."), counts ? folderCounts(q) : ""].filter(Boolean).join(" ");
       setNote({ ok, text });
+      window.dispatchEvent(new CustomEvent("admin-toast", { detail: { ok, text } })); // the corner toast (AdminEnhance)
       if (ok) {
         form.current?.reset();
         router.refresh(); // fresh data from the server, same scroll position
       }
     } catch {
-      setNote({ ok: false, text: "The server could not be reached. Please try again." });
+      const text = "The server could not be reached. Please try again.";
+      setNote({ ok: false, text });
+      window.dispatchEvent(new CustomEvent("admin-toast", { detail: { ok: false, text } }));
     } finally {
       setBusy(false);
       setAsking(null);
@@ -59,7 +62,8 @@ export function ActionForm({ action, children, messages, confirm, className, cou
   return (
     <form
       ref={form}
-      className={className}
+      className={[className, busy ? "form-busy" : ""].filter(Boolean).join(" ") || undefined}
+      aria-busy={busy || undefined}
       method="post"
       action={action}
       onSubmit={(e) => {

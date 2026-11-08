@@ -259,7 +259,7 @@ try {
 
   // 1. Without the syllabus PDF there is nothing to read.
   await page.goto(BASE + "/admin/library/0625");
-  await page.locator(".row-actions a", { hasText: "Topic tree" }).click();
+  await page.locator(".page-actions a", { hasText: "Topic tree" }).click();
   await page.waitForURL(BASE + "/admin/library/0625/topics");
   const card = page.locator("#tree-2023");
   check((await card.textContent())?.includes("not in the library yet"), "no syllabus PDF: the page says so and links to the version page");

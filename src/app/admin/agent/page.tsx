@@ -31,12 +31,16 @@ export default async function AgentPage({ searchParams }: { searchParams: Promis
   const quals = [...new Set(subjects.map((s) => s.qualification))];
 
   return (
-    <AdminShell current="/admin/agent" title="Download agent">
+    <AdminShell
+      current="/admin/agent"
+      title="Download agent"
+      intro="The agent reads the start pages of switched-on sources, follows their PDF links, and stores only files that are missing. Start with a dry run to see what it would fetch."
+      actions={<>
+        <a className="btn" href="#runs">Past runs</a>
+        <Link className="btn" href="/admin/sources">Sources</Link>
+      </>}
+    >
       <Notice code={q.e} messages={MESSAGES} errorRef={q.ref} />
-      <p className="muted">
-        The agent reads the start pages of switched-on <Link className="link" href="/admin/sources">sources</Link>, follows
-        their PDF links, and stores only files that are missing. Start with a dry run to see what it would fetch.
-      </p>
 
       <form className="card stack" method="post" action="/admin/agent/start">
         <div className="field stack">
@@ -85,7 +89,7 @@ export default async function AgentPage({ searchParams }: { searchParams: Promis
         <button className="btn btn-primary btn-block" type="submit">Run agent</button>
       </form>
 
-      <section className="card stack">
+      <section className="card stack" id="runs">
         <div className="row-between">
           <h2 className="subtitle">Runs</h2>
           <Link className="btn btn-small" href="/admin/agent">Refresh</Link>
@@ -107,7 +111,7 @@ export default async function AgentPage({ searchParams }: { searchParams: Promis
                   <span className="actions">
                     {r.status === "succeeded" ? <span className="muted">{n}</span> : null}
                     {r.status === "running" ? <span className="muted">{r.progress}%</span> : null}
-                    <span className={r.status === "succeeded" ? "pill pill-ok" : r.status === "failed" ? "pill pill-gap" : "pill"}>
+                    <span className={r.status === "succeeded" ? "pill pill-ok" : r.status === "failed" ? "pill pill-bad" : r.status === "running" || r.status === "queued" ? "pill pill-busy" : "pill"}>
                       {STATUS_LABELS[r.status] ?? r.status}
                     </span>
                   </span>

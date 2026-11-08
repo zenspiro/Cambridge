@@ -29,7 +29,12 @@ export default async function UploadPage({ searchParams }: { searchParams: Promi
   const stored = outcomes.filter((o) => o.ok).length;
 
   return (
-    <AdminShell current="/admin/library/upload" title="Upload source files">
+    <AdminShell
+      current="/admin/library/upload"
+      title="Upload source files"
+      intro={<>PDFs that already have Cambridge file names, like <span className="mono">0625_s23_qp_42.pdf</span>. For a Google Drive folder with other names (&quot;2024 / May June&quot;), use Upload a folder: it works out each file and shows you the result first.</>}
+      actions={<Link className="btn btn-primary" href="/admin/library/folder">Upload a folder</Link>}
+    >
       <Notice code={q.e} messages={MESSAGES} />
 
       {job ? (
@@ -48,24 +53,16 @@ export default async function UploadPage({ searchParams }: { searchParams: Promi
         </section>
       ) : null}
 
-      <section className="card stack">
-        <h2 className="subtitle">A folder from Google Drive?</h2>
-        <p className="muted">
-          Files without Cambridge names, in folders like &quot;2024 / May June&quot;: use{" "}
-          <Link className="link" href="/admin/library/folder">Upload a folder</Link>. It works out each file from its folder
-          names and first page, shows you the result, then uploads.
-        </p>
-      </section>
-
       <form className="card stack" method="post" action="/admin/library/upload/send" encType="multipart/form-data">
+        <h2 className="subtitle">Choose files</h2>
         <p className="muted">
-          PDFs with Cambridge file names, like <span className="mono">0625_s23_qp_42.pdf</span>, from {lib.fromYear} to{" "}
+          From {lib.fromYear} to{" "}
           {lib.toYear}. Up to {LIBRARY.maxFilesPerUpload} files and {LIBRARY.maxUploadBytes / 1024 / 1024} MB at a time.
           Files already stored are skipped.
         </p>
         <label className="label" htmlFor="files">PDF files</label>
         <input className="input" id="files" name="files" type="file" accept=".pdf,application/pdf" multiple required />
-        <button className="btn btn-primary btn-block" type="submit">Upload</button>
+        <div className="form-actions"><button className="btn btn-primary" type="submit">Upload</button></div>
       </form>
     </AdminShell>
   );

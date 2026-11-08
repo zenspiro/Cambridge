@@ -29,12 +29,16 @@ export default async function LibraryHome({ searchParams }: { searchParams: Prom
   }
 
   return (
-    <AdminShell current="/admin/library" title="Library">
+    <AdminShell
+      current="/admin/library"
+      title="Library"
+      intro={<>Cambridge source files by qualification and subject, {library.fromYear} to {library.toYear}. Green means every essential file is in. Admin only; every download is logged.</>}
+      actions={<>
+        <Link className="btn btn-primary" href="/admin/library/folder">Upload a folder</Link>
+        <Link className="btn" href="/admin/library/upload">Upload files</Link>
+      </>}
+    >
       <Notice code={sp.e} messages={{ unknown: "That syllabus is not in the library.", too_big: "That file is too big (25 MB at most)." }} />
-      <p className="muted">
-        Cambridge source files by qualification and subject, {library.fromYear} to {library.toYear}. Admin only; every
-        download is logged. Green means every essential file is in.
-      </p>
 
       <form className="card searchbar" method="get" role="search">
         <label className="sr-only" htmlFor="q">Search the library</label>
