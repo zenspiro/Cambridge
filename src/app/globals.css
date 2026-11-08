@@ -253,6 +253,7 @@
   .score-red { @apply border-red-300 bg-red-50 text-red-800; }
   .score-red .score-dot { @apply bg-red-600; }
   .score-detail { @apply font-normal; }
+  .score-list { @apply m-0 flex list-none flex-col gap-2 p-0; }
   .review-list { @apply m-0 flex list-none flex-col gap-2 p-0; }
   .review-list-row { @apply grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-3 text-base; }
   .flag-current { @apply ring-2 ring-blue-600 ring-offset-2; }

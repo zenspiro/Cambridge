@@ -39,3 +39,14 @@ export const PROBLEM_WORDS = {
   missing: "Missing from the tree",
   shape: "Answer shape",
 } as const;
+
+/**
+ * A model's name in words from its id: "claude-haiku-5-5" is "Claude Haiku 5.5", "gemini-3.5-flash" is "Gemini 3.5
+ * Flash". An id in another shape is shown as it is.
+ */
+export function modelName(id: string): string {
+  const c = /^claude-([a-z]+)-(\d+)(?:-(\d+))?$/.exec(id);
+  if (c) return `Claude ${c[1]![0]!.toUpperCase()}${c[1]!.slice(1)} ${c[2]}${c[3] ? `.${c[3]}` : ""}`;
+  if (/^gemini-[a-z0-9.-]+$/.test(id)) return id.split("-").map((w) => (/^[a-z]/.test(w) ? w[0]!.toUpperCase() + w.slice(1) : w)).join(" ");
+  return id;
+}

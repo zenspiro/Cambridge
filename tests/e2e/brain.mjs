@@ -556,8 +556,10 @@ try {
   await page.locator("#paper-sheet").waitFor({ timeout: 10_000 });
   const pill = await page.locator("#reading .pill").textContent();
   check(/flag/.test(pill ?? ""), `the misread is flagged (${pill})`);
-  const score = (await page.locator("#reading .score").textContent()) ?? "";
-  check(/^Red \d+%/.test(score) && score.includes("read accuracy") && (await page.locator("#reading .score-red").count()) === 1, `the paper's read accuracy shows as a red badge with words (${score.slice(0, 60)})`);
+  const score = (await page.locator("#reading .reading-head .score").textContent()) ?? "";
+  check(/^Red \d+%/.test(score) && score.includes("read accuracy") && (await page.locator("#reading .reading-head .score-red").count()) === 1, `the paper's read accuracy shows as a red badge with words (${score.slice(0, 60)})`);
+  const each = (await page.locator("#reading .score-list li").first().textContent()) ?? "";
+  check((await page.locator("#reading .score-list li").count()) === 1 && each.includes("Claude Sonnet 5.5") && /checked by Gemini/.test(each), `the reading's own score names its models (${each.slice(0, 80)})`);
   check((await page.locator("#item-1\\(a\\)").textContent())?.includes("State the instrument"), "the paper is rebuilt from our reading, page by page");
   check((await page.locator("#item-1\\(a\\) .pq-marks").textContent()) === "[1]", "marks show as on the paper");
   check((await page.locator("#item-1\\(b\\).pq-red").count()) === 1, "the misread part is boxed in red");

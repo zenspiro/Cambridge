@@ -17,6 +17,7 @@ import { ScoreBadge } from "@/components/ScoreBadge";
 import { RunProgress } from "@/components/RunProgress";
 import { loadPages, PAPER_KINDS, paperDoc, paperView, type PaperView } from "@/lib/brain/paperRead";
 import { isActive, runState } from "@/lib/brain/runs";
+import { modelName } from "@/lib/brain/labels";
 import { estimateWords, paperCostCheck, usdWords, type CostCheck } from "@/lib/brain/spend";
 import type { PaperKind } from "@/lib/brain/paper";
 
@@ -202,6 +203,21 @@ function ReadingCard({ docId, view, cost, run, busy, facts }: {
           {cost.cap > 0 ? ` This month: ${usdWords(cost.spent)} of your ${usdWords(cost.cap)} cap.` : ""}
           {cost.verdict === "over_cap" ? " This would go past the cap, so it will not start." : cost.verdict === "no_price" ? " With a cap set, runs need a price for every model in use." : ""}
         </p>
+      ) : null}
+      {/* One score per full reading with the models that read it (owner, 8 Nov 2026: compare a cheaper Claude). */}
+      {view.row?.scores.length ? (
+        <div className="stack-tight">
+          <h3 className="label-inline">Read accuracy of each reading</h3>
+          <ul className="score-list">
+            {[...view.row.scores].reverse().map((s) => (
+              <li key={s.at}>
+                <ScoreBadge score={s.score} />{" "}
+                <span>{s.claude ? modelName(s.claude) : "Claude"}{s.gemini ? `, checked by ${modelName(s.gemini)}` : ""}</span>{" "}
+                <span className="muted">{dateFmt.format(s.at)}, {s.score.clean} of {s.score.items} parts with no flag</span>
+              </li>
+            ))}
+          </ul>
+        </div>
       ) : null}
       {view.fixes.length ? (
         <details>

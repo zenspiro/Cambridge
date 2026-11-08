@@ -536,11 +536,18 @@ async function runPaper(job: PaperJob) {
   const prior = job.prior.content ? cleanPaper(job.prior.content, job.kind) : null;
   const priorGemini = job.prior.gemini ? cleanPaper(job.prior.gemini, job.kind) : null;
   const client = new Anthropic({ apiKey: CLAUDE_KEY, maxRetries: TEST_MODE ? 0 : 3, timeout: 30 * 60_000, ...(CLAUDE_BASE ? { baseURL: CLAUDE_BASE } : {}) });
+  // A full reading's own result before it is merged with what was kept: its score is this run's read accuracy, with
+  // the models that read it (owner, 8 Nov 2026: compare a cheaper Claude with the one in use).
+  let fresh: PaperContent | null = null;
   const save = async (content: PaperContent, gemini: PaperContent | null, final: boolean) => {
     const flags = paperFlags({ content, pages, gemini });
     if (final) await step(`Checks done: ${flags.length} flag${flags.length === 1 ? "" : "s"} for the review screen`, { stage: "checks", state: "done" });
+    const own = final && fresh ? {
+      fresh: { items: fresh.items.map((i) => ({ number: i.number, marks: i.marks })), flags: paperFlags({ content: fresh, pages, gemini }) },
+      models: { claude: reader, gemini: job.models.gemini },
+    } : {};
     // `read`: a full reading (not a figures-only run), so the first one sets the paper's read accuracy.
-    const r = await api("/api/brain/paper", { content, gemini, pages, flags, final, read: !figuresOnly });
+    const r = await api("/api/brain/paper", { content, gemini, pages, flags, final, read: !figuresOnly, ...own });
     if (r.status !== 200) throw new Stop(`save_${r.status}`);
     if (final) await note("Saved", { stage: "save", state: "done" });
   };
@@ -571,10 +578,11 @@ async function runPaper(job: PaperJob) {
         prompt: paperPrompt(job.kind, job.paper, job.scope.items, mixed ? { picturePages: pics, textPages: textOnly } : undefined),
         extraText: mixed ? textPagesBlock(pages, textOnly) : undefined,
       }));
-    const fresh = placeOnPages(remapPages(cleanPaper(r.raw, job.kind), slim.kept), pages);
-    if (!fresh.items.length) throw new Stop("claude_bad_answer", "the reading had no questions");
+    const read = placeOnPages(remapPages(cleanPaper(r.raw, job.kind), slim.kept), pages);
+    if (!read.items.length) throw new Stop("claude_bad_answer", "the reading had no questions");
+    if (!scoped) fresh = read;
     // Kept items are placed again too, so a page number stored wrongly before is put right.
-    content = placeOnPages(mergeReading(prior, fresh, new Set(job.prior.open), scoped ? job.scope : undefined), pages);
+    content = placeOnPages(mergeReading(prior, read, new Set(job.prior.open), scoped ? job.scope : undefined), pages);
     await step("Saving Claude's reading", { stage: "save", state: "start" });
     await save(content, gemini, false);
   } else await note("Claude: not needed to cut a figure again", { stage: "claude", state: "skip" });

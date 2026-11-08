@@ -7,6 +7,7 @@ import type { Bucket, Db } from "../db.ts";
 import { randomId } from "../auth/crypto.ts";
 import { audit } from "../auth/session.ts";
 import { BRAIN } from "../config.ts";
+import { CLAUDE_MODEL_RE, GEMINI_MODEL_RE } from "./aiSetup.ts";
 import { cleanArt, cleanBox, cropSvg, pageSvg, wholePage, type PageArt } from "./figures.ts";
 import { cleanPaper, editItem, paperScore, storedScore, type PaperScore, marksAgainstPaper, openFlags, recheckItem, type Flag, type FlagKind, type PaperContent, type PaperKind } from "./paper.ts";
 
@@ -68,7 +69,42 @@ export type PaperRow = {
   readAt: number | null; overrideAt: number | null; overrideBy: string | null;
   /** Read accuracy from the first full reading (estimated from the saved flags for papers read before it was kept). */
   score: PaperScore | null;
+  /** One score per full reading with the models that read it, oldest first (owner, 8 Nov 2026: compare models). */
+  scores: ReadScore[];
 };
+
+/** One full reading's accuracy: the AIs' own reading before it was merged with what was kept. */
+export type ReadScore = { at: number; claude: string; gemini: string; score: PaperScore };
+
+/** Stored per-reading scores made safe. Pure. */
+export function cleanScores(v: unknown): ReadScore[] {
+  const n = (x: unknown) => (typeof x === "number" && Number.isInteger(x) && x >= 0 ? x : null);
+  return (Array.isArray(v) ? v : []).slice(-BRAIN.maxReadScores).flatMap((x): ReadScore[] => {
+    const r = x && typeof x === "object" ? (x as Record<string, unknown>) : {};
+    const at = n(r.at);
+    const items = n(r.items), clean = n(r.clean), red = n(r.red);
+    const score = items !== null && clean !== null && red !== null && clean <= items && red <= items ? storedScore(items, clean, red) : null;
+    const claude = typeof r.claude === "string" && CLAUDE_MODEL_RE.test(r.claude) ? r.claude : "";
+    const gemini = typeof r.gemini === "string" && GEMINI_MODEL_RE.test(r.gemini) ? r.gemini : "";
+    return at !== null && score ? [{ at, claude, gemini, score }] : [];
+  });
+}
+
+/**
+ * The script's own reading for the score (full readings only): each part's number and marks, and the flags it raised
+ * by itself. Null when absent or not usable. Pure.
+ */
+function freshReading(v: unknown): { items: { number: string; marks: number | null }[]; flags: Flag[] } | null {
+  const r = v && typeof v === "object" ? (v as Record<string, unknown>) : null;
+  if (!r || !Array.isArray(r.items)) return null;
+  const items = r.items.slice(0, BRAIN.maxPaperItems).flatMap((x) => {
+    const o = x && typeof x === "object" ? (x as Record<string, unknown>) : {};
+    const number = typeof o.number === "string" ? o.number.slice(0, 40) : "";
+    const marks = typeof o.marks === "number" && Number.isInteger(o.marks) && o.marks >= 0 && o.marks <= 999 ? o.marks : null;
+    return number ? [{ number, marks }] : [];
+  });
+  return items.length ? { items, flags: cleanFlags(r.flags) } : null;
+}
 
 /** A paper_read row's read accuracy: the stored first reading, else estimated from its saved flags. */
 export function rowScore(r: { items: number; flags: string | Flag[]; read_at: number | null; first_items: number | null; first_clean: number | null; first_red: number | null }): PaperScore | null {
@@ -86,9 +122,9 @@ const safeJson = (s: string): unknown => {
 
 export async function loadPaperRow(db: Db, docId: string): Promise<PaperRow | null> {
   const r = await db
-    .prepare(`SELECT doc_id, job_id, items, figures, flags, dismissed, revision, read_at, override_at, override_by, first_items, first_clean, first_red FROM paper_read WHERE doc_id = ?1`)
+    .prepare(`SELECT doc_id, job_id, items, figures, flags, dismissed, revision, read_at, override_at, override_by, first_items, first_clean, first_red, scores FROM paper_read WHERE doc_id = ?1`)
     .bind(docId)
-    .first<{ doc_id: string; job_id: string | null; items: number; figures: number; flags: string; dismissed: string; revision: number; read_at: number | null; override_at: number | null; override_by: string | null; first_items: number | null; first_clean: number | null; first_red: number | null }>();
+    .first<{ doc_id: string; job_id: string | null; items: number; figures: number; flags: string; dismissed: string; revision: number; read_at: number | null; override_at: number | null; override_by: string | null; first_items: number | null; first_clean: number | null; first_red: number | null; scores: string }>();
   if (!r) return null;
   let flags: Flag[] = [];
   try {
@@ -99,7 +135,7 @@ export async function loadPaperRow(db: Db, docId: string): Promise<PaperRow | nu
   return {
     docId: r.doc_id, jobId: r.job_id, items: r.items, figures: r.figures, flags, dismissed: list(r.dismissed), revision: r.revision,
     readAt: r.read_at, overrideAt: r.override_at, overrideBy: r.override_by,
-    score: rowScore(r),
+    score: rowScore(r), scores: cleanScores(safeJson(r.scores)),
   };
 }
 
@@ -183,10 +219,31 @@ export async function savePaperReading(db: Db, bucket: Bucket, jobId: string, do
   await putJson(bucket, key(docId, "content"), content);
   if (pages && pages.join("").length <= BRAIN.maxPaperBytes) await putJson(bucket, key(docId, "pages"), pages);
   if (raw.gemini) await putJson(bucket, key(docId, "gemini"), cleanPaper(raw.gemini, doc.docType as PaperKind));
-  // The first full reading is kept as the paper's read accuracy (never a figures-only run, never overwritten).
+  // The first full reading is kept as the paper's read accuracy (never a figures-only run, never overwritten). Each
+  // full reading also adds its own score with the models that read it (owner, 8 Nov 2026: compare models), from the
+  // AIs' reading before it was merged with what was kept. A mark scheme's marks against its question paper count.
   if (final && raw.read !== false) {
-    const sc = paperScore(content.items.length, flags);
+    const fresh = freshReading(raw.fresh);
+    const parts = fresh ? fresh.items : content.items;
+    let scoreFlags = fresh ? fresh.flags : flags;
+    if (doc.docType === "ms") {
+      const qpId = await pairedQp(db, doc);
+      const qp = qpId ? await loadContent(bucket, qpId, "qp") : null;
+      if (qp) scoreFlags = [...scoreFlags, ...marksAgainstPaper({ items: parts }, qp)];
+    }
+    const sc = paperScore(parts.length, scoreFlags);
     if (sc) await db.prepare(`UPDATE paper_read SET first_items = ?2, first_clean = ?3, first_red = ?4, first_at = ?5 WHERE doc_id = ?1 AND first_items IS NULL`).bind(docId, sc.items, sc.clean, sc.red, now).run();
+    if (sc && fresh) {
+      const m = raw.models && typeof raw.models === "object" ? (raw.models as Record<string, unknown>) : {};
+      const stored = await db.prepare(`SELECT scores FROM paper_read WHERE doc_id = ?1`).bind(docId).first<{ scores: string }>();
+      const list = (Array.isArray(safeJson(stored?.scores ?? "[]")) ? (safeJson(stored?.scores ?? "[]") as unknown[]) : []).slice(-(BRAIN.maxReadScores - 1));
+      list.push({
+        at: now, items: sc.items, clean: sc.clean, red: sc.red,
+        claude: typeof m.claude === "string" && CLAUDE_MODEL_RE.test(m.claude) ? m.claude : "",
+        gemini: typeof m.gemini === "string" && GEMINI_MODEL_RE.test(m.gemini) ? m.gemini : "",
+      });
+      await db.prepare(`UPDATE paper_read SET scores = ?2 WHERE doc_id = ?1`).bind(docId, JSON.stringify(list)).run();
+    }
   }
   if (final) {
     await db.prepare(`UPDATE job SET status = 'succeeded', progress = 100, finished_at = ?2, step = NULL WHERE id = ?1 AND type = 'brain' AND status = 'running'`).bind(jobId, now).run();
