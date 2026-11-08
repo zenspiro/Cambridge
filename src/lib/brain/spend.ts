@@ -322,13 +322,13 @@ export function estimateWords(e: Estimate): string {
 
 /**
  * Rough cost of one paper reading: Gemini and Claude read it once; figures are cut from the PDF with no AI (owner,
- * 7 Nov 2026), so the drawing AI is no longer counted. Past paper runs on the same models replace the size guess. Pure.
+ * 7 Nov 2026), so the drawing AI is no longer counted. Claude's part is the reading AI's model (owner, 8 Nov 2026). Past paper runs on the same models replace the size guess. Pure.
  */
-export function estimatePaper(models: { claude: string; gemini: string }, pdfBytes: number, history: { paper: readonly ModelHistory[] }, prices: Prices): Estimate {
+export function estimatePaper(models: { reading: string; gemini: string }, pdfBytes: number, history: { paper: readonly ModelHistory[] }, prices: Prices): Estimate {
   const pages = Math.max(1, Math.ceil(pdfBytes / BRAIN.estBytesPerPage));
   const parts = [
     { model: models.gemini, h: history.paper.find((x) => x.model === models.gemini && x.runs > 0) },
-    { model: models.claude, h: history.paper.find((x) => x.model === models.claude && x.runs > 0) },
+    { model: models.reading, h: history.paper.find((x) => x.model === models.reading && x.runs > 0) },
   ];
   const missing = [...new Set(parts.map((p) => p.model).filter((m) => !prices[m]))];
   let usd = 0;
@@ -344,7 +344,7 @@ export function estimatePaper(models: { claude: string; gemini: string }, pdfByt
 export async function paperCostCheck(db: Db, env: { CLAUDE_MODEL?: string; GEMINI_MODEL?: string }, pdfBytes: number, now = Date.now()): Promise<CostCheck> {
   const [models, prices, cap] = await Promise.all([aiModels(db, env), readPrices(db), readCap(db)]);
   const month = monthBounds(undefined, now);
-  const [paper, summary] = await Promise.all([taskHistory(db, "paper", [models.claude, models.gemini]), spendBetween(db, month.from, month.to, prices)]);
+  const [paper, summary] = await Promise.all([taskHistory(db, "paper", [models.reading, models.gemini]), spendBetween(db, month.from, month.to, prices)]);
   const estimate = estimatePaper(models, pdfBytes, { paper }, prices);
   return { estimate, cap, spent: summary.total, verdict: capCheck(cap, summary.total, estimate) };
 }

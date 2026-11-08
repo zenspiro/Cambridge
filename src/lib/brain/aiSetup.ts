@@ -56,27 +56,35 @@ async function writeSetting(db: Db, key: string, value: unknown, actorId: string
     .run();
 }
 
-export type AiModels = { claude: string; gemini: string; drawing: string; claudeChosen: boolean; geminiChosen: boolean; drawingChosen: boolean };
+export type AiModels = {
+  claude: string; gemini: string; drawing: string; reading: string;
+  claudeChosen: boolean; geminiChosen: boolean; drawingChosen: boolean; readingChosen: boolean;
+};
 
-async function chosenModels(db: Db): Promise<{ claude: string; gemini: string; drawing: string }> {
+/** The Claude roles with a model of their own, chosen on AI setup (else the main AI's model). */
+export type ClaudeRole = "drawing" | "reading";
+
+async function chosenModels(db: Db): Promise<{ claude: string; gemini: string; drawing: string; reading: string }> {
   const s = await readSetting(db, "ai_models");
   const o = s && typeof s === "object" ? (s as Record<string, unknown>) : {};
   const claude = typeof o.claude === "string" && CLAUDE_MODEL_RE.test(o.claude) ? o.claude : "";
   const gemini = typeof o.gemini === "string" && GEMINI_MODEL_RE.test(o.gemini) ? o.gemini : "";
   const drawing = typeof o.drawing === "string" && CLAUDE_MODEL_RE.test(o.drawing) ? o.drawing : "";
-  return { claude, gemini, drawing };
+  const reading = typeof o.reading === "string" && CLAUDE_MODEL_RE.test(o.reading) ? o.reading : "";
+  return { claude, gemini, drawing, reading };
 }
 
 /**
  * The models runs use: each as chosen on the AI setup page, else the Worker var. The drawing AI (owner, 7 Nov 2026:
- * redraws figures from step 2b) is a Claude model of its own, else the main AI's model.
+ * redraws figures from step 2b) and the reading AI (owner, 8 Nov 2026: reads question papers and mark schemes, so a
+ * cheaper model can read papers while topic trees keep the main AI) are Claude models of their own, else the main AI's.
  */
 export async function aiModels(db: Db, env: { CLAUDE_MODEL?: string; GEMINI_MODEL?: string }): Promise<AiModels> {
   const c = await chosenModels(db);
   const claude = c.claude || (env.CLAUDE_MODEL ?? "");
   return {
-    claude, gemini: c.gemini || (env.GEMINI_MODEL ?? ""), drawing: c.drawing || claude,
-    claudeChosen: !!c.claude, geminiChosen: !!c.gemini, drawingChosen: !!c.drawing,
+    claude, gemini: c.gemini || (env.GEMINI_MODEL ?? ""), drawing: c.drawing || claude, reading: c.reading || claude,
+    claudeChosen: !!c.claude, geminiChosen: !!c.gemini, drawingChosen: !!c.drawing, readingChosen: !!c.reading,
   };
 }
 
@@ -127,12 +135,12 @@ export async function saveCheck(db: Db, raw: unknown, which: CheckWhich | null =
 }
 
 /**
- * Choose the model an AI uses. Gemini: only one the last check found working. Claude and the drawing AI: one on
+ * Choose the model an AI uses. Gemini: only one the last check found working. Claude, the drawing and reading AIs: one on
  * Anthropic's list for the key (only the one in use is tried, so a new pick is tried by the next check or run). The other AI's choice
  * stays.
  */
 export async function chooseModel(db: Db, provider: unknown, model: unknown, actorId: string, now = Date.now()): Promise<"ok_model" | "bad_model"> {
-  if (provider !== "claude" && provider !== "gemini" && provider !== "drawing") return "bad_model";
+  if (provider !== "claude" && provider !== "gemini" && provider !== "drawing" && provider !== "reading") return "bad_model";
   const re = provider === "gemini" ? GEMINI_MODEL_RE : CLAUDE_MODEL_RE;
   if (typeof model !== "string" || !re.test(model)) return "bad_model";
   const check = await lastCheck(db);
@@ -145,6 +153,12 @@ export async function chooseModel(db: Db, provider: unknown, model: unknown, act
   await audit(db, { actorId, action: `brain.${provider}_model`, entity: "setting", entityId: "ai_models", detail: { model } }, now);
   return "ok_model";
 }
+
+/**
+ * Whether Anthropic can hand a refused answer to another model for this one ("fallbacks", beta
+ * server-side-fallback-2026-07-01). Haiku models cannot, so their requests go without it (owner, 8 Nov 2026). Pure.
+ */
+export const hasServerFallback = (model: string) => !/^claude-haiku-/.test(model);
 
 /**
  * Which listed Gemini models to try: text models only (not embeddings, speech, images or live audio), stable before

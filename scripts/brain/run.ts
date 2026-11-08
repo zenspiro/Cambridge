@@ -26,7 +26,7 @@ import {
   type Draft, type Problem, type TextIndex, type TreeReport,
 } from "../../src/lib/brain/topics.ts";
 import { BRAIN } from "../../src/lib/config.ts";
-import { geminiStatus, modelsToTry, retryDelayMs, type ModelStatus, type ModelTry } from "../../src/lib/brain/aiSetup.ts";
+import { geminiStatus, hasServerFallback, modelsToTry, retryDelayMs, type ModelStatus, type ModelTry } from "../../src/lib/brain/aiSetup.ts";
 
 type Limits = {
   attempts: number; claudeMaxTokens: number; claudeEffort: "low" | "medium" | "high" | "xhigh" | "max"; geminiMaxTokens: number; maxPdfBytes: number;
@@ -40,7 +40,8 @@ type TopicJob = Extract<Job, { task: "topics" }>;
 type PaperJob = {
   task: "paper"; kind: PaperKind; subject: string; paper: string; pdfBytes: number;
   scope: { items: string[]; figures: string[] }; prior: { content: unknown; gemini?: unknown; open: string[] };
-  models: { claude: string; gemini: string; drawing: string }; limits: Limits;
+  /** reading: the Claude model that reads papers (AI setup's Reading AI, else the main AI's; older sites send none). */
+  models: { claude: string; gemini: string; drawing: string; reading?: string }; limits: Limits;
 };
 type Stage = "pdf" | "gemini" | "claude" | "retry" | "figures" | "checks" | "save";
 type StepEvent = { stage: Stage; state: "start" | "wait" | "done" | "fail" | "skip"; model?: string; tokens?: number };
@@ -136,14 +137,14 @@ type ClaudeAsk = {
 
 /**
  * One streamed Claude question with the PDF attached and a JSON answer. While it writes, the live panel hears how much
- * it has written every 15 seconds. Refusals fall back to another model on Anthropic's side ("default" routing).
+ * it has written every 15 seconds. Refusals fall back to another model on Anthropic's side ("default" routing), except
+ * for models that cannot (Haiku: a refusal there stops the run).
  */
 async function askClaude(client: Anthropic, a: ClaudeAsk): Promise<Reading> {
   const stream = client.beta.messages.stream({
     model: a.model,
     max_tokens: a.limits.claudeMaxTokens,
-    betas: ["server-side-fallback-2026-07-01"],
-    fallbacks: "default",
+    ...(hasServerFallback(a.model) ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const } : {}),
     thinking: { type: "adaptive" },
     output_config: { effort: a.effort ?? a.limits.claudeEffort, format: { type: "json_schema", schema: a.schema as Record<string, unknown> } },
     system: a.system,
@@ -510,9 +511,11 @@ async function cutFigures(job: PaperJob, content: PaperContent, bytes: Uint8Arra
  * saved again with them. A scope reads only some items again, or only cuts some figures again.
  */
 async function runPaper(job: PaperJob) {
+  // The Reading AI reads papers (owner, 8 Nov 2026); without one the main AI does.
+  const reader = job.models.reading || job.models.claude;
   if (!CLAUDE_KEY) throw new Stop("claude_key", "the GitHub secret CLAUDE_API_KEY is not set");
   if (!GEMINI_KEY) throw new Stop("gemini_key", "the GitHub secret GEMINI_API_KEY is not set");
-  if (!job.models.claude || !job.models.gemini) throw new Stop("models", "no Claude or Gemini model is set (AI setup page or wrangler.jsonc)");
+  if (!reader || !job.models.gemini) throw new Stop("models", "no Claude or Gemini model is set (AI setup page or wrangler.jsonc)");
   if (job.pdfBytes > job.limits.maxPdfBytes) throw new Stop("pdf_too_big");
 
   await step("Fetching the paper", { stage: "pdf", state: "start" });
@@ -560,10 +563,10 @@ async function runPaper(job: PaperJob) {
     const textOnly = keptPages(pages.length, [...blank, ...pics]);
     const mixed = readable && textOnly.length > 0;
     const claudePdf = mixed ? (pics.length ? (await slimPdf(doc.bytes, pics, pages.length)).pdf64 : "") : pdf64;
-    if (mixed) await note(`Claude gets ${pics.length} page${pics.length === 1 ? "" : "s"} with figures as pictures and ${textOnly.length} as text`, { stage: "claude", state: "start", model: job.models.claude });
-    const r = await timed("claude", job.models.claude, job.scope.items.length ? `Claude is reading ${job.scope.items.join(", ")} again` : "Claude is reading the paper", () =>
+    if (mixed) await note(`Claude gets ${pics.length} page${pics.length === 1 ? "" : "s"} with figures as pictures and ${textOnly.length} as text`, { stage: "claude", state: "start", model: reader });
+    const r = await timed("claude", reader, job.scope.items.length ? `Claude is reading ${job.scope.items.join(", ")} again` : "Claude is reading the paper", () =>
       askClaude(client, {
-        model: job.models.claude, system: PAPER_SYSTEM, schema: PAPER_SCHEMA, pdf64: claudePdf, pages: mixed ? pics.length : sentPages, limits: job.limits,
+        model: reader, system: PAPER_SYSTEM, schema: PAPER_SCHEMA, pdf64: claudePdf, pages: mixed ? pics.length : sentPages, limits: job.limits,
         effort: job.limits.paperEffort, stage: "claude", label: "Claude",
         prompt: paperPrompt(job.kind, job.paper, job.scope.items, mixed ? { picturePages: pics, textPages: textOnly } : undefined),
         extraText: mixed ? textPagesBlock(pages, textOnly) : undefined,

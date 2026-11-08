@@ -5,7 +5,7 @@ import { AdminShell, Notice } from "@/components/AdminShell";
 import { ActionForm } from "@/components/ActionForm";
 import { AiUsage } from "@/components/AiUsage";
 import { BRAIN } from "@/lib/config";
-import { aiModels, lastCheck, STATUS_WORDS, type AiCheck, type ModelStatus } from "@/lib/brain/aiSetup";
+import { aiModels, lastCheck, STATUS_WORDS, type AiCheck, type ClaudeRole, type ModelStatus } from "@/lib/brain/aiSetup";
 import { isActive, lastCheckRun } from "@/lib/brain/runs";
 import { reasonWords } from "@/lib/brain/labels";
 import { dayStart, monthBounds, readCap, readPrices, recentRuns, spendBetween, taskWords, usdWords, workersAiBetween, type RunSpend } from "@/lib/brain/spend";
@@ -15,7 +15,7 @@ export const metadata: Metadata = { title: "AI setup" };
 
 const MESSAGES = {
   ok_started: "Started. The check runs on GitHub with your keys and takes a minute or two. The page updates by itself.",
-  ok_model: "Saved. Topic trees and paper reading use this model from now on.",
+  ok_model: "Saved. The next runs use this model.",
   bad_model: "That model cannot be chosen. Run the check for that AI again and pick from its list.",
   ok_price: "Price saved.",
   bad_price: "Prices are US dollars per million tokens, like 2 or 0.075. Leave both boxes empty to remove a price.",
@@ -59,7 +59,7 @@ export default async function AiSetupPage({ searchParams }: { searchParams: Prom
     return y ? { href: `/admin/library/${y.code}/topics/${y.valid_from_year}`, label: `Topic tree, ${y.code} syllabus from ${y.valid_from_year}` } : null;
   };
   // Models in the price table: the two in use, any priced, any used this month.
-  const priceModels = [...new Set([models.claude, models.gemini, models.drawing, ...Object.keys(prices), ...summary.byModel.map((m) => m.model)])].filter(Boolean);
+  const priceModels = [...new Set([models.claude, models.gemini, models.reading, models.drawing, ...Object.keys(prices), ...summary.byModel.map((m) => m.model)])].filter(Boolean);
 
   return (
     <AdminShell current="/admin/ai" title="AI setup">
@@ -70,9 +70,10 @@ export default async function AiSetupPage({ searchParams }: { searchParams: Prom
         {run && active ? <p className="notice" role="status">{run.status === "queued" ? "Waiting for GitHub to start the check" : run.step ?? "Checking"}. This page refreshes every {BRAIN.refreshSeconds} seconds.</p> : null}
         {run && run.status === "failed" ? <p className="alert" role="alert">The last check stopped: {reasonWords(run.errorRef)}</p> : null}
         <div className="ai-pair">
-          <AiBox provider="claude" role="Main AI (reads the papers)" model={models.claude} chosen={models.claudeChosen} check={check} active={active} />
+          <AiBox provider="claude" role="Main AI (topic trees; papers too unless the Reading AI is set)" model={models.claude} chosen={models.claudeChosen} check={check} active={active} />
           <AiBox provider="gemini" role="Checking AI (reads them again to compare)" model={models.gemini} chosen={models.geminiChosen} check={check} active={active} />
-          <DrawingBox model={models.drawing} chosen={models.drawingChosen} check={check} />
+          <RoleBox role="reading" model={models.reading} chosen={models.readingChosen} check={check} />
+          <RoleBox role="drawing" model={models.drawing} chosen={models.drawingChosen} check={check} />
         </div>
         <p className="muted">
           Each check runs on GitHub with your keys and costs a fraction of a cent. Check Claude asks Anthropic which Claude models your key can use and tries the
@@ -118,7 +119,7 @@ export default async function AiSetupPage({ searchParams }: { searchParams: Prom
           <tbody>
             {priceModels.map((m) => (
               <tr key={m} id={`price-${m}`}>
-                <td>{m.startsWith("claude-") ? "Claude" : "Gemini"} <span className="mono muted">{m}</span>{m === models.claude || m === models.gemini || m === models.drawing ? <span className="muted"> (in use)</span> : null}</td>
+                <td>{m.startsWith("claude-") ? "Claude" : "Gemini"} <span className="mono muted">{m}</span>{m === models.claude || m === models.gemini || m === models.reading || m === models.drawing ? <span className="muted"> (in use)</span> : null}</td>
                 <td>
                   <ActionForm className="price-form" action="/admin/ai/price" messages={MESSAGES}>
                     <input type="hidden" name="model" value={m} />
@@ -160,32 +161,38 @@ export default async function AiSetupPage({ searchParams }: { searchParams: Prom
   );
 }
 
+const ROLE_WORDS: Record<ClaudeRole, { title: string; spend: string }> = {
+  reading: { title: "Reading AI: reads question papers and mark schemes", spend: "Its spend shows under Reading papers on the dashboard below." },
+  drawing: { title: "Drawing AI: redraws the figures (used from paper reading on)", spend: "Its spend shows as its own job (Drawing figures) on the dashboard below." },
+};
+
 /**
- * The drawing AI (owner, 7 Nov 2026): a Claude model of its own for redrawing figures (step 2b on). It picks from the
- * Claude check's list and has no check of its own; until chosen it is the main AI's model.
+ * A Claude model of its own for one job: the reading AI (owner, 8 Nov 2026: a cheaper model can read papers while topic
+ * trees keep the main AI) and the drawing AI (7 Nov 2026). It picks from the Claude check's list and has no check of
+ * its own; until chosen it is the main AI's model.
  */
-function DrawingBox({ model, chosen, check }: { model: string; chosen: boolean; check: AiCheck | null }) {
+function RoleBox({ role, model, chosen, check }: { role: ClaudeRole; model: string; chosen: boolean; check: AiCheck | null }) {
   const options = check?.claudeModels ?? [];
   const list = options.some((o) => o.name === model) ? options : model ? [{ name: model, label: model }, ...options] : options;
   return (
-    <div className="ai-box stack" id="ai-drawing">
-      <h3 className="label-inline">Drawing AI: redraws the figures (used from paper reading on)</h3>
+    <div className="ai-box stack" id={`ai-${role}`}>
+      <h3 className="label-inline">{ROLE_WORDS[role].title}</h3>
       <dl className="facts">
         <dt>Model</dt><dd><span className="mono">{model || "not set"}</span> <span className="muted">{chosen ? "(chosen here)" : "(the same as the main AI)"}</span></dd>
       </dl>
       {options.length ? (
         <ActionForm className="inline-form" action="/admin/ai/model" messages={MESSAGES}>
-          <input type="hidden" name="provider" value="drawing" />
+          <input type="hidden" name="provider" value={role} />
           <label className="field">
             <span className="label-inline">Claude models your key can use</span>
-            <select className="input" name="model" defaultValue={model}>
+            <select className="input" name="model" defaultValue={model} key={model}>
               {list.map((m) => <option key={m.name} value={m.name}>{m.label === m.name ? m.name : `${m.label} (${m.name})`}</option>)}
             </select>
           </label>
           <button className="btn btn-small" type="submit">Use this model</button>
         </ActionForm>
       ) : <p className="muted">Check Claude to see the models your key can use.</p>}
-      <p className="muted">Its spend shows as its own job (Drawing figures) on the dashboard below.</p>
+      <p className="muted">{ROLE_WORDS[role].spend}</p>
     </div>
   );
 }
@@ -220,7 +227,7 @@ function AiBox({ provider, role, model, chosen, check, active }: { provider: "cl
           <input type="hidden" name="provider" value={provider} />
           <label className="field">
             <span className="label-inline">{provider === "claude" ? "Models your key can use" : "Models that worked in the last check"}</span>
-            <select className="input" name="model" defaultValue={model}>
+            <select className="input" name="model" defaultValue={model} key={model}>
               {list.map((m) => <option key={m.name} value={m.name}>{m.label === m.name ? m.name : `${m.label} (${m.name})`}</option>)}
             </select>
           </label>
