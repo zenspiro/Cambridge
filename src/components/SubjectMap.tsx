@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { CellLink, GroupPill } from "@/components/LibraryBits";
+import { RagDot } from "@/components/RagDot";
 import { DOC_TYPE_LABELS } from "@/lib/config";
 import { TIER_LABELS } from "@/lib/library/papers";
 import { cellKey, SESSION_TYPES, type MapColumn, type MapVersion } from "@/lib/library/map";
@@ -71,8 +72,8 @@ export function SubjectMapVersion({ code, v }: { code: string; v: MapVersion }) 
               {v.rows.map((r) => (
                 <tr key={`${r.year}${r.session}${r.variant}${r.series ?? ""}`} className={[r.first ? "map-row-first" : "", r.essential ? "" : "row-extra"].join(" ").trim() || undefined}>
                   <th scope="row" className="map-first">
+                    <RagDot rag={r.rag ?? null} />
                     <Link className="link" href={sessionHref(code, r.year, r.session)}>{r.label}</Link>
-                    {r.first ? <span className="map-count"><GroupPill status={r.sessionStatus} /></span> : null}
                   </th>
                   {v.columns.flatMap((c) => c.types.map((t, i) => (
                     <td key={`${c.paper}-${t}`} className={i === 0 ? "map-start" : undefined}><CellLink cell={r.cells[cellKey(c.paper, t)]} /></td>

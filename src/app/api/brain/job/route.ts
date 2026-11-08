@@ -1,12 +1,9 @@
 import { agentRequest, json, JOB_ID_RE, parseJson } from "@/lib/agent/api";
 import { cleanRunUrl } from "@/lib/agent/runs";
-import { BRAIN } from "@/lib/config";
 import { claimBrainRun, syllabusPdf } from "@/lib/brain/runs";
 import { aiModels } from "@/lib/brain/aiSetup";
 import { listSubjects, subjectLabel } from "@/lib/library/catalog";
-import { describeFile, loadPapers, paperLookup } from "@/lib/library/papers";
-import { PAPER_KINDS, paperDoc, readingForRun } from "@/lib/brain/paperRead";
-import type { PaperKind } from "@/lib/brain/paper";
+import { brainLimits, paperJobPayload } from "@/lib/brain/paperJob";
 
 // The brain script picks up its run: what to read (the subject and its syllabus PDF) and the models to use
 // (Claude from the Worker var, Gemini as chosen on the AI setup page, else the Worker var). For an AI setup check,
@@ -20,40 +17,11 @@ export async function POST(request: Request) {
   const params = await claimBrainRun(a.db, jobId, cleanRunUrl(b?.runUrl, a.env.GITHUB_REPO));
   if (!params) return json({ error: "no_run" }, 409);
   const models = await aiModels(a.db, a.env);
-  const limits = {
-    attempts: BRAIN.attempts,
-    claudeMaxTokens: BRAIN.claudeMaxTokens,
-    claudeEffort: BRAIN.claudeEffort,
-    geminiMaxTokens: BRAIN.geminiMaxTokens,
-    maxPdfBytes: BRAIN.maxPdfBytes,
-    geminiTries: BRAIN.geminiTries,
-    geminiMaxWaitMs: BRAIN.geminiMaxWaitMs,
-    checkModels: BRAIN.checkModels,
-    checkDelayMs: BRAIN.checkDelayMs,
-    geminiRetryWaitsMs: BRAIN.geminiRetryWaitsMs,
-    paperEffort: BRAIN.paperEffort,
-    drawEffort: BRAIN.drawEffort,
-  };
+  const limits = brainLimits();
   if (params.task === "check") return json({ task: "check", which: params.which, models: { claude: models.claude, gemini: models.gemini }, limits });
   if (params.task === "paper") {
-    const doc = await paperDoc(a.db, params.docId);
-    if (!doc || !PAPER_KINDS.includes(doc.docType as PaperKind)) return json({ error: "no_paper" }, 404);
-    const [{ papers }, subjects, size, prior] = await Promise.all([
-      loadPapers(a.db, doc.code), listSubjects(a.db),
-      a.db.prepare(`SELECT size_bytes FROM source_document WHERE id = ?1`).bind(doc.id).first<{ size_bytes: number }>(),
-      readingForRun(a.db, a.env.FILES, doc),
-    ]);
-    return json({
-      task: "paper",
-      kind: doc.docType,
-      subject: subjectLabel(subjects, doc.code),
-      paper: describeFile(doc.fileName, doc.syllabusId, paperLookup(papers)),
-      pdfBytes: size?.size_bytes ?? 0,
-      scope: params.scope,
-      prior,
-      models: { claude: models.claude, gemini: models.gemini, drawing: models.drawing, reading: models.reading },
-      limits,
-    });
+    const payload = await paperJobPayload(a.db, a.env.FILES, params.docId, params.scope, params.batch, models, limits);
+    return payload ? json(payload) : json({ error: "no_paper" }, 404);
   }
   const y = await a.db
     .prepare(`SELECT code, valid_from_year, valid_to_year FROM syllabus WHERE id = ?1`)

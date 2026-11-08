@@ -90,9 +90,9 @@ const csv = readFileSync(await dl.path(), "utf8");
 check(dl.suggestedFilename() === "folder-report-0625.csv" && /"Folder path","File","Result"/.test(csv) && /"Revision notes.pdf","Needs your eye"/.test(csv) && csv.split("\r\n").length === 11,
   `folder: Download report gives every file and what happened to it (${csv.split("\r\n").length - 1} rows)`);
 const pickText = await notes.locator("select option[value='0625_s25_ci_52.pdf']").innerText();
-check(pickText.startsWith("IGCSE Physics (0625) / 2025 / June / 0625_s25_ci_52.pdf"), `folder: the picker shows the full place in the library (${pickText})`);
+check(pickText.startsWith("IGCSE Physics (0625) / 2025 / Jun / 0625_s25_ci_52.pdf"), `folder: the picker shows the full place in the library (${pickText})`);
 await notes.locator("select").selectOption("0625_s25_ci_52.pdf");
-check((await notes.locator(".pick-line", { hasText: "Goes to IGCSE Physics (0625) / 2025 / June / 0625_s25_ci_52.pdf" }).count()) === 1, "folder: the picker sits on its own line and says where the file goes");
+check((await notes.locator(".pick-line", { hasText: "Goes to IGCSE Physics (0625) / 2025 / Jun / 0625_s25_ci_52.pdf" }).count()) === 1, "folder: the picker sits on its own line and says where the file goes");
 const box = await notes.locator("select").boundingBox();
 const row = await notes.boundingBox();
 check(box && row && box.width > row.width * 0.6, `folder: the picker is wide enough to read (${Math.round(box?.width ?? 0)} of ${Math.round(row?.width ?? 0)} px)`);

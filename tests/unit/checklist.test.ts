@@ -28,14 +28,14 @@ test("the checklist has the syllabus documents, specimens and every public sessi
   const v20 = c.versions.find((g) => g.version.id === "0625-2020")!;
   assert.equal(v20.status.essentialTotal, 0, "old version asks for no specimens");
 
-  assert.deepEqual(c.sessions.slice(0, 3).map((g) => g.label), ["June 2026", "March 2026", "November 2025"]);
-  assert.ok(!c.sessions.some((g) => g.label === "November 2026"), "not public yet");
-  const june = c.sessions.find((g) => g.label === "June 2024")!;
+  assert.deepEqual(c.sessions.slice(0, 3).map((g) => g.label), ["Jun 2026", "Mar 2026", "Nov 2025"]);
+  assert.ok(!c.sessions.some((g) => g.label === "Nov 2026"), "not public yet");
+  const june = c.sessions.find((g) => g.label === "Jun 2024")!;
   assert.equal(june.rows.length, 6 * 3);
   assert.deepEqual(june.rows.slice(0, 6).map((r) => [r.paper, r.variant, r.essential]), [[1, 2, true], [2, 2, true], [3, 2, true], [4, 2, true], [5, 2, true], [6, 2, true]], "Pakistan's variant 2 first");
   assert.equal(june.status.essentialTotal, 6 * 2 + 1 + 2, "variant 2: qp+ms each, ci for paper 5, er and gt");
   assert.equal(june.versionId, "0625-2023");
-  const march = c.sessions.find((g) => g.label === "March 2024")!;
+  const march = c.sessions.find((g) => g.label === "Mar 2024")!;
   assert.ok(march.rows.every((r) => r.variant === 2 && r.essential), "March counts variant 2");
 });
 
@@ -43,7 +43,7 @@ test("stored files tick their cells; others are kept; status adds up", () => {
   const stored = [doc("0625_s24_qp_12.pdf", { variant: 2 }), doc("0625_s24_er.pdf", { doc_type: "er", paper: null, variant: null }),
     doc("0625_s24_qp_11.pdf"), doc("0625_s24_in_41.pdf", { doc_type: "in", paper: 4 })];
   const c = buildChecklist("0625", versions(), stored, LIBRARY_DEFAULTS);
-  const june = c.sessions.find((g) => g.label === "June 2024")!;
+  const june = c.sessions.find((g) => g.label === "Jun 2024")!;
   assert.equal(june.rows[0]!.cells.qp!.doc?.id, "id-0625_s24_qp_12.pdf");
   assert.equal(june.status.essentialHave, 2);
   assert.equal(june.status.extraHave, 1, "variant 1 (Cambridge's public one) counts as an extra");
@@ -55,14 +55,14 @@ test("stored files tick their cells; others are kept; status adds up", () => {
 
 test("essential variants: the syllabus's own setting wins, else the library default", () => {
   const lib = { ...LIBRARY_DEFAULTS, essentialVariants: { m: [2], s: [1, 2, 3], w: [1] } };
-  const own = buildChecklist("0625", versions(), [], lib).sessions.find((g) => g.label === "June 2024")!;
+  const own = buildChecklist("0625", versions(), [], lib).sessions.find((g) => g.label === "Jun 2024")!;
   assert.ok(own.rows.filter((r) => r.essential).every((r) => r.variant === 2), "0625 has its own: variant 2");
   const noOwn = versions().map((v) => ({ ...v, essential_variants: null }));
-  const june = buildChecklist("0625", noOwn, [], lib).sessions.find((g) => g.label === "June 2024")!;
+  const june = buildChecklist("0625", noOwn, [], lib).sessions.find((g) => g.label === "Jun 2024")!;
   assert.ok(june.rows.every((r) => r.essential), "library default: 1, 2 and 3");
   assert.equal(june.status.extraTotal, 0);
   const broken = versions().map((v) => ({ ...v, essential_variants: '{"s":"x"}' }));
-  assert.ok(buildChecklist("0625", broken, [], lib).sessions.find((g) => g.label === "June 2024")!.rows.every((r) => r.essential), "damaged value falls back");
+  assert.ok(buildChecklist("0625", broken, [], lib).sessions.find((g) => g.label === "Jun 2024")!.rows.every((r) => r.essential), "damaged value falls back");
 });
 
 test("filters and search narrow the checklist; status stays whole", () => {
@@ -143,10 +143,10 @@ test("papers and routes are seeded from the syllabus, per version", async () => 
 test("files are described in plain words with their paper names", async () => {
   const db = testDb();
   const look = paperLookup((await loadPapers(db, "0625")).papers);
-  assert.equal(describeFile("0625_s24_ms_22.pdf", "0625-2023", look), "June 2024, Paper 2 Multiple Choice (Extended), variant 2, mark scheme");
-  assert.equal(describeFile("0625_w25_ci_52.pdf", "0625-2023", look), "November 2025, Paper 5 Practical Test, variant 2, confidential instructions");
-  assert.equal(describeFile("0625_s24_er.pdf", "0625-2023", look), "June 2024, examiner report");
+  assert.equal(describeFile("0625_s24_ms_22.pdf", "0625-2023", look), "Jun 2024, Paper 2 Multiple Choice (Extended), variant 2, mark scheme");
+  assert.equal(describeFile("0625_w25_ci_52.pdf", "0625-2023", look), "Nov 2025, Paper 5 Practical Test, variant 2, confidential instructions");
+  assert.equal(describeFile("0625_s24_er.pdf", "0625-2023", look), "Jun 2024, examiner report");
   assert.equal(describeFile("0625_y23_sm_4.pdf", "0625-2023", look), "Syllabus 2023 version, Paper 4 Theory (Extended), specimen mark scheme");
-  assert.equal(describeFile("0625_s24_qp_42.pdf", null, look), "June 2024, Paper 4, variant 2, question paper", "no version: number only");
+  assert.equal(describeFile("0625_s24_qp_42.pdf", null, look), "Jun 2024, Paper 4, variant 2, question paper", "no version: number only");
   assert.equal(describeFile("junk.pdf", null, look), "junk.pdf");
 });

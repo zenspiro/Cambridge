@@ -6,7 +6,7 @@ import { getEnv } from "@/lib/env";
 import { AdminShell, Notice } from "@/components/AdminShell";
 import { CellLink, StatusLine } from "@/components/LibraryBits";
 import { Legend } from "@/components/LibraryTables";
-import { DOC_TYPE_LABELS, SESSION_LABELS } from "@/lib/config";
+import { BRAIN, DOC_TYPE_LABELS, SESSION_LABELS } from "@/lib/config";
 import { getLibrarySettings, libraryYears } from "@/lib/settings";
 import { loadHeader, loadSyllabus } from "@/lib/library/catalog";
 import { essentialFor, filterChecklist, groupCells, type Cell, type ChecklistFilter } from "@/lib/library/checklist";
@@ -16,6 +16,10 @@ import { buildSubjectMap } from "@/lib/library/map";
 import { SubjectMapVersion } from "@/components/SubjectMap";
 import { ScoreBadge } from "@/components/ScoreBadge";
 import { rowScore } from "@/lib/brain/paperRead";
+import { ActionForm } from "@/components/ActionForm";
+import { RagDot } from "@/components/RagDot";
+import { filterWords, hasTiers, planBatch, ragOf, readFilter, readStates, rowDocIds } from "@/lib/brain/readAll";
+import { batchCostCheck, estimateWords, usdWords } from "@/lib/brain/spend";
 
 export const metadata: Metadata = { title: "Library" };
 
@@ -24,6 +28,14 @@ const MESSAGES = {
   ok_variants: "Essential variants saved for this syllabus.",
   bad_variants: "Tick at least one variant for each session.",
   busy: "Too many changes this hour. Please wait a little.",
+  ok_batch: "Read all started. It reads the papers one after another; Running now in the sidebar shows where it is.",
+  batch_none: "Nothing to read: every stored paper in this choice is read already.",
+  over_cap: "This would go past your monthly AI cap, so it did not start. Raise the cap on AI setup, or read fewer papers.",
+  no_price: "A model in use has no price, so the cap cannot be checked. Set its price on AI setup.",
+  running: "Another AI run is going on. Wait for it to finish, then press Read all again.",
+  not_set_up: "Starting runs is not set up (GITHUB_TOKEN or the workflow name is missing).",
+  github: "GitHub refused to start the run. Check the GITHUB_TOKEN secret.",
+  bad: "That choice could not be read. Pick again.",
 };
 
 const pick = <T extends string>(v: string | undefined, allowed: readonly T[]): T | null =>
@@ -80,6 +92,14 @@ export default async function SyllabusOverview({
   const ownVariants = essentialFor(list.versions[0]?.version, lib);
   const allVariants = q.variants === "all";
   const map = buildSubjectMap(list, papers, { allVariants });
+  // Reading status per session row (owner, 8 Nov 2026), and Read all for the choice in the query.
+  const states = await readStates(env.DB, code);
+  for (const v of map) for (const r of v.rows) r.rag = ragOf(rowDocIds(r.cells), states);
+  const yearNums = libraryYears(lib);
+  const choice = readFilter((k) => q[k], yearNums);
+  const tiered = hasTiers(papers);
+  const plan = choice ? planBatch(list, papers, choice, states) : null;
+  const batchCost = plan?.toRead.length ? await batchCostCheck(env.DB, env, plan.toRead.map((d) => d.bytes)) : null;
   // Papers read so far, with their read accuracy (owner, 7 Nov 2026), weakest first so they stand out.
   const { results: readRows } = await env.DB
     .prepare(`SELECT p.doc_id, p.items, p.flags, p.read_at, p.first_items, p.first_clean, p.first_red, d.file_name, d.syllabus_id
@@ -103,6 +123,7 @@ export default async function SyllabusOverview({
       <Notice code={q.e} messages={MESSAGES} errorRef={q.ref} />
       <nav className="jump" aria-label="On this page">
         <span className="muted">On this page:</span>
+        <a className="link" href="#read-all">Read all</a>
         {read.length ? <a className="link" href="#papers-read">Papers read</a> : null}
         {!view.filtered ? <a className="link" href="#map">Subject map</a> : null}
         <a className="link" href="#find">Search the files</a>
@@ -120,6 +141,70 @@ export default async function SyllabusOverview({
         ) : (
           <p className="notice">Every essential file is in.</p>
         )}
+      </section>
+
+      <section className="card stack" id="read-all">
+        <div className="card-head"><h2 className="subtitle">Read all</h2></div>
+        <p className="hint m-0">
+          Reads every stored question paper and mark scheme of the essential variants that is not read yet, one after
+          another in one run. Papers read already are skipped; fix their flags on the review screen. Pick a month and a
+          year, or leave them on every one.
+        </p>
+        <form className="form-actions" method="get" action={`/admin/library/${code}#read-all`}>
+          <label className="field">
+            <span className="label-inline">Month</span>
+            <select className="input" name="ras" defaultValue={choice?.session ?? ""}>
+              <option value="">Every month</option>
+              {(["m", "s", "w"] as const).map((s) => <option key={s} value={s}>{SESSION_LABELS[s]}</option>)}
+            </select>
+          </label>
+          <label className="field">
+            <span className="label-inline">Year</span>
+            <select className="input" name="ray" defaultValue={choice?.year ? String(choice.year) : ""}>
+              <option value="">Every year</option>
+              {[...yearNums].sort((a, b) => b - a).map((y) => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </label>
+          {tiered ? (
+            <>
+              <button className="btn" type="submit" name="ra" value="core">Read all Core</button>
+              <button className="btn" type="submit" name="ra" value="extended">Read all Extended</button>
+            </>
+          ) : <button className="btn" type="submit" name="ra" value="any">Read all</button>}
+        </form>
+        {choice && plan ? (
+          <div className="stack-tight">
+            <h3 className="subtitle">{filterWords(choice, SESSION_LABELS)}</h3>
+            <p className="m-0">
+              {plan.toRead.length + plan.over} to read, {plan.read} read already (skipped)
+              {plan.missing ? `, ${plan.missing} not in the library (cannot be read)` : ""}.
+              {tiered ? " Practical papers sat by both count for Core and Extended." : ""}
+            </p>
+            {plan.over ? <p className="alert m-0">One run reads {BRAIN.maxBatchPapers} at most: the first {BRAIN.maxBatchPapers} are read now, press Read all again for the other {plan.over}.</p> : null}
+            {plan.toRead.length ? (
+              <>
+                <ol className="read-plan">
+                  {plan.toRead.map((d) => <li key={d.docId}>{describeFile(d.fileName, d.syllabusId, look)}</li>)}
+                </ol>
+                {batchCost ? (
+                  <p className={batchCost.verdict === "ok" ? "muted m-0" : "alert m-0"}>
+                    {estimateWords(batchCost.estimate).replace("Rough cost:", `Rough cost for ${plan.toRead.length}:`)}
+                    {batchCost.cap > 0 ? ` This month: ${usdWords(batchCost.spent)} of your ${usdWords(batchCost.cap)} cap.` : ""}
+                    {batchCost.verdict === "over_cap" ? " This would go past the cap, so it will not start." : batchCost.verdict === "no_price" ? " With a cap set, runs need a price for every model in use." : ""}
+                    {" "}The cap is checked again before each paper.
+                  </p>
+                ) : null}
+                <ActionForm action={`/admin/library/${code}/read-all`} messages={MESSAGES} yes="Yes, proceed" no="No"
+                  confirm={`Read ${plan.toRead.length} paper${plan.toRead.length === 1 ? "" : "s"}? This uses AI tokens: ${batchCost?.estimate.usd == null ? "cost unknown" : `about ${usdWords(batchCost.estimate.usd)}`}. Proceed?`}>
+                  <input type="hidden" name="ra" value={choice.tier} />
+                  {choice.session ? <input type="hidden" name="ras" value={choice.session} /> : null}
+                  {choice.year ? <input type="hidden" name="ray" value={choice.year} /> : null}
+                  <button className="btn btn-primary" type="submit">Read these {plan.toRead.length} papers</button>
+                </ActionForm>
+              </>
+            ) : <p className="notice m-0">Nothing to read: every stored paper in this choice is read already.</p>}
+          </div>
+        ) : null}
       </section>
 
       {read.length ? (
@@ -156,6 +241,13 @@ export default async function SyllabusOverview({
             Every syllabus version with its documents and specimens, then each exam session with every paper&apos;s files
             ({allVariants ? "all variants" : "essential variants"}), newest first. A tick downloads the file; a cross or + adds it.
             The map file holds the same structure for the AI.
+          </p>
+          <p className="rag-legend m-0">
+            <span>Dot before each session, reading status:</span>
+            <span><RagDot rag="green" />all read and ready</span>
+            <span><RagDot rag="amber" />partly read, or flags open</span>
+            <span><RagDot rag="red" />not read yet</span>
+            <span><RagDot rag={null} />no papers stored</span>
           </p>
         </section>
         {map.map((v) => <SubjectMapVersion key={v.id} code={code} v={v} />)}

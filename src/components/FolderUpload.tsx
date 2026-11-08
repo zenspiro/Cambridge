@@ -106,7 +106,7 @@ export function FolderUpload(props: {
   };
   const versionOf = (name: string) => versionForFile(props.versions.filter((v) => v.code === mainCode(name.slice(0, 4))), name);
   // Where a file goes in the library, in full: "IGCSE Computer Science (0478) / 2020 / November / 0478_w20_qp_21.pdf".
-  const SESSION_FOLDERS = { m: "March", s: "June", w: "November", y: "Syllabus and specimens" } as const;
+  const SESSION_FOLDERS = { m: "Mar", s: "Jun", w: "Nov", y: "Syllabus and specimens" } as const;
   const placeOf = (name: string) => {
     const p = parseCambridgeName(name);
     if (!p) return name;

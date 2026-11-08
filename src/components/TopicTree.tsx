@@ -10,7 +10,7 @@ const minutes = (ms: number) => {
   return m < 1 ? "less than a minute" : m === 1 ? "1 minute" : `${m} minutes`;
 };
 
-const day = (ms: number) => new Date(ms).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+const day = (ms: number) => new Date(ms).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 
 export function TreeStatusLine({ row, now }: { row: TreeRow; now: number }) {
   const run = row.run;

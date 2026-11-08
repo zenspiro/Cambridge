@@ -257,6 +257,14 @@
   .map-sub { @apply text-sm font-semibold text-muted; }
   .map-start { @apply border-l border-line; }
   .map-count { @apply ml-2; }
+  /* Reading status dots (owner, 8 Nov 2026): colour only, words for screen readers and on hover. */
+  .rag { @apply mr-2 inline-block h-3 w-3 shrink-0 rounded-full align-middle; }
+  .rag-red { @apply bg-red-600; }
+  .rag-amber { @apply bg-amber-500; }
+  .rag-green { @apply bg-green-600; }
+  .rag-none { @apply border border-dashed border-line; }
+  .rag-legend { @apply flex flex-wrap items-center gap-4 text-sm text-muted; }
+  .read-plan { @apply m-0 flex list-none flex-col gap-1 p-0; }
   .map-row-first th, .map-row-first td { @apply border-t border-line; }
   .map-table .cell { @apply min-h-7 min-w-7 px-1 text-sm; }
   .info-table { @apply w-full border-collapse text-base; }

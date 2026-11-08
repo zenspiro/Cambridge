@@ -666,6 +666,45 @@ try {
   check((await page.locator("#to-review .score-red").count()) === 1, "the session page shows the read accuracy beside Review");
   check(rows(`SELECT first_items, first_clean FROM paper_read WHERE doc_id = '${paperId}'`)[0].first_items === 3, "the first reading's numbers are kept, unchanged by the free figure cut");
 
+  // 13. Read all (owner, 8 Nov 2026): the choice shows what it reads and the cost; one run reads the papers in turn.
+  sql(`DELETE FROM source_document WHERE file_name IN ('0625_s24_qp_22.pdf', '0625_s24_qp_62.pdf')`);
+  for (const [name, tag] of [["0625_s24_qp_22.pdf", "two"], ["0625_s24_qp_62.pdf", "six"]]) {
+    const bytes = [...pagesPdf([...PAPER_LINES, [`Copy ${tag}`]])];
+    const r = await page.evaluate(async ([n, b]) => (await fetch("/admin/library/folder/file", { method: "POST", headers: { "x-file-name": n, "Content-Type": "application/pdf" }, body: new Uint8Array(b) })).json(), [name, bytes]);
+    check(r.ok === true, `test paper ${name} stored${r.ok ? "" : ": " + JSON.stringify(r)}`);
+  }
+  const id22 = rows(`SELECT id FROM source_document WHERE file_name = '0625_s24_qp_22.pdf'`)[0]?.id;
+  const id62 = rows(`SELECT id FROM source_document WHERE file_name = '0625_s24_qp_62.pdf'`)[0]?.id;
+  await page.goto(`${BASE}/admin/library/0625/2024/june`);
+  check((await page.locator(".page-actions a", { hasText: "Read all Extended" }).getAttribute("href")) === "/admin/library/0625?ra=extended&ras=s&ray=2024#read-all"
+    && (await page.locator(".page-actions a", { hasText: "Read all Core" }).count()) === 1, "the session page has Read all Core and Read all Extended for that session");
+  await page.locator(".page-actions a", { hasText: "Read all Extended" }).click();
+  await page.waitForURL(/ra=extended/);
+  const plan = (await page.locator("#read-all").textContent()) ?? "";
+  check(plan.includes("Extended papers, Jun 2024") && plan.includes("Jun 2024, Paper 2") && plan.includes("Jun 2024, Paper 6") && !plan.includes("Jun 2024, Paper 4"), `Read all lists the Extended papers not read yet, skipping the one read (${plan.slice(0, 200)})`);
+  check(/1 read already/.test(plan) && /not in the library/.test(plan) && plan.includes("Rough cost for 2"), "it counts what it skips and what is missing, with the cost of the whole batch");
+  check((await page.locator("#read-all select[name=ras]").inputValue()) === "s" && (await page.locator("#read-all select[name=ray]").inputValue()) === "2024", "the month and year stay picked");
+  await page.locator("#read-all button", { hasText: "Read these 2 papers" }).click();
+  check((await page.locator("#read-all .confirm").textContent())?.includes("Read 2 papers? This uses AI tokens"), "Read all asks first, with the cost");
+  await page.locator("#read-all button", { hasText: "Yes, proceed" }).click();
+  await page.locator("#read-all .action-note", { hasText: "GITHUB_TOKEN" }).waitFor({ timeout: 10_000 }).then(() => check(true, "Read all without a GitHub token says what is missing"), () => check(false, "Read all without a GitHub token says what is missing"));
+  const rowDot = page.locator("table.map-table tr", { has: page.locator("th a", { hasText: /^Jun 2024$/ }) }).first().locator(".rag");
+  check((await rowDot.getAttribute("class"))?.includes("rag-amber"), `the map's Jun 2024 dot is amber: some papers read (${await rowDot.getAttribute("class")})`);
+  check((await page.locator("table.map-table .rag-red").count()) + (await page.locator("table.map-table .rag-none").count()) > 0, "other sessions show red or an empty slot");
+  // The run itself, as the button would start it on GitHub.
+  const batch = `e2ebatch${Date.now()}`;
+  sql(`INSERT INTO job (id, type, status, params, created_by, created_at) VALUES ('${batch}', 'brain', 'queued', '{"task":"paper","docId":"${id22}","scope":{"items":[],"figures":[]},"batch":{"docs":["${id22}","${id62}"],"label":"0625 Extended papers, Jun 2024"}}', 'platform-admin', ${Date.now()})`);
+  sql(`INSERT INTO paper_read (doc_id, job_id, updated_at) VALUES ('${id22}', '${batch}', ${Date.now()}) ON CONFLICT (doc_id) DO UPDATE SET job_id = '${batch}'`);
+  await page.goto(`${BASE}/admin`);
+  check((await page.locator(".side-run", { hasText: "Read all: paper 1 of 2" }).count()) === 1, "Running now says which paper of how many");
+  const rbatch = await runBrain(batch);
+  check(rbatch.status === 0 && rbatch.out.includes("Paper 1 of 2") && rbatch.out.includes("Paper 2 of 2") && rbatch.out.includes("batch done"), `one run reads both papers in turn${rbatch.status ? ": " + rbatch.out.slice(-800) : ""}`);
+  const done = rows(`SELECT COUNT(*) AS n FROM paper_read WHERE doc_id IN ('${id22}', '${id62}') AND read_at IS NOT NULL`)[0].n;
+  check(done === 2 && rows(`SELECT status FROM job WHERE id = '${batch}'`)[0].status === "succeeded", `both readings are saved and the run is done (${done})`);
+  await page.goto(`${BASE}/admin/library/0625?ra=extended&ras=s&ray=2024#read-all`);
+  check((await page.locator("#read-all").textContent())?.includes("Nothing to read"), "pressing it again finds nothing left to read");
+  check((await fetch(`${BASE}/api/brain/next`, { method: "POST", body: "{}" })).status === 401, "the next-paper endpoint refuses unsigned requests");
+
   // 11. Signed endpoints refuse unsigned calls.
   const unsigned = await fetch(`${BASE}/api/brain/job`, { method: "POST", body: "{}" });
   check(unsigned.status === 401, "brain endpoints refuse unsigned requests");
@@ -683,7 +722,7 @@ try {
   server.close();
   sql(`UPDATE job SET status = 'failed' WHERE type = 'brain' AND status IN ('queued', 'running')`);
   sql(`DELETE FROM topic_tree WHERE syllabus_id = '0625-2023'`);
-  sql(`DELETE FROM source_document WHERE file_name IN ('0625_y23_sy.pdf', '0625_s24_qp_42.pdf')`);
+  sql(`DELETE FROM source_document WHERE file_name IN ('0625_y23_sy.pdf', '0625_s24_qp_42.pdf', '0625_s24_qp_22.pdf', '0625_s24_qp_62.pdf')`);
   sql(`DELETE FROM setting WHERE key IN ('ai_models', 'ai_check', 'ai_budget')`);
 }
 
