@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-07: Read accuracy (RAG) per paper, Yes, proceed / No confirms, cost without the drawing AI
+
+**What:** every paper now has a read accuracy from its first full reading: parts with no flag of their own over all parts (figure boxes and whole-paper flags do not count), coloured green (95% or more, no wording flag), amber (80% to 94%) or red (under 80% or any wording flag) (`paperScore`, `storedScore`, `BRAIN.scoreGreen`/`scoreAmber`). Migration 0023 adds `paper_read.first_items`, `first_clean`, `first_red`, `first_at`, set once by the first final save of a full reading (the script sends `read: false` for a figures-only run); papers read before show an estimate from their saved flags, marked "(est.)". Shown as a badge with words (`ScoreBadge`) on the reading card, the session page's "Read and review" list, and a new "Papers read" list on the subject overview (weakest first). "Read this paper", "Read it again" and "Cut figures from the PDF (free)" now all ask "Proceed?" with Yes, proceed / No, and the two reading buttons give the cost (`ActionForm` takes `yes` and `no` words). The rough cost of a paper no longer adds the drawing AI.
+
+**Why:** owner, 7 Nov 2026: "a RAG colored status appearing for the overall paper showing how accurate it is read"; the buttons "must have a confirmation Proceed, yes/no".
+
+**Tested:** `npm run check` exits 0 (208 unit tests; new: score colours and thresholds, figures and whole-paper flags left out, the first full reading kept and never overwritten by a figures-only or later run). Browser suite from a fresh database: 502 checks, all passing (new: Read this paper asks with the cost, the red badge on the reading card, overview and session page, first numbers kept after the free figure cut).
+
 ## 2026-11-07: "Cut figures from the PDF (free)" button
 
 **What:** owner asked whether "Read it again" would spend tokens to get figures for a paper read before the figure build (it would: Claude reads every page again). The reading card now has "Cut figures from the PDF (free)": a brain run scoped to the paper's figures (all but boxes drawn by hand), which skips Gemini and Claude, cuts every figure again with Poppler and stores the pages for Adjust box. The read route already skipped the cost check for a figures-only run. "Read it again" now says it uses AI tokens in its confirm.
