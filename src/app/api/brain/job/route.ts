@@ -51,7 +51,7 @@ export async function POST(request: Request) {
       pdfBytes: size?.size_bytes ?? 0,
       scope: params.scope,
       prior,
-      models: { claude: models.claude, gemini: models.gemini, drawing: models.drawing },
+      models: { claude: models.claude, gemini: models.gemini, drawing: models.drawing, reading: models.reading },
       limits,
     });
   }
@@ -66,7 +66,7 @@ export async function POST(request: Request) {
     task: params.task,
     subject: `${subjectLabel(await listSubjects(a.db), y.code)}, syllabus for ${years}`,
     pdfBytes: pdf.bytes,
-    models: { claude: models.claude, gemini: models.gemini, drawing: models.drawing },
+    models: { claude: models.claude, gemini: models.gemini, drawing: models.drawing, reading: models.reading },
     limits,
   });
 }

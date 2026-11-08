@@ -467,12 +467,14 @@ export function itemsByPage(c: PaperContent): { page: number; items: PaperItem[]
  * Pages printed "BLANK PAGE" with nothing to answer on them, 1-based: Cambridge prints the words (often kerned as
  * "BLANK P AGE") with only boilerplate around them (page number, paper code, copyright line, "DO NOT WRITE IN THIS
  * MARGIN", bar codes, and on the last page the copyright acknowledgements). A page with marks ("[2]"), a figure or
- * answer lines is never left out, and neither is the cover (it carries the total marks). Pure.
+ * answer lines is never left out, and neither is the cover (it carries the total marks). Only the printed capitals
+ * count (owner, 8 Nov 2026: a mark scheme's rules saying "blank page seen" had pages left out). Pure.
  */
 export function blankPages(pages: readonly string[]): number[] {
   const out: number[] = [];
   pages.forEach((text, i) => {
-    if (i === 0 || !squash(text).includes("blankpage")) return;
+    // Cambridge prints it in capitals; "blank page seen" or "Blank pages will be..." in a mark scheme's rules is text.
+    if (i === 0 || !/B\s*L\s*A\s*N\s*K\s*P\s*A\s*G\s*E/.test(text)) return;
     if (/\[\s*\d+\s*\]/.test(text) || /\bFig\.\s*\d/i.test(text) || /\.{8,}/.test(text) || /\btable\s*\d+\.\d/i.test(text)) return;
     out.push(i + 1);
   });
