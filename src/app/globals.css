@@ -371,6 +371,9 @@
   .change-diff { @apply ml-4 flex flex-col gap-1 border-l-2 border-line py-1 pl-3; }
   .change-undone { @apply opacity-60; }
   .pq-focus { @apply ring-2 ring-blue-500; }
+  .pq-fixed { @apply ring-2 ring-green-600; }
+  .fixed-note { @apply mt-2 flex flex-wrap items-center justify-between gap-2 rounded border border-green-300 bg-green-50 px-3 py-2 text-green-900; }
+  .fixed-note-open { @apply border-amber-300 bg-amber-50 text-amber-900; }
   /* View only (owner, 9 Nov 2026): change buttons hidden, fields shown but not editable; the server refuses changes. */
   .admin-readonly form[method="post"] button, .admin-readonly .edit-only { @apply hidden; }
   .admin-readonly form[method="post"] :is(input, select, textarea) { @apply pointer-events-none bg-wash; }

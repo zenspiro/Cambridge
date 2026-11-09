@@ -3,7 +3,7 @@
 // each question part laid out like the paper (number, wording, options, figures, answer lines, [marks]); open flags
 // boxed in red (wording), amber (numbers or marks) or blue (a figure's box), each with its fixes. The flag list
 // (owner, 7 Nov 2026) shows every open flag by page; a click, Previous / Next or the J and K keys jump to one, and
-// after a fix the next one is picked. Figures are cut from the PDF (figures.ts); "Adjust box" draws a figure's box by
+// after a fix the fixed part stays in view as it now reads, with Next flag and Undo (owner, 9 Nov 2026). Figures are cut from the PDF (figures.ts); "Adjust box" draws a figure's box by
 // hand on its page. The page and flag you were on are remembered in this browser. Fixes post in the background.
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { ActionForm } from "@/components/ActionForm";
@@ -85,6 +85,8 @@ export function PaperReview({ docId, pdfUrl, kind, items, figures, flags, pageCo
   const [tab, setTab] = useState<"flags" | "pages" | "changes">(flags.length ? "flags" : "pages");
   const [focus, setFocus] = useState<string | null>(null);
   const [adjusting, setAdjusting] = useState<string | null>(null);
+  // The part just fixed (or undone), shown as it now reads until you move on (owner, 9 Nov 2026).
+  const [fixed, setFixed] = useState<{ items: string[]; undone: boolean } | null>(null);
   const closeEditor = useCallback(() => setAdjusting(null), []);
   const lastIndex = useRef(0);
   const restored = useRef(false);
@@ -105,20 +107,34 @@ export function PaperReview({ docId, pdfUrl, kind, items, figures, flags, pageCo
     const at = p ?? (id ? itemPage.get(id) ?? figPage.get(id) : undefined);
     if (at) setPage(at);
     setCurrent(null);
+    setFixed(null);
     setFocus(id);
+  };
+  /** After a fix or an Undo: stay on the part (and a new lead-in above it) instead of moving on. */
+  const afterFix = (parts: string[], undone = false) => (ok: boolean) => {
+    if (!ok || !parts.length) return;
+    const at = itemPage.get(parts[0]!) ?? figPage.get(parts[0]!);
+    if (at) setPage(at);
+    setCurrent(null);
+    setFocus(null);
+    setFixed({ items: parts, undone });
   };
   const select = useCallback((f: Flag | undefined) => {
     if (!f) return;
     setShow(true);
+    setFixed(null);
     setCurrent(f.key);
     const p = pageOf(f);
     if (p > 0) setPage(p);
   }, [pageOf]);
   const step = useCallback((by: number) => {
     if (!visible.length) return;
-    const i = index < 0 ? (by > 0 ? 0 : visible.length - 1) : (index + by + visible.length) % visible.length;
+    // From a part just fixed: the next open flag after it in the paper (or the one before it).
+    const from = index < 0 && fixed ? order.get(fixed.items[0]!) : undefined;
+    const after = from === undefined ? -1 : by > 0 ? visible.findIndex((f) => (order.get(f.item) ?? -1) >= from) : visible.findLastIndex((f) => (order.get(f.item) ?? -1) < from);
+    const i = after >= 0 ? after : index < 0 ? (by > 0 ? 0 : visible.length - 1) : (index + by + visible.length) % visible.length;
     select(visible[i]);
-  }, [visible, index, select]);
+  }, [visible, index, select, fixed, order]);
 
   // The page and flag you were on, from this browser (after the first render, so the server's page matches).
   useEffect(() => {
@@ -150,6 +166,14 @@ export function PaperReview({ docId, pdfUrl, kind, items, figures, flags, pageCo
     el?.scrollIntoView({ block: "center", behavior: "smooth" });
   }, [focus, page]);
 
+  // Keep the part just fixed in view.
+  useEffect(() => {
+    if (!fixed) return;
+    const id = fixed.items[0]!;
+    const el = document.getElementById(`item-${id}`) ?? document.getElementById(`figure-${id}`);
+    el?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [fixed, page, revision]);
+
   // Bring the chosen flag into view and mark it.
   useEffect(() => {
     if (!current) return;
@@ -180,14 +204,35 @@ export function PaperReview({ docId, pdfUrl, kind, items, figures, flags, pageCo
   const onPage = items.filter((i) => i.page === page);
   const base = `/admin/library/review/${encodeURIComponent(docId)}`;
   const box = (f: Flag, item: PaperItem | undefined) => (
-    <FlagBox key={f.key} flag={f} base={base} busy={busy} item={item} current={f.key === current} onAdjust={setAdjusting} canFix={canFix} canRead={canRead} />
+    <FlagBox key={f.key} flag={f} base={base} busy={busy} item={item} current={f.key === current} onAdjust={setAdjusting} canFix={canFix} canRead={canRead} onFixed={(parts) => afterFix(parts)} />
   );
+  /** Under the part just fixed: how it went, Next flag and Undo of that fix. */
+  const fixedNote = (id: string, open: number) => {
+    if (fixed?.items[0] !== id) return null;
+    const fix = fixed.undone ? undefined : fixes.find((f) => !f.undone && f.item && fixed.items.includes(f.item));
+    return (
+      <div className={`fixed-note${open ? " fixed-note-open" : ""}`} role="status">
+        <span>{fixed.undone ? "Undone. This is how it reads now." : open ? "Saved, but a flag is still open on this part." : "Fixed. This is how it reads now."}</span>
+        <span className="row-actions">
+          {visible.length ? <button className="btn btn-small btn-primary" type="button" onClick={() => step(1)}>Next flag</button> : <span className="muted">No open flags left.</span>}
+          {fix && canFix ? (
+            <ActionForm className="inline-form" action={`${base}/fix`} messages={MESSAGES} onDone={afterFix(fixed.items.slice(0, 1), true)}>
+              <input type="hidden" name="action" value="undo" />
+              <input type="hidden" name="fix" value={fix.id} />
+              <button className="btn btn-small" type="submit">Undo</button>
+            </ActionForm>
+          ) : null}
+        </span>
+      </div>
+    );
+  };
+  const isFixed = (id: string) => !!fixed?.items.includes(id);
 
   const figureCard = (id: string) => {
     const f = figures.find((x) => x.id === id);
     const ff = show ? byItem.get(id) ?? [] : [];
     return (
-      <figure key={id} className={`pq-figure${ff.length ? " pq-flag pq-blue" : ""}${focus === id ? " pq-focus" : ""}`} id={`figure-${id}`}>
+      <figure key={id} className={`pq-figure${ff.length ? " pq-flag pq-blue" : ""}${focus === id ? " pq-focus" : ""}${isFixed(id) ? " pq-fixed" : ""}`} id={`figure-${id}`}>
         {f?.shown ? <img src={`${base}/figure/${encodeURIComponent(id)}?r=${revision}`} alt={`Figure ${id}${f.caption ? `: ${f.caption}` : ""}`} /> : <p className="muted">Figure {id} has no box yet.</p>}
         <figcaption className="pq-figcaption">
           <span>{f?.caption || `Figure ${id}`}</span>
@@ -198,6 +243,7 @@ export function PaperReview({ docId, pdfUrl, kind, items, figures, flags, pageCo
           </span>
         </figcaption>
         {ff.map((x) => box(x, undefined))}
+        {fixedNote(id, ff.length)}
       </figure>
     );
   };
@@ -297,7 +343,7 @@ export function PaperReview({ docId, pdfUrl, kind, items, figures, flags, pageCo
                     ) : <span className="flag-row"><span className={`flag-dot ${f.undone ? "flag-dot-none" : "flag-dot-blue"}`} aria-hidden="true" /><span className="flag-row-item">{f.item ?? "Paper"}</span><span /><span className="flag-row-reason">{f.what}</span></span>}
                     <span className="muted change-meta">{f.who}, {dateTime.format(f.at)} UTC{f.undone ? " (undone)" : ""}</span>
                     {!f.undone && canFix ? (
-                      <ActionForm className="inline-form fix-undo" action={`${base}/fix`} messages={MESSAGES}>
+                      <ActionForm className="inline-form fix-undo" action={`${base}/fix`} messages={MESSAGES} onDone={afterFix(f.item ? [f.item] : [], true)}>
                         <input type="hidden" name="action" value="undo" />
                         <input type="hidden" name="fix" value={f.id} />
                         <button className="btn btn-small" type="submit">Undo</button>
@@ -329,7 +375,7 @@ export function PaperReview({ docId, pdfUrl, kind, items, figures, flags, pageCo
               const fl = show ? (byItem.get(it.number) ?? []).filter((f) => f.kind !== "missing") : [];
               const colour = fl.find((f) => f.colour === "red")?.colour ?? fl[0]?.colour;
               return (
-                <article key={it.number} className={`pq${isLeadIn(items, it.number) ? " pq-lead" : ""}${colour ? ` pq-flag pq-${colour}` : ""}${focus === it.number ? " pq-focus" : ""}`} id={`item-${it.number}`}>
+                <article key={it.number} className={`pq${isLeadIn(items, it.number) ? " pq-lead" : ""}${colour ? ` pq-flag pq-${colour}` : ""}${focus === it.number ? " pq-focus" : ""}${isFixed(it.number) ? " pq-fixed" : ""}`} id={`item-${it.number}`}>
                   <div className="pq-row">
                     <span className="pq-num">{it.number}</span>
                     <div className="pq-main">
@@ -347,6 +393,7 @@ export function PaperReview({ docId, pdfUrl, kind, items, figures, flags, pageCo
                     <span className="pq-marks">{it.marks !== null ? `[${it.marks}]` : ""}</span>
                   </div>
                   {fl.map((f) => box(f, it))}
+                  {fixedNote(it.number, (byItem.get(it.number) ?? []).length)}
                 </article>
               );
             }) : null}
@@ -474,8 +521,10 @@ function BoxEditor({ base, figure, revision, onClose }: { base: string; figure: 
 }
 
 /** One open flag: its colour and reason, and the fixes that fit it. */
-function FlagBox({ flag, base, busy, item, current, onAdjust, canFix, canRead }: { flag: Flag; base: string; busy: boolean; item: PaperItem | undefined; current: boolean; onAdjust: (id: string) => void; canFix: boolean; canRead: boolean }) {
+function FlagBox({ flag, base, busy, item, current, onAdjust, canFix, canRead, onFixed }: { flag: Flag; base: string; busy: boolean; item: PaperItem | undefined; current: boolean; onAdjust: (id: string) => void; canFix: boolean; canRead: boolean; onFixed: (parts: string[]) => (ok: boolean) => void }) {
   const fix = `${base}/fix`;
+  // A part (or figure) stays in view once fixed; a whole-paper flag moves on to the next one as before.
+  const done = flag.item === "paper" || flag.kind === "missing" ? undefined : onFixed([flag.item]);
   const isItem = flag.item !== "paper" && flag.kind !== "figure" && flag.kind !== "missing";
   const stale = isStale(flag) && !!flag.pdfText && isItem;
   return (
@@ -486,7 +535,7 @@ function FlagBox({ flag, base, busy, item, current, onAdjust, canFix, canRead }:
       {canFix ? <div className="row-actions">
         {flag.kind === "figure" ? (
           <>
-            <ActionForm action={fix} messages={MESSAGES}>
+            <ActionForm action={fix} messages={MESSAGES} onDone={done}>
               <input type="hidden" name="action" value="looks_right" />
               <input type="hidden" name="key" value={flag.key} />
               <button className="btn btn-small" type="submit">Looks right</button>
@@ -496,7 +545,7 @@ function FlagBox({ flag, base, busy, item, current, onAdjust, canFix, canRead }:
         ) : (
           <>
             {flag.pdfText && isItem ? (
-              <ActionForm action={fix} messages={MESSAGES}>
+              <ActionForm action={fix} messages={MESSAGES} onDone={flag.kind === "structure" ? onFixed([flag.item, flag.key.split(":").at(-1) ?? ""]) : done}>
                 <input type="hidden" name="action" value="pdf" />
                 <input type="hidden" name="key" value={flag.key} />
                 <button className="btn btn-small" type="submit" disabled={stale}>{flag.kind === "structure" ? "Give it its own part" : "Use the PDF's version"}</button>
@@ -508,7 +557,7 @@ function FlagBox({ flag, base, busy, item, current, onAdjust, canFix, canRead }:
                 <button className="btn btn-small" type="submit" disabled={busy}>Read it again</button>
               </ActionForm>
             ) : null}
-            <ActionForm action={fix} messages={MESSAGES}>
+            <ActionForm action={fix} messages={MESSAGES} onDone={done}>
               <input type="hidden" name="action" value="fine" />
               <input type="hidden" name="key" value={flag.key} />
               <button className="btn btn-small" type="submit">It&apos;s fine</button>
@@ -519,7 +568,7 @@ function FlagBox({ flag, base, busy, item, current, onAdjust, canFix, canRead }:
       {item && isItem && canFix ? (
         <details className="flag-edit">
           <summary className="link">Edit it yourself</summary>
-          <ActionForm className="stack-tight" action={fix} messages={MESSAGES}>
+          <ActionForm className="stack-tight" action={fix} messages={MESSAGES} onDone={onFixed([item.number])}>
             <input type="hidden" name="action" value="edit" />
             <input type="hidden" name="item" value={item.number} />
             <label className="field">

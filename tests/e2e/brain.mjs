@@ -603,8 +603,12 @@ try {
   check((await page.locator("#paper-sheet .flag-box").count()) === flagsBefore, "and on shows them again");
 
   await page.locator('#item-1\\(b\\) .flag-box[data-flag="words:1(b)"] button', { hasText: "Use the PDF's version" }).click();
-  // The fixed flag was the chosen one: once its flags clear, the next open flag (the figure on page 4) is picked.
-  await page.locator(".page-bar-count", { hasText: "Page 4 of 4" }).waitFor({ timeout: 15_000 }).then(() => check(true, "after a fix the next open flag is picked"), () => check(false, "after a fix the next open flag is picked"));
+  // The fixed part stays in view as it now reads (owner, 9 Nov 2026), until Next flag.
+  await page.locator("#item-1\\(b\\).pq-fixed .fixed-note", { hasText: "Fixed. This is how it reads now." }).waitFor({ timeout: 15_000 }).then(() => check(true, "after a fix the part stays in view, marked fixed"), () => check(false, "after a fix the part stays in view, marked fixed"));
+  check((await page.locator(".page-bar-count").textContent()) === "Page 2 of 4" && (await page.locator("#item-1\\(b\\) .pq-text", { hasText: "Calculate its average speed" }).count()) === 1, "the fixed part shows its new words before moving on");
+  check((await page.locator("#item-1\\(b\\) .fixed-note button", { hasText: "Undo" }).count()) === 1, "the fixed note offers Undo of that fix");
+  await page.locator("#item-1\\(b\\) .fixed-note button", { hasText: "Next flag" }).click();
+  check((await page.locator(".page-bar-count").textContent()) === "Page 4 of 4" && (await page.locator(".fixed-note").count()) === 0, "Next flag moves on to the next open flag after it");
   await page.locator(".page-bar button", { hasText: "Previous page" }).click();
   await page.locator(".page-bar button", { hasText: "Previous page" }).click();
   await page.locator("#item-1\\(b\\) .pq-text", { hasText: "Calculate its average speed" }).waitFor({ timeout: 15_000 }).then(() => check(true, "Use the PDF's version copies the PDF's words, in place"), () => check(false, "Use the PDF's version copies the PDF's words, in place"));
@@ -614,6 +618,7 @@ try {
   check((await page.locator("#figure-F2.pq-blue").count()) === 1, "the figure cut without a label is boxed in blue");
   await page.locator("#figure-F2 button", { hasText: "Looks right" }).click();
   await page.locator("#reading .pill", { hasText: "Ready" }).waitFor({ timeout: 15_000 }).then(() => check(true, "every flag cleared: the paper is Ready"), () => check(false, "every flag cleared: the paper is Ready"));
+  check((await page.locator("#figure-F2.pq-fixed .fixed-note", { hasText: "No open flags left." }).count()) === 1, "the last fix stays in view and says no flags are left");
   // Changes (owner, 9 Nov 2026): every change listed with who, when, before and after, opening where it was made.
   await page.locator(".panel-tab", { hasText: "Changes" }).click();
   const pdfChange = page.locator(".change-list li", { hasText: "Used the PDF's version" }).first();

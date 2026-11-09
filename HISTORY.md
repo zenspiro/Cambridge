@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-09: A fixed part stays in view before the next flag
+
+**What:** after a fix on the review screen (Use the PDF's version, Give it its own part, Edit it yourself, It's fine, Looks right), the screen stays on that part as it now reads, outlined in green with "Fixed. This is how it reads now." (or "Saved, but a flag is still open on this part."), a Next flag button (the next open flag after it in the paper; J and K too) and Undo of that fix. "Give it its own part" outlines the new lead-in and the part. An Undo from the note or from Changes stays on the part the same way ("Undone."). A whole-paper flag still moves on as before. `ActionForm` gains `onDone`.
+
+**Why:** owner, 9 Nov 2026: "when I am fixing any question, I need the page to show me the fixed version before moving on to the next flag."
+
+**Tested:** `npm run check` exits 0 (246 unit tests). Browser suite from a fresh database, all 592 checks passing (new: after a fix the part stays marked with its new words and Undo; Next flag moves on; the last fix says no flags are left).
+
 ## 2026-11-09: Flags from older checks marked, their PDF fix off
 
 **What:** every flag now carries the version of the checks that raised it (`Flag.v`, `CHECKS_VERSION` in `paper.ts`, now 2: the outline read as printed). A flag from older checks (saved before today, or put back by Undo) shows "Checked before the latest update. Run the checks again to use this fix.", its "Use the PDF's version" or "Give it its own part" is off, and the server refuses it (`stale`). The Flags tab says how many flags are from older checks. Bump `CHECKS_VERSION` whenever a check changes what it finds.
