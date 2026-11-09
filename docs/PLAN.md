@@ -195,7 +195,15 @@ You see at the end: students and parents can sign up, approve, link, and land on
    2a sidebar, full width, Parent approval page, review screen with the PDF side; 2b question papers and mark schemes
    with flags, fixes and override; 2c examiner reports, grade thresholds, blueprints, topic frequency.
    **2b built 7 Nov 2026** ("Read this paper", the rebuilt paper with flags and fixes, override, live run progress).
-   Still to do in step 2: "Read all" for a subject (batch, half price), then 2c.
+   **Read all built 8 Nov 2026** (Core or Extended, by month and year, the cap checked before each paper). Still to do
+   in step 2: 2c.
+   **Examiner reports are essential to marking (owner, 9 Nov 2026).** The AI that marks student answers must use them,
+   so 2c reads each report into structured, per-question pieces, never a summary: for each question, what good answers
+   did, the common mistakes and misconceptions, what examiners did not accept, and wording that lost marks, each tied
+   to the question number (and its mark scheme point where the report names it), the session and the paper. Build it
+   so the marking step can ask "what did examiners say about this question, or this kind of question" and so a later
+   test bank can check that answers showing a reported mistake lose the mark. Reports are read and reviewed like
+   papers (flags, fixes, read accuracy), and the team's source reviewers check them.
 3. **Question making with self-checks.** Original questions; a second AI from another provider solves each one, code
    recalculates numbers, similarity check against past papers; diagrams drawn as code and checked by a second AI.
    Failures are thrown away.

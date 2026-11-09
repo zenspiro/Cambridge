@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
-import { requireAdmin } from "@/lib/auth/guard";
+import { requireStaff } from "@/lib/auth/staff";
 import { getEnv } from "@/lib/env";
 import { AdminShell } from "@/components/AdminShell";
 import { StatusLine } from "@/components/LibraryBits";
@@ -11,8 +11,8 @@ import { loadPapers } from "@/lib/library/papers";
 export const metadata: Metadata = { title: "Syllabus version" };
 
 export default async function VersionPage({ params }: { params: Promise<{ code: string; from: string }> }) {
-  await requireAdmin();
   const { code, from } = await params;
+  await requireStaff({ area: "library", level: "view", code });
   if (!/^\d{4}$/.test(from)) notFound();
   const env = await getEnv();
   const [list, header, { papers }] = await Promise.all([loadSyllabus(env.DB, code), loadHeader(env.DB, code), loadPapers(env.DB, code)]);

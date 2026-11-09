@@ -2,25 +2,36 @@ import Link from "next/link";
 import { getEnv } from "@/lib/env";
 import { aiUsageToday } from "@/lib/agent/usage";
 import { AI_USAGE } from "@/lib/config";
-import { activeRuns } from "@/lib/adminStatus";
 import { AdminEnhance } from "@/components/AdminEnhance";
 import { AppIcon } from "@/components/icons/AppIcon";
 import { readIcons } from "@/lib/icons";
+import { allowed, staffSession, type Need } from "@/lib/auth/staff";
 
-/** The sidebar, in groups (owner, 6 Nov 2026). `current` on a page names the item it belongs to. */
-const NAV: readonly { group: string | null; items: readonly { href: string; label: string; icon: string }[] }[] = [
-  { group: null, items: [{ href: "/admin", label: "Home", icon: "admin.home" }] },
+/**
+ * The sidebar, in groups (owner, 6 Nov 2026). `current` on a page names the item it belongs to. `need`: what a team
+ * member needs to see the item (owner, 9 Nov 2026); items without it are the owner's only.
+ */
+type NavItem = { href: string; label: string; icon: string; need?: Need };
+const NAV: readonly { group: string | null; items: readonly NavItem[] }[] = [
+  { group: null, items: [{ href: "/admin", label: "Home", icon: "admin.home", need: null }] },
   {
     group: "Library",
     items: [
-      { href: "/admin/library", label: "Library", icon: "admin.library" },
-      { href: "/admin/library/upload", label: "Upload", icon: "admin.upload" },
+      { href: "/admin/library", label: "Library", icon: "admin.library", need: { area: "library", level: "view" } },
+      { href: "/admin/library/upload", label: "Upload", icon: "admin.upload", need: { area: "library", level: "edit" } },
       { href: "/admin/sources", label: "Sources", icon: "admin.sources" },
       { href: "/admin/agent", label: "Agent", icon: "admin.agent" },
     ],
   },
   { group: "Subject brain", items: [{ href: "/admin/topics", label: "Topic trees", icon: "admin.topics" }] },
-  { group: "Students and parents", items: [{ href: "/admin/approval", label: "Parent approval", icon: "admin.approval" }] },
+  {
+    group: "Users",
+    items: [
+      { href: "/admin/users/team", label: "Team", icon: "admin.team" },
+      { href: "/admin/users/accounts", label: "Students and parents", icon: "admin.accounts" },
+      { href: "/admin/approval", label: "Parent approval", icon: "admin.approval" },
+    ],
+  },
   {
     group: "Settings",
     items: [
@@ -38,8 +49,8 @@ export type Crumb = { label: string; href?: string };
 /**
  * Frame for every signed-in admin page: a sidebar and the page using the rest of the width. Every page has the same
  * header (owner, 8 Nov 2026: a standard, functional admin): breadcrumbs, the title, one line on what the page is for,
- * and the page's main actions on the right, kept in view while the page scrolls. The sidebar shows the runs going on
- * now with links. Pages still call requireAdmin() themselves.
+ * and the page's main actions on the right, kept in view while the page scrolls. Runs going on show on the page that started
+ * them and on Home (owner, 9 Nov 2026: not in the sidebar). Pages still call requireAdmin() themselves.
  */
 export async function AdminShell({ current, title, children, intro, actions, crumbs, keepHead = true }: {
   current: string; title: string; children: React.ReactNode;
@@ -52,13 +63,16 @@ export async function AdminShell({ current, title, children, intro, actions, cru
   keepHead?: boolean;
 }) {
   const db = (await getEnv()).DB;
-  const [ai, runs, icons] = await Promise.all([aiUsageToday(db), activeRuns(db), readIcons(db)]);
+  const [ai, icons, staff] = await Promise.all([aiUsageToday(db), readIcons(db), staffSession()]);
+  // A team member sees only what they may use; the owner sees everything.
+  const show = (n: NavItem) => !!staff && (staff.owner || (n.need !== undefined && allowed(staff, n.need)));
+  const nav = NAV.map((g) => ({ ...g, items: g.items.filter(show) })).filter((g) => g.items.length);
   return (
     <div className="admin">
       <a className="skip-link" href="#main">Skip to the page</a>
       <aside className="admin-side">
         <nav className="side-nav" aria-label="Admin">
-          {NAV.map((g) => (
+          {nav.map((g) => (
             <div className="side-group" key={g.group ?? "top"}>
               {g.group ? <p className="side-heading">{g.group}</p> : null}
               {g.items.map((n) => (
@@ -71,25 +85,14 @@ export async function AdminShell({ current, title, children, intro, actions, cru
           ))}
         </nav>
         <div className="side-foot">
-          {runs.length ? (
-            <div className="side-runs" id="running-now">
-              <p className="side-heading">Running now</p>
-              {runs.map((r) => (
-                <a key={r.id} className="side-run" href={r.href}>
-                  <span className={r.queued ? "run-dot run-dot-wait" : "run-dot"} aria-hidden="true" />
-                  <span className="side-run-text">
-                    <span>{r.label}</span>
-                    <span className="side-run-step">{r.queued ? "Waiting to start" : r.step ?? "Working"}</span>
-                  </span>
-                </a>
-              ))}
-            </div>
-          ) : null}
-          <span className={ai.share >= 90 ? "ai-meter ai-meter-high" : "ai-meter"} title={`Workers AI questions today (UTC) and an estimate of Cloudflare's free ${AI_USAGE.freeNeuronsPerDay.toLocaleString("en-GB")} daily units used. Cloudflare's dashboard has the exact figure.`}>
-            AI today: {ai.calls} question{ai.calls === 1 ? "" : "s"}, {ai.share}% of free allowance
-            <progress className="ai-meter-bar" max={100} value={Math.min(ai.share, 100)}>{ai.share}%</progress>
-          </span>
-          <form method="post" action="/admin/session/end">
+          {staff?.owner ? (
+            <span className={ai.share >= 90 ? "ai-meter ai-meter-high" : "ai-meter"} title={`Workers AI questions today (UTC) and an estimate of Cloudflare's free ${AI_USAGE.freeNeuronsPerDay.toLocaleString("en-GB")} daily units used. Cloudflare's dashboard has the exact figure.`}>
+              AI today: {ai.calls} question{ai.calls === 1 ? "" : "s"}, {ai.share}% of free allowance
+              <progress className="ai-meter-bar" max={100} value={Math.min(ai.share, 100)}>{ai.share}%</progress>
+            </span>
+          ) : staff ? <span className="side-who">Signed in as {staff.name} (team)</span> : null}
+          {/* The owner signs out of the admin; a team member out of their email sign-in. */}
+          <form method="post" action={staff && !staff.owner ? "/account/signout" : "/admin/session/end"}>
             <button className="btn btn-small" type="submit">
               Sign out
             </button>

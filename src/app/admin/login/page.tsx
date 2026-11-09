@@ -48,6 +48,8 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           Sign in
         </button>
       </form>
+      {/* Team members sign in with their email code (owner, 9 Nov 2026); the password is the owner's. */}
+      <p className="muted" id="team-signin">Team member? <a className="link" href="/signin?next=/admin">Sign in with your email</a></p>
     </main>
   );
 }

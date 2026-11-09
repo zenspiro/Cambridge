@@ -557,7 +557,7 @@ try {
   const pill = await page.locator("#reading .pill").textContent();
   check(/flag/.test(pill ?? ""), `the misread is flagged (${pill})`);
   const score = (await page.locator("#reading .reading-head .score").textContent()) ?? "";
-  check(/^Red \d+%/.test(score) && score.includes("read accuracy") && (await page.locator("#reading .reading-head .score-red").count()) === 1, `the paper's read accuracy shows as a red badge with words (${score.slice(0, 60)})`);
+  check(/^Red: \d+%/.test(score) && (await page.locator("#reading .reading-head .score .sr-only").first().textContent()) === "Red: " && score.includes("read accuracy") && (await page.locator("#reading .reading-head .score-red").count()) === 1, `the paper's read accuracy shows as a red badge with words (${score.slice(0, 60)})`);
   const each = (await page.locator("#reading .score-list li").first().textContent()) ?? "";
   check((await page.locator("#reading .score-list li").count()) === 1 && each.includes("Claude Sonnet 5.5") && /checked by Gemini/.test(each), `the reading's own score names its models (${each.slice(0, 80)})`);
   check((await page.locator("#item-1\\(a\\)").textContent())?.includes("State the instrument"), "the paper is rebuilt from our reading, page by page");
@@ -696,11 +696,16 @@ try {
   sql(`INSERT INTO job (id, type, status, params, created_by, created_at) VALUES ('${batch}', 'brain', 'queued', '{"task":"paper","docId":"${id22}","scope":{"items":[],"figures":[]},"batch":{"docs":["${id22}","${id62}"],"label":"0625 Extended papers, Jun 2024"}}', 'platform-admin', ${Date.now()})`);
   sql(`INSERT INTO paper_read (doc_id, job_id, updated_at) VALUES ('${id22}', '${batch}', ${Date.now()}) ON CONFLICT (doc_id) DO UPDATE SET job_id = '${batch}'`);
   await page.goto(`${BASE}/admin`);
-  check((await page.locator(".side-run", { hasText: "Read all: paper 1 of 2" }).count()) === 1, "Running now says which paper of how many");
+  check((await page.locator("#running-now a", { hasText: "Read all: paper 1 of 2" }).getAttribute("href")) === "/admin/library/0625#read-all", "Home's Running now says which paper of how many and links to the Read all card");
+  check((await page.locator(".admin-side .side-run").count()) === 0, "runs are not in the sidebar");
+  await page.goto(`${BASE}/admin/library/0625#read-all`);
+  await page.locator("#read-all .batch-head", { hasText: "Paper 1 of 2" }).waitFor({ timeout: 10_000 }).then(() => check(true, "the Read all card shows the run live where it was started"), () => check(false, "the Read all card shows the run live where it was started"));
   const rbatch = await runBrain(batch);
   check(rbatch.status === 0 && rbatch.out.includes("Paper 1 of 2") && rbatch.out.includes("Paper 2 of 2") && rbatch.out.includes("batch done"), `one run reads both papers in turn${rbatch.status ? ": " + rbatch.out.slice(-800) : ""}`);
   const done = rows(`SELECT COUNT(*) AS n FROM paper_read WHERE doc_id IN ('${id22}', '${id62}') AND read_at IS NOT NULL`)[0].n;
   check(done === 2 && rows(`SELECT status FROM job WHERE id = '${batch}'`)[0].status === "succeeded", `both readings are saved and the run is done (${done})`);
+  await page.locator("#read-all .batch-head", { hasText: "Done: 2 of 2 read" }).waitFor({ timeout: 15_000 }).then(() => check(true, "the card updates in place when the run ends"), () => check(false, "the card updates in place when the run ends"));
+  check((await page.locator(`#read-all .batch-list a[href="/admin/library/review/${id22}"]`).count()) === 1, "each paper read links to its review screen");
   await page.goto(`${BASE}/admin/library/0625?ra=extended&ras=s&ray=2024#read-all`);
   check((await page.locator("#read-all").textContent())?.includes("Nothing to read"), "pressing it again finds nothing left to read");
   check((await fetch(`${BASE}/api/brain/next`, { method: "POST", body: "{}" })).status === 401, "the next-paper endpoint refuses unsigned requests");

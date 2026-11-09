@@ -70,6 +70,15 @@ export const docTypeLabel = (t: string): string => DOC_TYPE_LABELS[t] ?? OTHER_T
  * learning goals; code checks every word against the PDF's own text and the numbering; a second AI (Gemini) reads
  * the same PDF on its own and the two are compared. Models are Worker vars (CLAUDE_MODEL, GEMINI_MODEL), never here.
  */
+/** Team access (owner, 9 Nov 2026). */
+export const TEAM = {
+  inviteDays: 7,
+  /** A team member signs in again after this long, like the owner's admin session. */
+  sessionMs: 12 * 3_600_000,
+  invitesPerDay: 30,
+  maxSubjects: 40,
+} as const;
+
 /** Storage on Home (owner, 9 Nov 2026): Cloudflare's free allowances, how long a count is kept, how far a bucket is listed. */
 export const STORAGE = {
   dbFreeBytes: 5 * 1000 ** 3,

@@ -4,7 +4,7 @@ import { storeDocument } from "@/lib/library/store";
 
 // One missing file fetched from a link on an approved source, saved under the checklist's name.
 export async function POST(request: Request) {
-  // addFilePost runs adminPost, which checks the admin session before anything else.
+  // addFilePost runs staffPost, which checks the owner or a team member with library edit before anything else.
   return addFilePost(request, async ({ db, env, form, actorId, target }) => {
     const got = await fetchApprovedPdf(db, form.get("url"));
     if (!got.ok) return got;

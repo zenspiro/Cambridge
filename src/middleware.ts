@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { PDF_VIEW_CSP, PDF_VIEW_RE, REVIEW_PAGE_RE, SECURITY_HEADERS, buildCsp, makeNonce } from "@/lib/security/headers";
-import { AUTH } from "@/lib/config";
+import { ACCOUNT, AUTH } from "@/lib/config";
 
 // Runs before every page and API route. Sets a per-request CSP nonce (Next reads it
 // from the request header and adds it to its own scripts) and the security headers.
@@ -9,7 +9,8 @@ import { AUTH } from "@/lib/config";
 // Cloudflare, so we keep the supported edge middleware until that changes.
 
 // Admin paths open without a cookie. Every other /admin path also checks the
-// session in D1 itself (requireAdmin); this is only an early, cheap turn-away.
+// session in D1 itself (requireAdmin, requireStaff); this is only an early, cheap turn-away. Team members
+// (owner, 9 Nov 2026) come with the email sign-in's cookie instead of the admin one.
 const ADMIN_OPEN = new Set(["/admin/login", "/admin/session"]);
 
 export function middleware(request: NextRequest) {
@@ -18,7 +19,8 @@ export function middleware(request: NextRequest) {
 
   const plainHttp = request.nextUrl.protocol === "http:";
 
-  if (isAdmin && !ADMIN_OPEN.has(pathname) && !request.cookies.has(AUTH.cookieName) && request.method === "GET") {
+  const hasSession = request.cookies.has(AUTH.cookieName) || request.cookies.getAll().some((c) => c.name.endsWith(`${ACCOUNT.cookiePrefix}.session_token`));
+  if (isAdmin && !ADMIN_OPEN.has(pathname) && !hasSession && request.method === "GET") {
     return withHeaders(NextResponse.redirect(new URL("/admin/login", request.url), 303), makeNonce(), true, plainHttp);
   }
 

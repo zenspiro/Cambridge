@@ -18,7 +18,7 @@ type Result = { ok: boolean; text: string; retry?: boolean };
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 // Refusals that will not change on a second try; anything else (server hiccup) is retried.
-const FINAL_REASONS = new Set(["name", "year", "size", "not_pdf", "no_syllabus", "same_name", "same_content"]);
+const FINAL_REASONS = new Set(["name", "year", "size", "not_pdf", "no_syllabus", "same_name", "same_content", "no_access"]);
 
 const AI_CALLS = 60;
 const AI_BATCH = 40;

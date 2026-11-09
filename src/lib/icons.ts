@@ -44,6 +44,8 @@ export const ICON_SLOTS: readonly IconSlot[] = [
   { id: "admin.sources", group: "Admin menu", label: "Sources", default: "globe" },
   { id: "admin.agent", group: "Admin menu", label: "Agent", default: "bot" },
   { id: "admin.topics", group: "Admin menu", label: "Topic trees", default: "folder-tree" },
+  { id: "admin.team", group: "Admin menu", label: "Team", default: "user-cog" },
+  { id: "admin.accounts", group: "Admin menu", label: "Students and parents", default: "graduation-cap" },
   { id: "admin.approval", group: "Admin menu", label: "Parent approval", default: "shield-check" },
   { id: "admin.settings", group: "Admin menu", label: "Library settings", default: "settings" },
   { id: "admin.ai", group: "Admin menu", label: "AI setup", default: "brain-circuit" },

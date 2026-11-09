@@ -70,6 +70,8 @@ export type AccountSession = {
   standing: Standing;
   /** The theme the person picked, or null (the Brand page's default then applies). */
   theme: ThemeId | null;
+  /** When this sign-in began (team access needs a fresh one: TEAM.sessionMs). */
+  signedInAt: number;
 };
 
 /** The signed-in student or parent, or null. */
@@ -84,7 +86,8 @@ export async function accountSession(): Promise<AccountSession | null> {
     const db = (await getEnv()).DB;
     const roles = await getRoles(db, u.id);
     const [st, p] = await Promise.all([standing(db, u.id, roles), getProfile(db, u.id)]);
-    return { userId: u.id, email: u.email, firstName: u.firstName ?? "", lastName: u.lastName ?? "", roles, standing: st, theme: p.theme };
+    const started = new Date(s.session.createdAt as unknown as string | Date).getTime();
+    return { userId: u.id, email: u.email, firstName: u.firstName ?? "", lastName: u.lastName ?? "", roles, standing: st, theme: p.theme, signedInAt: Number.isFinite(started) ? started : 0 };
   } catch (err) {
     reportError("account.session", err);
     return null;

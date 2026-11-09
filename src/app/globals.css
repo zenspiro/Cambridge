@@ -55,6 +55,7 @@
   .side-heading { @apply px-3 pb-1 text-sm font-semibold uppercase tracking-wide text-muted; }
   .side-link { @apply flex items-center gap-2.5 rounded-lg px-3 py-2 text-base font-medium text-muted hover:bg-wash hover:text-ink; }
   .side-icon { @apply h-5 w-5 shrink-0; }
+  .side-who { @apply text-sm text-muted; }
   .app-icon { @apply inline-block h-5 w-5 shrink-0 align-middle; }
   /* Settings > Icons and its picker (owner, 9 Nov 2026). */
   .icon-preview { @apply h-6 w-6; }
@@ -151,6 +152,13 @@
   .tile-stat-value { @apply text-2xl font-semibold tabular-nums; }
   .tile-stat-note { @apply text-sm text-muted; }
   .tile-wide { @apply col-span-full; }
+  /* Users > Team (owner, 9 Nov 2026). */
+  .access-fields { @apply flex flex-col gap-4; }
+  .access-areas { @apply grid grid-cols-3 gap-4; }
+  .access-qual { @apply flex flex-col gap-1; }
+  .member-row { @apply flex flex-col gap-2 border-b border-line py-3; }
+  .member-head { @apply flex flex-wrap items-center justify-between gap-3; }
+  .tile-runs { @apply m-0 flex list-none flex-col gap-1 p-0 text-sm; }
   .tile-stat-foot { @apply mt-1 flex flex-wrap items-center justify-between gap-3; }
   .btn-small { @apply min-h-9 px-3 py-1; }
   .btn-danger { @apply border-red-300 text-red-800 hover:bg-red-50; }
@@ -308,6 +316,9 @@
   .reading-head { @apply flex flex-wrap items-center gap-3; }
   .run-progress { @apply flex flex-col gap-2 rounded-lg border border-line bg-wash p-4; }
   .run-progress-head { @apply m-0; }
+  .batch-head { @apply flex flex-col gap-1; }
+  .batch-bar { @apply h-2 w-full; }
+  .batch-paper { @apply grid grid-cols-[minmax(0,1fr)_auto_4rem] items-center gap-3; }
   .run-steps { @apply m-0 flex list-none flex-col gap-1 p-0; }
   .run-step { @apply grid grid-cols-[1rem_12rem_minmax(0,1fr)_auto] items-center gap-3 py-1 text-base; }
   .run-step-dot { @apply h-3 w-3 rounded-full bg-slate-300; }

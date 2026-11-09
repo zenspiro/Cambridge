@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { requireAdmin } from "@/lib/auth/guard";
+import { requireStaff, allowed } from "@/lib/auth/staff";
 import { getEnv } from "@/lib/env";
 import { AdminShell, Notice } from "@/components/AdminShell";
 import { StatusLine } from "@/components/LibraryBits";
@@ -24,8 +24,9 @@ export default async function SessionPage({
   params: Promise<{ code: string; year: string; session: string }>;
   searchParams: Promise<{ e?: string }>;
 }) {
-  await requireAdmin();
   const { code, year, session } = await params;
+  const staff = await requireStaff({ area: "library", level: "view", code });
+  const canEdit = allowed(staff, { area: "library", level: "edit", code });
   const q = await searchParams;
   const s = sessionFromSlug(session);
   if (!/^\d{4}$/.test(year) || !s) notFound();
@@ -70,13 +71,13 @@ export default async function SessionPage({
           {older ? <Link className="btn" href={sessionHref(code, older.year, older.session)}>‹ {older.label}</Link> : null}
           {newer ? <Link className="btn" href={sessionHref(code, newer.year, newer.session)}>{newer.label} ›</Link> : null}
           {/* Read all for this session (owner, 8 Nov 2026): the subject overview shows what it reads and the cost first. */}
-          {hasTiers(papers) ? (
+          {!staff.owner ? null : hasTiers(papers) ? (
             <>
               <Link className="btn" href={`/admin/library/${code}?ra=core&ras=${g.session}&ray=${g.year}#read-all`}>Read all Core</Link>
               <Link className="btn" href={`/admin/library/${code}?ra=extended&ras=${g.session}&ray=${g.year}#read-all`}>Read all Extended</Link>
             </>
           ) : <Link className="btn" href={`/admin/library/${code}?ra=any&ras=${g.session}&ray=${g.year}#read-all`}>Read all</Link>}
-          <Link className="btn btn-primary" href={`/admin/library/folder?code=${code}`}>Upload a folder</Link>
+          {canEdit ? <Link className="btn btn-primary" href={`/admin/library/folder?code=${code}`}>Upload a folder</Link> : null}
         </nav>
       }
     >

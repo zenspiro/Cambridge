@@ -22,7 +22,42 @@ test("every page and route is public on purpose or checks the admin or account s
     const src = readFileSync(join(appDir, r), "utf8");
     // Guards: requireAdmin() for pages, adminSession() for handlers, adminPost() wraps adminSession().
     const code = src.replace(/\/\/.*$/gm, "");
-    assert.match(code, /\b(requireAdmin\(\)|adminSession\(\)|adminPost\(|addFilePost\(|requireAccount\(\)|requireRole\(|accountSession\(\)|accountPost\()/, `${r} has no auth check and is not in PUBLIC_ROUTES`);
+    assert.match(code, /\b(requireAdmin\(\)|adminSession\(\)|adminPost\(|addFilePost\(|requireAccount\(\)|requireRole\(|accountSession\(\)|accountPost\(|requireStaff\(|staffFor\(|staffForDoc\(|staffPost\()/, `${r} has no auth check and is not in PUBLIC_ROUTES`);
+  }
+});
+
+// Team access (owner, 9 Nov 2026): only these admin pages and routes may let a team member in; every other admin page
+// stays the owner's (requireAdmin, adminSession, adminPost). A new one here is a decision, not an accident.
+const TEAM_ROUTES = [
+  "admin/page.tsx",
+  "admin/brain/runs/[id]/route.ts",
+  "admin/library/page.tsx",
+  "admin/library/[code]/page.tsx",
+  "admin/library/[code]/[year]/[session]/page.tsx",
+  "admin/library/[code]/version/[from]/page.tsx",
+  "admin/library/[code]/map/route.ts",
+  "admin/library/add/page.tsx",
+  "admin/library/add/link/route.ts",
+  "admin/library/add/upload/route.ts",
+  "admin/library/upload/page.tsx",
+  "admin/library/upload/send/route.ts",
+  "admin/library/folder/page.tsx",
+  "admin/library/folder/file/route.ts",
+  "admin/library/folder/ai/route.ts",
+  "admin/library/file/[id]/route.ts",
+  "admin/library/file/[id]/view/route.ts",
+  "admin/library/review/[id]/page.tsx",
+  "admin/library/review/[id]/fix/route.ts",
+  "admin/library/review/[id]/figure/[fig]/route.ts",
+  "admin/library/review/[id]/figure/[fig]/page/route.ts",
+].sort();
+
+test("only the listed admin pages let team members in; the rest stay the owner's", () => {
+  const admin = routes(appDir).filter((r) => r.startsWith("admin/"));
+  const team = admin.filter((r) => /\b(requireStaff\(|staffFor\(|staffForDoc\(|staffPost\(|addFilePost\()/.test(readFileSync(join(appDir, r), "utf8").replace(/\/\/.*$/gm, ""))).sort();
+  assert.deepEqual(team, TEAM_ROUTES);
+  for (const r of ["admin/users/team/page.tsx", "admin/users/team/invite/route.ts", "admin/users/team/member/route.ts", "admin/ai/page.tsx", "admin/library/review/[id]/read/route.ts", "admin/library/[code]/read-all/route.ts", "admin/agent/start/route.ts"]) {
+    assert.ok(admin.includes(r) && !team.includes(r), `${r} is the owner's only`);
   }
 });
 

@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import { currentBrand } from "@/lib/env";
 import { frameBrand } from "@/lib/brand";
 import { accountSession, accountsReady, googleReady } from "@/lib/account/server";
-import { homeFor } from "@/lib/account/roles";
+import { homeFor, safeNext } from "@/lib/account/roles";
+import { TEAM } from "@/lib/config";
 import { StudentFrame } from "@/components/student/StudentFrame";
 import { SignIn } from "@/components/student/SignIn";
 
@@ -17,17 +18,21 @@ const NOTICES: Readonly<Record<string, { good: boolean; text: string }>> = {
 };
 
 /** Sign-in for students and parents (public). Already signed in: straight to their home. */
-export default async function SignInPage({ searchParams }: { searchParams: Promise<{ e?: string }> }) {
+export default async function SignInPage({ searchParams }: { searchParams: Promise<{ e?: string; next?: string }> }) {
+  const q = await searchParams;
+  // `next`: a team member signing in for the admin, or someone taking a team invite (owner, 9 Nov 2026).
+  const next = safeNext(q.next);
   const s = await accountSession();
-  if (s) redirect(homeFor(s.roles, s.standing));
+  // Team access needs a sign-in from the last TEAM.sessionMs: an older one signs in again here.
+  if (s && !(next === "/admin" && Date.now() - s.signedInAt > TEAM.sessionMs)) redirect(next ?? homeFor(s.roles, s.standing));
   const brand = await currentBrand();
-  const e = (await searchParams).e;
+  const e = q.e;
   const notice = e && Object.hasOwn(NOTICES, e) ? NOTICES[e] : null;
   const ready = await accountsReady();
   return (
     <StudentFrame brand={frameBrand(brand)} theme={brand.defaultTheme} nav={[]} current="">
       {notice ? <p className={notice.good ? "s-note s-note-good" : "s-note s-note-bad"} role="status">{notice.text}</p> : null}
-      {ready ? <SignIn google={await googleReady()} /> : (
+      {ready ? <SignIn google={await googleReady() && !next} next={next} /> : (
         <section className="s-card s-auth">
           <h1 className="s-h1">Sign in</h1>
           <p>Sign-in is not open yet. Please try again later.</p>

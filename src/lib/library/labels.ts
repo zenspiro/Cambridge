@@ -10,6 +10,7 @@ export const REASON_LABELS: Record<StoreReason, string> = {
   same_name: "Already in the library",
   same_content: "Same file is already stored under another name",
   storage: "Could not be saved, please try again",
+  no_access: "Not one of your subjects (no edit access)",
 };
 
 export function describeDoc(d: { doc_type: string; paper: number | null; variant: number | null }): string {

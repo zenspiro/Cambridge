@@ -26,7 +26,7 @@ async function post(path: string, body: Record<string, string>): Promise<{ ok?: 
   }
 }
 
-export function SignIn({ google }: { google: boolean }) {
+export function SignIn({ google, next }: { google: boolean; next?: string | null }) {
   const [step, setStep] = useState<"email" | "code">("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -51,7 +51,7 @@ export function SignIn({ google }: { google: boolean }) {
   async function checkCode() {
     setBusy(true);
     setNote(null);
-    const r = await post("/account/verify", { email, code });
+    const r = await post("/account/verify", next ? { email, code, next } : { email, code });
     if (r.ok && r.next?.startsWith("/")) {
       window.location.assign(r.next);
       return;

@@ -2,7 +2,7 @@ import { APIError } from "better-auth/api";
 import { ACCOUNT } from "@/lib/config";
 import { getEnv } from "@/lib/env";
 import { getAuth } from "@/lib/account/server";
-import { cleanCode, cleanEmail, getRoles, homeFor } from "@/lib/account/roles";
+import { cleanCode, cleanEmail, getRoles, homeFor, safeNext } from "@/lib/account/roles";
 import { standing } from "@/lib/account/profile";
 import { accountJson, json, underLimits, withCookies } from "@/lib/account/http";
 
@@ -32,7 +32,8 @@ export async function POST(request: Request) {
     }
     const db = (await getEnv()).DB;
     const roles = await getRoles(db, result.response.user.id);
-    const next = homeFor(roles, await standing(db, result.response.user.id, roles));
+    // A team member (or someone taking a team invite) goes back to where they started.
+    const next = safeNext(body.next) ?? homeFor(roles, await standing(db, result.response.user.id, roles));
     return json({ ok: true, next }, { headers: withCookies(result.headers, new Headers()) });
   });
 }

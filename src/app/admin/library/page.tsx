@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { requireAdmin } from "@/lib/auth/guard";
+import { requireStaff, allowed } from "@/lib/auth/staff";
+import { hasSubject } from "@/lib/auth/team";
 import { getEnv } from "@/lib/env";
 import { AdminShell, Notice } from "@/components/AdminShell";
 import { CellLink, StatusLine } from "@/components/LibraryBits";
@@ -10,11 +11,17 @@ import { cellMatches, groupCells, searchWords, type Cell } from "@/lib/library/c
 export const metadata: Metadata = { title: "Library" };
 
 export default async function LibraryHome({ searchParams }: { searchParams: Promise<{ q?: string; e?: string }> }) {
-  await requireAdmin();
+  const staff = await requireStaff({ area: "library", level: "view" });
+  const edit = allowed(staff, { area: "library", level: "edit" });
   const sp = await searchParams;
   const q = (sp.q ?? "").slice(0, 100);
   const env = await getEnv();
-  const { library, qualifications } = await loadCatalog(env.DB);
+  const catalog = await loadCatalog(env.DB);
+  const { library } = catalog;
+  // A team member sees only their subjects (owner, 9 Nov 2026).
+  const qualifications = staff.owner ? catalog.qualifications : catalog.qualifications.map((q) => ({
+    ...q, subjects: q.subjects.map((s) => ({ ...s, syllabuses: s.syllabuses.filter((y) => hasSubject(staff.access, y.code)) })).filter((s) => s.syllabuses.length),
+  })).filter((q) => q.subjects.length);
   const words = searchWords(q);
 
   // Search across every syllabus.
@@ -33,10 +40,10 @@ export default async function LibraryHome({ searchParams }: { searchParams: Prom
       current="/admin/library"
       title="Library"
       intro={<>Cambridge source files by qualification and subject, {library.fromYear} to {library.toYear}. Green means every essential file is in. Admin only; every download is logged.</>}
-      actions={<>
+      actions={edit ? <>
         <Link className="btn btn-primary" href="/admin/library/folder">Upload a folder</Link>
         <Link className="btn" href="/admin/library/upload">Upload files</Link>
-      </>}
+      </> : undefined}
     >
       <Notice code={sp.e} messages={{ unknown: "That syllabus is not in the library.", too_big: "That file is too big (25 MB at most)." }} />
 

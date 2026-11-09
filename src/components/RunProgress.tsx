@@ -7,7 +7,12 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type Event = { at: number; stage: string; state: "start" | "wait" | "done" | "fail" | "skip"; text: string; model: string; tokens: number };
-type State = { status: "queued" | "running" | "succeeded" | "failed" | "cancelled"; step: string | null; events: Event[]; createdAt: number; finishedAt: number | null; stopped: string | null };
+type BatchPaper = { docId: string; name: string; read: boolean; flags: number; now: boolean };
+type State = {
+  status: "queued" | "running" | "succeeded" | "failed" | "cancelled"; step: string | null; events: Event[]; createdAt: number; finishedAt: number | null; stopped: string | null;
+  /** Read all: where the batch is and each paper's state. */
+  batch?: { label: string; at: number; of: number; papers: BatchPaper[] } | null;
+};
 
 const LABELS: Record<string, string> = {
   pdf: "The PDF", gemini: "Gemini (checking AI)", claude: "Claude (main AI)", retry: "Claude, second try", figures: "Figures (cut from the PDF)", drawing: "Drawing AI", checks: "Checks", save: "Saving",
@@ -69,6 +74,7 @@ export function RunProgress({ runId, stages, intervalMs = 3000 }: { runId: strin
         <strong>{state.status === "queued" ? "Waiting for GitHub to start the run" : active ? "Running" : state.status === "succeeded" ? "Finished" : "Stopped"}</strong>
         <span className="muted"> {since((state.finishedAt ?? now) - state.createdAt)}</span>
       </p>
+      {state.batch ? <BatchHead batch={state.batch} active={active} /> : null}
       <ol className="run-steps">
         {stages.map((stage) => {
           const last = latest.get(stage);
@@ -91,6 +97,44 @@ export function RunProgress({ runId, stages, intervalMs = 3000 }: { runId: strin
         })}
       </ol>
       {state.stopped ? <p className="alert" role="alert">{state.stopped}</p> : null}
+      {state.batch ? <BatchList papers={state.batch.papers} active={active} /> : null}
     </div>
+  );
+}
+
+/** Read all: which paper of how many, and a bar of how many are read. */
+function BatchHead({ batch, active }: { batch: NonNullable<State["batch"]>; active: boolean }) {
+  const read = batch.papers.filter((p) => p.read).length;
+  const flagged = batch.papers.filter((p) => p.read && p.flags > 0).length;
+  const current = batch.papers.find((p) => p.now);
+  return (
+    <div className="batch-head">
+      <p className="m-0">
+        <strong>{active ? `Paper ${batch.at} of ${batch.of}` : `Done: ${read} of ${batch.of} read`}</strong>
+        {active && current ? `: ${current.name}` : !active ? `, ${flagged} with flags to review` : ""}
+      </p>
+      <progress className="batch-bar" max={batch.of} value={read}>{read} of {batch.of}</progress>
+    </div>
+  );
+}
+
+/** Read all: every paper with where it stands; a read paper links to its review screen. */
+function BatchList({ papers, active }: { papers: BatchPaper[]; active: boolean }) {
+  return (
+    <details className="batch-list" open={!active}>
+      <summary className="muted">The papers in this run</summary>
+      <ol className="read-plan">
+        {papers.map((p) => (
+          <li key={p.docId} className="batch-paper">
+            <span>{p.name}</span>
+            <span className={p.read ? (p.flags ? "pill pill-warn" : "pill pill-ok") : p.now && active ? "pill pill-busy" : "pill"}>
+              {p.read ? (p.flags ? `${p.flags} flag${p.flags === 1 ? "" : "s"}` : "Ready") : p.now && active ? "Reading now" : active ? "Waiting" : "Not read"}
+            </span>
+            {/* A plain link: the review screen needs its own page load for its PDF frame. */}
+            {p.read ? <a className="link" href={`/admin/library/review/${encodeURIComponent(p.docId)}`}>Review</a> : <span />}
+          </li>
+        ))}
+      </ol>
+    </details>
   );
 }
