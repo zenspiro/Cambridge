@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-09: Read with: choose the AI for one reading
+
+**What:** Read this paper and Read it again have a "Read with" list: the saved Reading AI first (marked), every other Claude model the key offered at the last AI setup check, and Gemini alone (no second reader). Each choice shows its rough cost for this paper; one past the monthly cap cannot be picked, and the server checks the chosen one's cost again. The choice is for that reading only: the Reading AI on AI setup stays as it is. The run keeps the choice (`params.reader`, a Claude model id or "gemini", anything else dropped); the job gives it to the script as `models.reading` or `readWith: "gemini"`. Gemini alone: Gemini reads, Claude is never asked (no Claude key needed), the checks run without a second reader, and the reading's score is listed as "Gemini ... alone". Reading one item again from a flag still uses the Reading AI.
+
+**Why:** owner, 9 Nov 2026: "a function to switch AI model when doing the Read again", to compare models on the same paper.
+
+**Tested:** `npm run check` exits 0 (245 unit tests; new: the choices and their order, each priced on its own, Gemini alone priced without Claude, a run keeping only a valid reader). Browser suite from a fresh database, all passing (new: the Read with list with the Reading AI first, Gemini alone and a cost on every choice; a Gemini-alone run where Claude is never asked and no Claude spend is recorded). Images: figures are still cut from the PDF (no AI); trying Gemini or OpenAI drawing belongs with question writing (step 3).
+
 ## 2026-11-09: Fractions read from the page, nuclides set digit by digit, checks run on the live papers
 
 **What:** Stacked fractions are read from where they sit: the script draws each page (`pdftocairo -svg`), finds the fraction bars (thin filled strips; table rules are stroked), and the words just above and below a bar become \frac{numerator}{denominator}, a part's own powers included (y⁸ over 16x¹⁶), shortest bars first so a fraction inside a fraction works, a whole number before it a mixed number (43⅓), and the fraction is put back on the line it sits on ("C = ¼xy²"). Underlined words in mark schemes are not fractions (running text either side). The AI is asked for \frac too; Unicode fractions become it. New red flag: a fraction whose parts the reading runs together ("4/x − 1" for 4 over x − 1); \frac or a/b with brackets are both exact. A formula before the first part ("C = ¼xy²" before 3(a)(i)) counts as a lead-in. The review screen draws fractions stacked. Nuclides whose digits are set one by one ("9" "0" over "3" "8", as in Mar 2025 Paper 42) are read whole. A page goes to Claude as text instead of a picture only when it was a picture for its formula pieces and the rebuilt page has fractions and nothing left in pieces.

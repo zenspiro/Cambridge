@@ -18,7 +18,7 @@ import { RunProgress } from "@/components/RunProgress";
 import { loadPages, PAPER_KINDS, paperDoc, paperView, type PaperView } from "@/lib/brain/paperRead";
 import { isActive, runState } from "@/lib/brain/runs";
 import { modelName } from "@/lib/brain/labels";
-import { estimateWords, paperCostCheck, usdWords, type CostCheck } from "@/lib/brain/spend";
+import { estimateWords, readerChoices, usdWords, type ReaderChoice } from "@/lib/brain/spend";
 import type { PaperKind } from "@/lib/brain/paper";
 
 export const metadata: Metadata = { title: "Review" };
@@ -71,10 +71,10 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
   const isPaper = PAPER_KINDS.includes(doc.docType as PaperKind);
   const info = isPaper ? await paperDoc(env.DB, doc.id) : null;
   const view = info ? await paperView(env.DB, env.FILES, info) : null;
-  const [pageCount, run, cost] = view ? await Promise.all([
+  const [pageCount, run, choices] = view ? await Promise.all([
     view.content ? loadPages(env.FILES, doc.id).then((p) => p.length) : Promise.resolve(0),
     view.row?.jobId ? runState(env.DB, view.row.jobId) : Promise.resolve(null),
-    paperCostCheck(env.DB, env, doc.bytes),
+    readerChoices(env.DB, env, doc.bytes),
   ]) : [0, null, null];
   const busy = isActive(run);
   const facts = (
@@ -108,7 +108,7 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
           </nav>
         ) : <span />}
       </div>
-      {view && cost ? <ReadingCard docId={doc.id} view={view} cost={cost} run={run} busy={busy} facts={facts} canFix={canFix} canRead={canRead} /> : null}
+      {view && choices?.length ? <ReadingCard docId={doc.id} view={view} choices={choices} run={run} busy={busy} facts={facts} canFix={canFix} canRead={canRead} /> : null}
       {view?.content ? (
         <PaperReview
           docId={doc.id}
@@ -159,11 +159,13 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
 }
 
 /** The paper's reading: its state, Read this paper (with the rough cost), ready anyway, live progress and recent fixes. */
-function ReadingCard({ docId, view, cost, run, busy, facts, canFix, canRead }: {
-  docId: string; view: PaperView; cost: CostCheck; run: Awaited<ReturnType<typeof runState>>; busy: boolean; facts: React.ReactNode; canFix: boolean; canRead: boolean;
+function ReadingCard({ docId, view, choices, run, busy, facts, canFix, canRead }: {
+  docId: string; view: PaperView; choices: ReaderChoice[]; run: Awaited<ReturnType<typeof runState>>; busy: boolean; facts: React.ReactNode; canFix: boolean; canRead: boolean;
 }) {
   const base = `/admin/library/review/${encodeURIComponent(docId)}`;
   const read = !!view.content;
+  // The saved Reading AI's rough cost leads; "Read with" offers the others for this reading only (owner, 9 Nov 2026).
+  const cost = choices[0]!.check;
   const override = !!view.row?.overrideAt;
   const cutAgain = (view.content?.figures ?? []).filter((f) => f.cut !== "manual").map((f) => f.id).slice(0, 50);
   const pill = !read ? <span className="pill">Not read</span>
@@ -183,7 +185,17 @@ function ReadingCard({ docId, view, cost, run, busy, facts, canFix, canRead }: {
       <div className="row-actions">
         {!busy && canRead ? (
           <ActionForm action={`${base}/read`} messages={MESSAGES} yes="Yes, proceed" no="No"
-            confirm={`${read ? "Read the paper again? Confirmed items stay; flagged and missing ones are read again." : "Read this paper?"} This uses AI tokens: ${cost.estimate.usd === null ? "cost unknown" : `about ${usdWords(cost.estimate.usd)}`}. Proceed?`}>
+            confirm={`${read ? "Read the paper again? Confirmed items stay; flagged and missing ones are read again." : "Read this paper?"} This uses AI tokens: the rough cost is beside the AI you chose. Proceed?`}>
+            <span className="read-with">
+              <label className="label-inline" htmlFor="read-with">Read with</label>
+              <select className="input" id="read-with" name="reader" defaultValue="">
+                {choices.map((c) => (
+                  <option key={c.value || "saved"} value={c.value} disabled={c.check.verdict === "over_cap"}>
+                    {c.label}: {c.check.estimate.usd === null ? "price not set" : `about ${usdWords(c.check.estimate.usd)}`}{c.check.verdict === "over_cap" ? " (past the cap)" : ""}
+                  </option>
+                ))}
+              </select>
+            </span>
             <button className="btn btn-primary" type="submit">{read ? "Read it again" : "Read this paper"}</button>
           </ActionForm>
         ) : null}
@@ -210,7 +222,7 @@ function ReadingCard({ docId, view, cost, run, busy, facts, canFix, canRead }: {
       </div>
       {!busy && canRead ? (
         <p className={cost.verdict === "ok" ? "muted" : "alert"}>
-          {estimateWords(cost.estimate)}
+          {estimateWords(cost.estimate)}{choices.length > 1 ? " Pick another AI in Read with for this reading only; your Reading AI on AI setup stays as it is." : ""}
           {cost.cap > 0 ? ` This month: ${usdWords(cost.spent)} of your ${usdWords(cost.cap)} cap.` : ""}
           {cost.verdict === "over_cap" ? " This would go past the cap, so it will not start." : cost.verdict === "no_price" ? " With a cap set, runs need a price for every model in use." : ""}
         </p>
@@ -223,7 +235,7 @@ function ReadingCard({ docId, view, cost, run, busy, facts, canFix, canRead }: {
             {[...view.row.scores].reverse().map((s) => (
               <li key={s.at}>
                 <ScoreBadge score={s.score} />{" "}
-                <span>{s.claude ? modelName(s.claude) : "Claude"}{s.gemini ? `, checked by ${modelName(s.gemini)}` : ""}</span>{" "}
+                <span>{s.claude ? `${modelName(s.claude)}${s.gemini ? `, checked by ${modelName(s.gemini)}` : ""}` : s.gemini ? `${modelName(s.gemini)} alone` : "Claude"}</span>{" "}
                 <span className="muted">{dateFmt.format(s.at)}, {s.score.clean} of {s.score.items} parts with no flag</span>
               </li>
             ))}

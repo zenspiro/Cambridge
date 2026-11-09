@@ -139,6 +139,15 @@ test("paper runs: started with a scope, progress events kept in order, a reading
   const id = (await startPaperRun(db, "doc-qp-1", { items: [], figures: [] }, "platform-admin", NOW))!;
   assert.ok(id);
   assert.deepEqual(await claimBrainRun(db, id, null, NOW + 1), { task: "paper", docId: "doc-qp-1", scope: { items: [], figures: [] } });
+  // "Read with": a run keeps the AI chosen for it; anything that is not a Claude model or "gemini" is dropped.
+  const db2 = testDb();
+  seedDoc(db2);
+  const r2 = (await startPaperRun(db2, "doc-qp-1", { items: [], figures: [] }, "platform-admin", NOW, "gemini"))!;
+  assert.equal((await claimBrainRun(db2, r2, null, NOW + 1) as { reader?: string }).reader, "gemini");
+  const db3 = testDb();
+  seedDoc(db3);
+  const r3 = (await startPaperRun(db3, "doc-qp-1", { items: [], figures: [] }, "platform-admin", NOW, "gpt-5"))!;
+  assert.equal((await claimBrainRun(db3, r3, null, NOW + 1) as { reader?: string }).reader, undefined);
   for (let i = 0; i < BRAIN.maxRunEvents + 5; i++) await brainStep(db, id, `step ${i}`, NOW + 2 + i, cleanEvent({ stage: "claude", state: "start", text: `step ${i}` }, NOW + 2 + i));
   const st = (await runState(db, id, NOW + 100))!;
   assert.equal(st.events.length, BRAIN.maxRunEvents, "kept to the limit");

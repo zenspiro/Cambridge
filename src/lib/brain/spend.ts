@@ -8,7 +8,8 @@ import type { Db } from "../db.ts";
 import { randomId } from "../auth/crypto.ts";
 import { audit } from "../auth/session.ts";
 import { BRAIN } from "../config.ts";
-import { aiModels } from "./aiSetup.ts";
+import { aiModels, lastCheck } from "./aiSetup.ts";
+import { modelName } from "./labels.ts";
 
 export type Provider = "claude" | "gemini";
 export type Price = { in: number; out: number };
@@ -326,9 +327,10 @@ export function estimateWords(e: Estimate): string {
  */
 export function estimatePaper(models: { reading: string; gemini: string }, pdfBytes: number, history: { paper: readonly ModelHistory[] }, prices: Prices): Estimate {
   const pages = Math.max(1, Math.ceil(pdfBytes / BRAIN.estBytesPerPage));
+  // "gemini" as the reader: Gemini reads alone, no Claude (owner, 9 Nov 2026, "Read with").
   const parts = [
     { model: models.gemini, h: history.paper.find((x) => x.model === models.gemini && x.runs > 0) },
-    { model: models.reading, h: history.paper.find((x) => x.model === models.reading && x.runs > 0) },
+    ...(models.reading === "gemini" ? [] : [{ model: models.reading, h: history.paper.find((x) => x.model === models.reading && x.runs > 0) }]),
   ];
   const missing = [...new Set(parts.map((p) => p.model).filter((m) => !prices[m]))];
   let usd = 0;
@@ -347,6 +349,30 @@ export async function paperCostCheck(db: Db, env: { CLAUDE_MODEL?: string; GEMIN
   const [paper, summary] = await Promise.all([taskHistory(db, "paper", [models.reading, models.gemini]), spendBetween(db, month.from, month.to, prices)]);
   const estimate = estimatePaper(models, pdfBytes, { paper }, prices);
   return { estimate, cap, spent: summary.total, verdict: capCheck(cap, summary.total, estimate) };
+}
+
+/** One choice in "Read with": the AI that reads this one paper, its words and its rough cost against the cap. */
+export type ReaderChoice = { value: string; label: string; check: CostCheck; current: boolean };
+
+/**
+ * "Read with" (owner, 9 Nov 2026: switch the AI for Read it again): the saved Reading AI first, then every other Claude
+ * model the key offered at the last AI setup check, then Gemini reading alone (no second reader). Each with its rough
+ * cost for this paper and whether the cap lets it start. The saved Reading AI is not changed by a choice here.
+ */
+export async function readerChoices(db: Db, env: { CLAUDE_MODEL?: string; GEMINI_MODEL?: string }, pdfBytes: number, now = Date.now()): Promise<ReaderChoice[]> {
+  const [models, prices, cap, check] = await Promise.all([aiModels(db, env), readPrices(db), readCap(db), lastCheck(db)]);
+  const others = (check?.claudeModels ?? []).map((m) => m.name).filter((m) => m !== models.reading).slice(0, BRAIN.maxReaderChoices);
+  const claude = [models.reading, ...others].filter((m, i, a) => m && a.indexOf(m) === i);
+  const month = monthBounds(undefined, now);
+  const [paper, summary] = await Promise.all([taskHistory(db, "paper", [...claude, models.gemini]), spendBetween(db, month.from, month.to, prices)]);
+  const one = (reading: string): CostCheck => {
+    const estimate = estimatePaper({ reading, gemini: models.gemini }, pdfBytes, { paper }, prices);
+    return { estimate, cap, spent: summary.total, verdict: capCheck(cap, summary.total, estimate) };
+  };
+  return [
+    ...claude.map((m) => ({ value: m === models.reading ? "" : m, label: `${modelName(m)}${m === models.reading ? " (your Reading AI)" : ""}, checked by ${modelName(models.gemini)}`, check: one(m), current: m === models.reading })),
+    ...(models.gemini ? [{ value: "gemini", label: `${modelName(models.gemini)} alone (no second reader)`, check: one("gemini"), current: false }] : []),
+  ];
 }
 
 /** Read all's check before it starts: every paper's rough cost added up, against this month's spend and the cap. */
