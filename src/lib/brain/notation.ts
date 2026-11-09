@@ -571,6 +571,22 @@ const TOP_BAND = 55;
 const FOOT_BAND = 785;
 
 /**
+ * A page's words in printed order: lines from top to bottom (words whose bottoms are within 3 pt share a line), each
+ * line left to right, the first word of each line marked. The text layer's own order can differ (a question number
+ * written after the page's text). Pure.
+ */
+export function visualLines(words: readonly Word[]): Word[] {
+  const sorted = [...words].sort((a, b) => a.b[3] - b.b[3] || a.b[0] - b.b[0]);
+  const lines: Word[][] = [];
+  for (const w of sorted) {
+    const line = lines.at(-1);
+    if (line && Math.abs(w.b[3] - line[0]!.b[3]) <= 3) line.push(w);
+    else lines.push([w]);
+  }
+  return lines.flatMap((l) => l.sort((a, b) => a.b[0] - b.b[0]).map((w, k) => ({ ...w, first: k === 0 })));
+}
+
+/**
  * The paper's questions and parts as printed: a question number alone at the left margin (the next number in turn),
  * a part letter "(a)" or numeral "(i)" at the start of a line (the next in turn; "(i)" after "(h)" is a letter only when
  * it lines up with the letters), and the words after each label up to the next one. Answer lines, [marks], the header
@@ -587,8 +603,11 @@ export function pdfOutline(pages: readonly (readonly Word[])[]): OutlinePart[] {
     cur = { number, page, text: "", words: [] };
     out.push(cur);
   };
-  pages.forEach((words, pi) => {
+  pages.forEach((raw, pi) => {
     const page = pi + 1;
+    // As printed, top to bottom (owner, 9 Nov 2026: Nov 2025 P42 stores the "2" of question 2 after its page's text).
+    // The margin warnings, header and footer are left out first, so they never start a line.
+    const words = visualLines(raw.filter((w) => !(w.b[1] < TOP_BAND || w.b[3] > FOOT_BAND || w.b[0] < 30 || w.b[2] > 565)));
     let prevLabelLine = -1;
     words.forEach((w, wi) => {
       if (w.b[1] < TOP_BAND || w.b[3] > FOOT_BAND || w.b[0] < 30 || w.b[2] > 565) return;
