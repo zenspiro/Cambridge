@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  capCheck, cleanPrices, cleanUsage, costUsd, estimateTopics, monthBounds, parseAmount, readCap, readPrices, recentRuns, recordSpend,
+  capCheck, cleanPrices, cleanUsage, costUsd, estimatePaper, estimateTopics, readerChoices, monthBounds, parseAmount, readCap, readPrices, recentRuns, recordSpend,
   saveCap, savePrice, spendBetween, summarise, taskHistory, topicsCostCheck, usdWords,
 } from "../../src/lib/brain/spend.ts";
 import { BRAIN } from "../../src/lib/config.ts";
@@ -123,4 +123,20 @@ test("recorded usage feeds the month, the latest runs, history and the Draft but
   assert.equal(c.verdict, "over_cap", "3 spent and about 3 more would pass the 5 cap");
   await saveCap(db, "10", "platform-admin", NOW);
   assert.equal((await topicsCostCheck(db, env, 1_000_000, NOW)).verdict, "ok");
+});
+
+test("Read with: the Reading AI first, the key's other Claude models, Gemini alone; each priced on its own", async () => {
+  const db = testDb();
+  const env = { CLAUDE_MODEL: "claude-sonnet-5-5", GEMINI_MODEL: "gemini-3.5-flash" };
+  await savePrice(db, "gemini-3.5-flash", "0", "0", "platform-admin", NOW);
+  db.raw.exec(`INSERT INTO setting (key, value, updated_by, updated_at) VALUES ('ai_models', '{"reading":"claude-haiku-5-5"}', 'x', ${NOW})`);
+  db.raw.exec(`INSERT INTO setting (key, value, updated_by, updated_at) VALUES ('ai_check', '${JSON.stringify({ claude: { model: "claude-sonnet-5-5", status: "works", detail: "" }, gemini: { model: "gemini-3.5-flash", status: "works", detail: "" }, models: [], claudeModels: [{ name: "claude-haiku-5-5", label: "Haiku", status: "works", detail: "" }, { name: "claude-opus-5-5", label: "Opus", status: "works", detail: "" }], at: NOW, claudeAt: NOW, geminiAt: NOW })}', 'brain', ${NOW})`);
+  const c = await readerChoices(db, env, 1_000_000, NOW);
+  assert.deepEqual(c.map((x) => x.value), ["", "claude-opus-5-5", "gemini"]);
+  assert.match(c[0]!.label, /Claude Haiku 5\.5 \(your Reading AI\), checked by Gemini 3\.5 Flash/);
+  assert.match(c[2]!.label, /Gemini 3\.5 Flash alone/);
+  assert.equal(c[2]!.check.estimate.usd, 0, "Gemini alone costs only Gemini (free here)");
+  assert.ok((c[1]!.check.estimate.usd ?? 0) > (c[0]!.check.estimate.usd ?? 0), "Opus costs more than Haiku");
+  // Gemini alone leaves Claude out of the estimate entirely (no price needed for it).
+  assert.deepEqual(estimatePaper({ reading: "gemini", gemini: "gemini-3.5-flash" }, 500_000, { paper: [] }, { "gemini-3.5-flash": { in: 0, out: 0 } }).missing, []);
 });

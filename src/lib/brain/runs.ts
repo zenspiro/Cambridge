@@ -5,13 +5,15 @@ import { BRAIN } from "../config.ts";
 import type { Db } from "../db.ts";
 import { randomId } from "../auth/crypto.ts";
 import { audit } from "../auth/session.ts";
+import { CLAUDE_MODEL_RE } from "./aiSetup.ts";
 import { checkNumbers, cleanDraft, isReady, type Disagreement, type Draft, type Problem, type TreeReport } from "./topics.ts";
 
 export type PaperScope = { items: string[]; figures: string[] };
+
 export type BrainParams =
   | { task: "topics"; syllabusId: string }
   | { task: "check"; which: "claude" | "gemini" | null }
-  | { task: "paper"; docId: string; scope: PaperScope; batch?: Batch };
+  | { task: "paper"; docId: string; scope: PaperScope; batch?: Batch; reader?: string };
 /** Read all (owner, 8 Nov 2026): one run reads these papers in turn; `docId` is the one being read now. */
 export type Batch = { docs: string[]; label: string };
 export type TreeStatus = "none" | "ready" | "not_ready";
@@ -79,14 +81,16 @@ export async function finishCheckRun(db: Db, id: string, now = Date.now()): Prom
  * "Read this paper" (or read one question again, or redraw one figure): a brain run for one question paper or mark
  * scheme. An empty scope reads the whole paper (keeping what is confirmed).
  */
-export async function startPaperRun(db: Db, docId: string, scope: PaperScope, actorId: string, now = Date.now()): Promise<string | null> {
-  const id = await startBrainRun(db, { task: "paper", docId, scope }, actorId, now);
+export async function startPaperRun(db: Db, docId: string, scope: PaperScope, actorId: string, now = Date.now(), reader?: string): Promise<string | null> {
+  // `reader` (owner, 9 Nov 2026): the AI chosen for this one reading ("Read with"); the saved Reading AI stays as it is.
+  const r = reader && isReader(reader) ? reader : undefined;
+  const id = await startBrainRun(db, { task: "paper", docId, scope, ...(r ? { reader: r } : {}) }, actorId, now);
   if (!id) return null;
   await db
     .prepare(`INSERT INTO paper_read (doc_id, job_id, updated_at) VALUES (?1, ?2, ?3) ON CONFLICT (doc_id) DO UPDATE SET job_id = ?2, updated_at = ?3`)
     .bind(docId, id, now)
     .run();
-  await audit(db, { actorId, action: "brain.paper_start", entity: "source_document", entityId: docId, detail: { job: id, items: scope.items.length, figures: scope.figures.length } }, now);
+  await audit(db, { actorId, action: "brain.paper_start", entity: "source_document", entityId: docId, detail: { job: id, items: scope.items.length, figures: scope.figures.length, ...(r ? { reader: r } : {}) } }, now);
   return id;
 }
 
@@ -246,6 +250,9 @@ export async function startTreeRun(db: Db, syllabusId: string, actorId: string, 
   return row.id;
 }
 
+/** A reader for one paper: a Claude model, or "gemini" (Gemini reads alone, no second reader). */
+export const isReader = (s: string) => s === "gemini" || CLAUDE_MODEL_RE.test(s);
+
 const readParams = (s: string): BrainParams | null => {
   try {
     const p = JSON.parse(s) as BrainParams;
@@ -256,7 +263,8 @@ const readParams = (s: string): BrainParams | null => {
       const b = (p as { batch?: { docs?: unknown; label?: unknown } }).batch;
       const docs = b && Array.isArray(b.docs) ? b.docs.filter((x): x is string => typeof x === "string" && DOC_ID_RE.test(x)).slice(0, BRAIN.maxBatchPapers) : [];
       const batch = docs.includes(p.docId) ? { docs, label: typeof b?.label === "string" ? b.label.slice(0, 120) : "" } : undefined;
-      return { task: "paper", docId: p.docId, scope: { items: list(sc.items), figures: list(sc.figures) }, ...(batch ? { batch } : {}) };
+      const reader = typeof p.reader === "string" && isReader(p.reader) ? p.reader : undefined;
+      return { task: "paper", docId: p.docId, scope: { items: list(sc.items), figures: list(sc.figures) }, ...(batch ? { batch } : {}), ...(reader ? { reader } : {}) };
     }
     return p?.task === "topics" && typeof p.syllabusId === "string" ? { task: "topics", syllabusId: p.syllabusId } : null;
   } catch {

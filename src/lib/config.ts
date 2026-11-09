@@ -159,6 +159,8 @@ export const BRAIN = {
   maxReadScores: 20,
   /** Read all (owner, 8 Nov 2026): papers one batch run reads at most, one after another, the cap checked before each. */
   maxBatchPapers: 24,
+  /** Other Claude models offered in "Read with" besides the Reading AI (owner, 9 Nov 2026). */
+  maxReaderChoices: 6,
   minPaperTextChars: 400,
   /** Brain run activity kept per run for the live progress panel. */
   maxRunEvents: 60,

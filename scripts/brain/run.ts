@@ -45,6 +45,8 @@ type PaperJob = {
   models: { claude: string; gemini: string; drawing: string; reading?: string }; limits: Limits;
   /** Read all (owner, 8 Nov 2026): this paper's place in the batch. */
   batch?: { at: number; of: number; label: string };
+  /** "Read with" (owner, 9 Nov 2026): "gemini" reads with Gemini alone, no Claude and no second reader. */
+  readWith?: "claude" | "gemini";
 };
 type Stage = "pdf" | "gemini" | "claude" | "retry" | "figures" | "checks" | "save";
 type StepEvent = { stage: Stage; state: "start" | "wait" | "done" | "fail" | "skip"; model?: string; tokens?: number };
@@ -516,9 +518,10 @@ async function cutFigures(job: PaperJob, content: PaperContent, bytes: Uint8Arra
 async function runPaper(job: PaperJob) {
   // The Reading AI reads papers (owner, 8 Nov 2026); without one the main AI does.
   const reader = job.models.reading || job.models.claude;
-  if (!CLAUDE_KEY) throw new Stop("claude_key", "the GitHub secret CLAUDE_API_KEY is not set");
+  const alone = job.readWith === "gemini";
+  if (!CLAUDE_KEY && !alone) throw new Stop("claude_key", "the GitHub secret CLAUDE_API_KEY is not set");
   if (!GEMINI_KEY) throw new Stop("gemini_key", "the GitHub secret GEMINI_API_KEY is not set");
-  if (!reader || !job.models.gemini) throw new Stop("models", "no Claude or Gemini model is set (AI setup page or wrangler.jsonc)");
+  if ((!reader && !alone) || !job.models.gemini) throw new Stop("models", "no Claude or Gemini model is set (AI setup page or wrangler.jsonc)");
   if (job.pdfBytes > job.limits.maxPdfBytes) throw new Stop("pdf_too_big");
 
   await step(job.batch ? `Paper ${job.batch.at} of ${job.batch.of}: ${job.paper}` : "Fetching the paper", { stage: "pdf", state: "start" });
@@ -575,11 +578,13 @@ async function runPaper(job: PaperJob) {
   // the models that read it (owner, 8 Nov 2026: compare a cheaper Claude with the one in use).
   let fresh: PaperContent | null = null;
   const save = async (content: PaperContent, gemini: PaperContent | null, final: boolean) => {
-    const flags = paperFlags({ content, pages, gemini, outline });
+    // Gemini alone: its reading is the reading, so there is no second reader to compare with.
+    const second = alone ? null : gemini;
+    const flags = paperFlags({ content, pages, gemini: second, outline });
     if (final) await step(`Checks done: ${flags.length} flag${flags.length === 1 ? "" : "s"} for the review screen`, { stage: "checks", state: "done" });
     const own = final && fresh ? {
-      fresh: { items: fresh.items.map((i) => ({ number: i.number, marks: i.marks })), flags: paperFlags({ content: fresh, pages, gemini, outline }) },
-      models: { claude: reader, gemini: job.models.gemini },
+      fresh: { items: fresh.items.map((i) => ({ number: i.number, marks: i.marks })), flags: paperFlags({ content: fresh, pages, gemini: second, outline }) },
+      models: { claude: alone ? "" : reader, gemini: job.models.gemini },
     } : {};
     // `read`: a full reading (not a figures-only run), so the first one sets the paper's read accuracy.
     const r = await api("/api/brain/paper", { content, gemini, pages, flags, final, read: !figuresOnly, ...own });
@@ -596,7 +601,15 @@ async function runPaper(job: PaperJob) {
   } else await note("Gemini: not needed to cut a figure again", { stage: "gemini", state: "skip" });
 
   let content = prior;
-  if (!figuresOnly) {
+  if (!figuresOnly && alone) {
+    // Gemini alone (owner, 9 Nov 2026, "Read with"): Gemini's reading is merged and saved; Claude is not asked.
+    if (!gemini?.items.length) throw new Stop("gemini_bad_answer", "Gemini's reading had no questions (it read alone)");
+    await note("Claude: not asked (this reading is Gemini alone)", { stage: "claude", state: "skip" });
+    if (!scoped) fresh = gemini;
+    content = placeOnPages(mergeReading(prior, gemini, new Set(job.prior.open), scoped ? job.scope : undefined), pages);
+    await step("Saving Gemini's reading", { stage: "save", state: "start" });
+    await save(content, gemini, false);
+  } else if (!figuresOnly) {
     // Claude sees only the figure pages as pictures; every other page goes as its text (far fewer tokens). A paper
     // whose text cannot be read goes whole, as before.
     const readable = pages.join("").replace(/\s/g, "").length >= BRAIN.minPaperTextChars;

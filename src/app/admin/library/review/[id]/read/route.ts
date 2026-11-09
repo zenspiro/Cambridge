@@ -5,7 +5,7 @@ import { allow, limitKey } from "@/lib/ratelimit";
 import { dispatchBrain } from "@/lib/agent/github";
 import { failBrainRun, startPaperRun } from "@/lib/brain/runs";
 import { PAPER_KINDS, paperDoc } from "@/lib/brain/paperRead";
-import { paperCostCheck } from "@/lib/brain/spend";
+import { readerChoices } from "@/lib/brain/spend";
 import type { PaperKind } from "@/lib/brain/paper";
 
 const ITEM_RE = /^[0-9]{1,3}(\([a-z]{1,4}\)){0,3}$/;
@@ -22,12 +22,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const items = form.getAll("item").map(String).filter((x) => ITEM_RE.test(x)).slice(0, 50);
     const figures = form.getAll("figure").map(String).filter((x) => FIG_RE.test(x)).slice(0, 50);
     const size = await db.prepare(`SELECT size_bytes FROM source_document WHERE id = ?1`).bind(id).first<{ size_bytes: number }>();
+    // "Read with" (owner, 9 Nov 2026): the AI for this reading only, one of the choices the page offered; empty is the
+    // saved Reading AI. Its own rough cost is checked against the cap.
+    let reader: string | undefined;
     if (items.length || !figures.length) {
-      const cost = await paperCostCheck(db, env, size?.size_bytes ?? 0);
-      if (cost.verdict !== "ok") return cost.verdict;
+      const want = String(form.get("reader") ?? "");
+      const choice = (await readerChoices(db, env, size?.size_bytes ?? 0)).find((c) => c.value === want);
+      if (!choice) return "bad";
+      if (choice.check.verdict !== "ok") return choice.check.verdict;
+      reader = choice.value || undefined;
     }
     if (!(await allow(db, await limitKey("brain-run", actorId), BRAIN.runsPerHour, 3_600_000))) return "busy";
-    const jobId = await startPaperRun(db, id, { items, figures }, actorId);
+    const jobId = await startPaperRun(db, id, { items, figures }, actorId, Date.now(), reader);
     if (!jobId) return "running";
     let failure: string | null = null;
     try {

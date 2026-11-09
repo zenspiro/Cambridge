@@ -668,6 +668,19 @@ try {
   check((await page.locator("#to-review .score-red").count()) === 1, "the session page shows the read accuracy beside Review");
   check(rows(`SELECT first_items, first_clean FROM paper_read WHERE doc_id = '${paperId}'`)[0].first_items === 3, "the first reading's numbers are kept, unchanged by the free figure cut");
 
+  // "Read with" (owner, 9 Nov 2026): the AI for one reading, priced; Gemini alone never asks Claude.
+  await page.goto(`${BASE}/admin/library/review/${paperId}`);
+  const withOpts = await page.locator("#reading select[name=reader] option").allTextContents();
+  check(withOpts.length >= 2 && /\(your Reading AI\)/.test(withOpts[0] ?? "") && withOpts.some((o) => /alone \(no second reader\)/.test(o)) && withOpts.every((o) => /about \$|price not set/.test(o)),
+    `Read it again offers Read with: the Reading AI first, Gemini alone, each with its cost (${withOpts.join(" | ")})`);
+  const alone = `e2eg${Date.now()}`;
+  sql(`INSERT INTO job (id, type, status, params, created_by, created_at) VALUES ('${alone}', 'brain', 'queued', '{"task":"paper","docId":"${paperId}","scope":{"items":["1(b)"],"figures":[]},"reader":"gemini"}', 'platform-admin', ${Date.now()})`);
+  sql(`UPDATE paper_read SET job_id = '${alone}' WHERE doc_id = '${paperId}'`);
+  ai.seq.length = 0;
+  const rAlone = await runBrain(alone);
+  check(rAlone.status === 0 && ai.seq.filter((x) => x !== "claude").join(",") === "gemini-paper" && !ai.seq.includes("claude-paper"), `Gemini alone reads it and Claude is never asked (${ai.seq.join(",")})${rAlone.status ? ": " + rAlone.out.slice(-500) : ""}`);
+  check(rows(`SELECT COUNT(*) AS n FROM ai_spend WHERE job_id = '${alone}' AND provider = 'claude'`)[0].n === 0, "no Claude spend for a Gemini-alone reading");
+
   // 13. Read all (owner, 8 Nov 2026): the choice shows what it reads and the cost; one run reads the papers in turn.
   sql(`DELETE FROM source_document WHERE file_name IN ('0625_s24_qp_22.pdf', '0625_s24_qp_62.pdf')`);
   for (const [name, tag] of [["0625_s24_qp_22.pdf", "two"], ["0625_s24_qp_62.pdf", "six"]]) {

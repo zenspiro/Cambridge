@@ -8,7 +8,7 @@ import type { PaperKind } from "./paper.ts";
 import type { AiModels } from "./aiSetup.ts";
 import type { PaperScope, Batch } from "./runs.ts";
 
-export async function paperJobPayload(db: Db, files: Bucket, docId: string, scope: PaperScope, batch: Batch | undefined, models: AiModels, limits: Record<string, unknown>): Promise<Record<string, unknown> | null> {
+export async function paperJobPayload(db: Db, files: Bucket, docId: string, scope: PaperScope, batch: Batch | undefined, models: AiModels, limits: Record<string, unknown>, reader?: string): Promise<Record<string, unknown> | null> {
   const doc = await paperDoc(db, docId);
   if (!doc || !PAPER_KINDS.includes(doc.docType as PaperKind)) return null;
   const [{ papers }, subjects, size, prior] = await Promise.all([
@@ -25,7 +25,9 @@ export async function paperJobPayload(db: Db, files: Bucket, docId: string, scop
     scope,
     prior,
     ...(batch ? { batch: { at: batch.docs.indexOf(docId) + 1, of: batch.docs.length, label: batch.label } } : {}),
-    models: { claude: models.claude, gemini: models.gemini, drawing: models.drawing, reading: models.reading },
+    // "Read with" (owner, 9 Nov 2026): this reading's own Claude model, or Gemini alone; else the saved Reading AI.
+    models: { claude: models.claude, gemini: models.gemini, drawing: models.drawing, reading: reader && reader !== "gemini" ? reader : models.reading },
+    readWith: reader === "gemini" ? "gemini" : "claude",
     limits,
   };
 }

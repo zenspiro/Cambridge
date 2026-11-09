@@ -359,6 +359,10 @@
   .pq-cell-blank { @apply min-w-16 bg-slate-50; }
   /* Superscripts and subscripts stay readable (nothing below 14 px). */
   .admin sup, .admin sub { font-size: 0.875rem; }
+  /* "Read with" (owner, 9 Nov 2026): the AI for one reading, beside Read it again. */
+  .read-with { @apply inline-flex items-center gap-2; }
+  .read-with .input { @apply mt-0 w-auto max-w-xl; }
+  .read-with .label-inline { @apply inline; }
   .nota-stack { @apply inline-flex flex-col items-end align-middle text-sm leading-none; }
   .nota-frac { @apply mx-0.5 inline-flex flex-col items-center align-middle leading-tight; }
   .nota-num { @apply border-b border-current px-0.5; }
