@@ -258,3 +258,15 @@ test("an underlined word in a mark scheme is not a fraction", () => {
   const ws: W[] = [[281.6, 233.9, 315.8, 244.2, "square"], [319.5, 233.9, 337.7, 244.2, "and"], [341.1, 233.9, 377.7, 244.2, "precise"], [320, 243.5, 336, 253.8, "data"], [339, 243.5, 380, 253.8, "values"]];
   assert.equal(fractions(bboxWords(xml([[ws]]))[0]!, [[319.4, 242.4, 337.8, 243.2]]).count, 0);
 });
+
+test("the outline reads each page as printed, even when the text layer stores a question number after its text", () => {
+  // Nov 2025 Paper 42 page 4: "(a) A truck ..." comes first in the text layer, the "2" in the margin last.
+  const p4: W[][] = [
+    [[72.3, 62.2, 85.7, 76.5, "(a)"], [95.0, 62.2, 120.0, 76.5, "A"], [123, 62.2, 160, 76.5, "truck"], [163, 62.2, 200, 76.5, "moves."]],
+    [[93.9, 100, 106, 114, "(i)"], [117, 100, 170, 114, "Calculate"], [173, 100, 220, 114, "the"], [223, 100, 270, 114, "force."]],
+    [[49.6, 62.2, 55.4, 76.5, "2"]],
+  ];
+  const p3: W[][] = [[[49.6, 62.2, 55.4, 76.5, "1"], [72.3, 62.2, 85.7, 76.5, "(a)"], [95, 62.2, 150, 76.5, "State"], [153, 62.2, 190, 76.5, "this"], [193, 62.2, 230, 76.5, "now."]]];
+  const o = pdfOutline(bboxWords(xml([[], p3, p4])));
+  assert.deepEqual(o.map((x) => [x.number, x.text]), [["1", ""], ["1(a)", "State this now."], ["2", ""], ["2(a)", "A truck moves."], ["2(a)(i)", "Calculate the force."]]);
+});

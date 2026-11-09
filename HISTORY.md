@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-09: The paper's outline read as printed
+
+**What:** The outline (question numbers, part labels, lead-ins) now reads each page as printed, top to bottom and left to right (`visualLines`), after leaving out the margin warnings, header and footer, instead of the text layer's own order.
+
+**Why:** owner, 9 Nov 2026, on Nov 2025 Paper 42 after Read it again: question 2 got 2(b)'s words as its lead-in, and 2(a)'s lead-in stayed joined to 2(a)(i). The PDF stores page 4's "2" after the rest of the page's text, so "(a) A truck moves ..." was read while still on question 1, and the next text after the late "2" ("(b) Fig. 2.1 ...") became question 2's lead-in. "Give it its own part" then copied that wrong text. Found with read-only access to the live reading.
+
+**Tested:** `npm run check` exits 0 (246 unit tests; new: a question number stored after its page's text). The live Nov 2025 Paper 42 now gives all 61 questions and parts in order (2: no lead-in; 2(a): "A truck moves ..."; 2(b): "Fig. 2.1 shows a car ..."); March 2025 Papers 2, 4, 5 and 6 checked again with plausible flags. Browser suite from a fresh database, all passing.
+
 ## 2026-11-09: Run the checks again, and the review screen's Pages and Changes
 
 **What:** "Run the checks again" on every read paper (mark schemes included) and "Run the checks again on all" on the subject's Papers read card: no AI is asked and nothing is spent (no cost check); the reading as it stands, fixes included, is checked with today's checks (notation, lead-ins, tables, fractions) and saved with its new flags, and figures with no box are cut. The run is a paper run (or a batch) with `check: true`; the script needs no AI keys for it, and a check batch skips papers with no reading. "Cut figures from the PDF (free)" is now "Cut figures again". The review screen's panel has three tabs: Flags (as before), Pages (every page with its parts and figures, open flags and changes; a click opens that page on both sides) and Changes (every fix with what was done in words, the part, who (Owner or the team member), when, the words before and after, Undo; a click opens its page on both sides with the part marked). The Reading card's fold of fixes is gone.
