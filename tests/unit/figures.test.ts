@@ -2,7 +2,7 @@
 // -svg, pdftotext -bbox-layout); no Cambridge artwork is kept in the repo.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { assignBoxes, cleanArt, cleanBox, cropSvg, findBoxes, pageArt, pageSvg, textLines, wholePage } from "../../src/lib/brain/figures.ts";
+import { assignBoxes, cleanArt, cleanBox, cropSvg, findBoxes, labelBoxes, pageArt, pageSvg, textLines, wholePage } from "../../src/lib/brain/figures.ts";
 import { cleanPaper, figureFlag, paperFlags, placeOnPages } from "../../src/lib/brain/paper.ts";
 import { applyFix, figurePageSvg, figureSvg, loadContent, paperDoc, paperView, saveArt, savePaperReading } from "../../src/lib/brain/paperRead.ts";
 import { claimBrainRun, startPaperRun } from "../../src/lib/brain/runs.ts";
@@ -197,4 +197,17 @@ test("figures stored, served cut, and a box drawn by hand saved and undone", asy
   assert.ok((await paperView(db, bucket, doc)).open.some((f) => f.kind === "figure"), "and its flag");
   assert.equal(await applyFix(db, bucket, doc, "box", { item: "F1", box: "whole" }, "platform-admin", NOW + 30), "ok_fixed");
   assert.equal((await loadContent(bucket, "doc-qp-fig", "qp"))!.figures[0]!.cut, "page");
+});
+
+test("a figure's labels by text alone: short lines between the question text and its printed label (Mar 2025 Paper 42, Fig. 7.1)", () => {
+  const xml = `<doc><page width="595" height="842"><flow>
+${block(line(72, 62, 421, 76, word("(a)", 72, 62, 85, 76) + word("Fig.", 95, 62, 110, 76) + word("7.1 is a scale drawing of light waves approaching a narrow slit.", 112, 62, 421, 76)))}
+${block(line(150, 110, 291, 126, word("SCALE", 150, 110, 190, 126) + word("1.0 cm", 193, 110, 230, 126)))}
+${block(line(165, 187, 219, 201, word("direction", 165, 187, 200, 201) + word("of", 203, 187, 219, 201)))}
+${block(line(72, 300, 300, 314, word("Use", 72, 300, 90, 314) + word("the sheet provided.", 93, 300, 300, 314)))}
+${block(line(279, 498, 317, 512, word("Fig.", 279, 498, 295, 512) + word("7.1", 297, 498, 317, 512)))}
+${block(line(118, 524, 362, 538, word("Name", 118, 524, 150, 538) + word("the wave effect.", 153, 524, 362, 538)))}
+</flow></page></doc>`;
+  const boxes = labelBoxes(textLines(xml));
+  assert.deepEqual(boxes, [[150, 110, 291, 126], [165, 187, 219, 201]], "the labels, not the question, a sentence or the text after the label");
 });

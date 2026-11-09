@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-09: Figures belong to the lead-in that prints them
+
+**What:** the outline leaves out each labelled figure's drawing with its labels (`findBoxes` captions, plus `labelBoxes`: short label lines between the last question line and a "Fig. N.N" line) and the "Fig. 2.1 (not drawn to scale)" line itself (`isCaptionLine`); a full sentence is always kept. `figuresToLeads` moves a figure from a part to the lead-in that says "Fig. N.N" (on every save and on "Give it its own part"). A lead-in item holding a figure's words (`leadExtra`: every printed lead-in word plus two or more others, numbers counted) gets a red flag `structure:<n>:lead` whose "Use the PDF's version" gives the paper's own words (`isSplitFlag` tells it from a split). The prompt says a figure printed before the first part goes on the lead-in. `CHECKS_VERSION` 3.
+
+**Why:** owner, 9 Nov 2026, on Mar 2025 Paper 42: Fig. 2.1 showed under 2(a) though (a) and (b) both answer from it, and question 2's lead-in read "... direction of motion A B bench Fig. 2.1 (not drawn to scale)".
+
+**Tested:** `npm run check` exits 0 (249 unit tests; new: the outline without a figure's labels and caption, a sentence kept inside a figure's box, label lines by text, figures moved to their lead-in, the lead-in flag and its fix). On the live Mar 2025 Papers 22, 42, 52 and 62, Nov 2025 Paper 42 and the June 2024 Physics, Chemistry and Maths papers (read-only), every word the outline now leaves out is a figure's label or axis value; Paper 42's figures 1.1, 2.1 and 3.1 move to questions 1, 2 and 3, and those lead-ins get the new flag. Browser suite from a fresh database, all 592 checks passing.
+
 ## 2026-11-09: A fixed part stays in view before the next flag
 
 **What:** after a fix on the review screen (Use the PDF's version, Give it its own part, Edit it yourself, It's fine, Looks right), the screen stays on that part as it now reads, outlined in green with "Fixed. This is how it reads now." (or "Saved, but a flag is still open on this part."), a Next flag button (the next open flag after it in the paper; J and K too) and Undo of that fix. "Give it its own part" outlines the new lead-in and the part. An Undo from the note or from Changes stays on the part the same way ("Undone."). A whole-paper flag still moves on as before. `ActionForm` gains `onDone`.

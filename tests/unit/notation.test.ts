@@ -6,9 +6,9 @@ import assert from "node:assert/strict";
 import {
   fractionBars, fractions, fractionsIn, joinFractionLines, linearFraction, notationTree,
   applyNotation, bboxWords, leadInProblems, lostNotation, normaliseNotation, notate, notatedPages, notationOn, notationParts, notationPlain,
-  pdfOutline, withoutLead, wordsText, type Word,
+  isCaptionLine, leadExtra, pdfOutline, withoutLead, wordsText, type Word,
 } from "../../src/lib/brain/notation.ts";
-import { cleanPaper, mergeReading, paperFlags, recheckItem, splitLeadIn, structureFlags } from "../../src/lib/brain/paper.ts";
+import { cleanPaper, figuresToLeads, isSplitFlag, mergeReading, paperFlags, recheckItem, splitLeadIn, structureFlags } from "../../src/lib/brain/paper.ts";
 
 type W = [number, number, number, number, string];
 /** Poppler's -bbox-layout shape: pages of lines of words. */
@@ -269,4 +269,62 @@ test("the outline reads each page as printed, even when the text layer stores a 
   const p3: W[][] = [[[49.6, 62.2, 55.4, 76.5, "1"], [72.3, 62.2, 85.7, 76.5, "(a)"], [95, 62.2, 150, 76.5, "State"], [153, 62.2, 190, 76.5, "this"], [193, 62.2, 230, 76.5, "now."]]];
   const o = pdfOutline(bboxWords(xml([[], p3, p4])));
   assert.deepEqual(o.map((x) => [x.number, x.text]), [["1", ""], ["1(a)", "State this now."], ["2", ""], ["2(a)", "A truck moves."], ["2(a)(i)", "Calculate the force."]]);
+});
+
+test("a lead-in is question text only: a figure's labels and its printed label are left out (Mar 2025 Paper 42, question 2)", () => {
+  const p4: W[][] = [
+    [[49.6, 62, 55.4, 76, "2"], [72.3, 62, 110, 76, "Trolley"], [113, 62, 125, 76, "A"], [128, 62, 160, 76, "moves."]],
+    [[72.3, 88, 90, 102, "Fig."], [93, 88, 110, 102, "2.1"], [113, 88, 145, 102, "shows"], [148, 88, 170, 102, "trolley"], [173, 88, 185, 102, "A."]],
+    [[184, 120, 230, 134, "direction"], [233, 120, 245, 134, "of"], [248, 120, 290, 134, "motion"]],
+    [[262, 220, 270, 234, "A"], [600, 220, 610, 234, "B"]],
+    [[517, 300, 560, 314, "bench"]],
+    // A short sentence just above the drawing stays, even inside its box.
+    [[72.3, 330, 100, 344, "Use"], [103, 330, 120, 344, "the"], [123, 330, 160, 344, "sheet"], [163, 330, 200, 344, "provided."]],
+    [[385, 480, 405, 494, "Fig."], [408, 480, 425, 494, "2.1"], [428, 480, 460, 494, "(not"], [463, 480, 490, 494, "drawn"], [493, 480, 505, 494, "to"], [508, 480, 540, 494, "scale)"]],
+    [[72.3, 520, 85.7, 534, "(a)"], [95, 520, 130, 534, "State"], [133, 520, 170, 534, "the"], [173, 520, 230, 534, "momentum."]],
+  ];
+  const words = bboxWords(xml([[], p4]));
+  const figure: [number, number, number, number] = [60, 110, 565, 470];
+  const before = pdfOutline(words).find((x) => x.number === "2")!.text;
+  assert.match(before, /direction of motion/, "without the figure's box its labels are read as text");
+  const lead = pdfOutline(words, [[], [figure]]).find((x) => x.number === "2")!.text;
+  assert.equal(lead, "Trolley A moves. Fig. 2.1 shows trolley A. Use the sheet provided.");
+  assert.equal(isCaptionLine("Fig. 2.1 (not drawn to scale)"), true);
+  assert.equal(isCaptionLine("Fig. 2.1 shows trolley A."), false);
+  // A lead-in item with the labels read into it: the extra words, numbers included; none once it reads as printed.
+  assert.deepEqual(leadExtra(`${lead} direction of motion A B bench Fig. 2.1 (not drawn to scale)`, lead).slice(0, 3), ["direction", "of", "motion"]);
+  assert.ok(leadExtra("Fig. 1.1 shows a force-extension graph for a spring. 5000 4000 force / N", "Fig. 1.1 shows a force-extension graph for a spring.").includes("5000"));
+  assert.deepEqual(leadExtra(lead, lead), []);
+});
+
+test("a figure printed in a lead-in goes on the lead-in, not its first part; a lead-in with a figure's words is flagged", () => {
+  const c = cleanPaper({
+    items: [
+      { number: "2", page: 4, text: "Trolley A moves. Fig. 2.1 shows trolley A. direction of motion bench Fig. 2.1 (not drawn to scale)", marks: null, figures: [] },
+      { number: "2(a)", page: 4, text: "State the momentum.", marks: 1, figures: ["F2"] },
+      { number: "2(b)", page: 4, text: "Calculate the mass.", marks: 3, figures: ["F2"] },
+      { number: "3(a)", page: 5, text: "Fig. 3.1 shows a heater. State the region.", marks: 1, figures: ["F3"] },
+    ],
+    figures: [{ id: "F2", page: 4, caption: "Fig. 2.1", description: "" }, { id: "F3", page: 5, caption: "Fig. 3.1 heater", description: "" }],
+  }, "qp");
+  const moved = figuresToLeads(c);
+  assert.deepEqual(moved.items.map((i) => [i.number, i.figures]), [["2", ["F2"]], ["2(a)", []], ["2(b)", []], ["3(a)", ["F3"]]], "only a lead-in that says Fig. 2.1 takes it");
+  // Splitting a lead-in off its first part takes the figure with it.
+  const split = splitLeadIn(c, "3(a)", "3", "Fig. 3.1 shows a heater.")!;
+  assert.deepEqual(split.items.filter((i) => i.number.startsWith("3")).map((i) => [i.number, i.figures]), [["3", ["F3"]], ["3(a)", []]]);
+  const outline = [
+    { number: "2", page: 4, text: "Trolley A moves. Fig. 2.1 shows trolley A." },
+    { number: "2(a)", page: 4, text: "State the momentum." },
+    { number: "2(b)", page: 4, text: "Calculate the mass." },
+    { number: "3", page: 5, text: "Fig. 3.1 shows a heater." },
+    { number: "3(a)", page: 5, text: "State the region." },
+  ];
+  const flag = structureFlags(moved.items, outline).find((f) => f.key === "structure:2:lead")!;
+  assert.ok(flag && flag.item === "2" && flag.pdfText === "Trolley A moves. Fig. 2.1 shows trolley A.");
+  assert.equal(isSplitFlag(flag), false, "its fix is the paper's words, not a split");
+  assert.equal(isSplitFlag({ kind: "structure", key: "structure:3(a):3" }), true);
+  // Once the lead-in reads as printed, the flag is settled.
+  const fixed = { ...moved, items: moved.items.map((i) => (i.number === "2" ? { ...i, text: flag.pdfText } : i)) };
+  assert.ok(!recheckItem(fixed, [flag], "2", ["Trolley A moves. Fig. 2.1 shows trolley A."]).some((f) => f.key === flag.key));
+  assert.ok(recheckItem(moved, [flag], "2", ["Trolley A moves. Fig. 2.1 shows trolley A."]).some((f) => f.key === flag.key), "still flagged while the labels are there");
 });

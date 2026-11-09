@@ -13,7 +13,7 @@ import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { assignBoxes, findBoxes, pageArt, textLines, type Box, type FigureCut } from "../../src/lib/brain/figures.ts";
+import { assignBoxes, findBoxes, labelBoxes, pageArt, textLines, type Box, type FigureCut } from "../../src/lib/brain/figures.ts";
 import { signRequest } from "../../src/lib/agent/sign.ts";
 import { allPagesInfo, allPagesText } from "../../src/lib/pdf/firstPage.ts";
 import { fractionBars, notatedPages, pdfOutline, type Bar, type OutlinePart } from "../../src/lib/brain/notation.ts";
@@ -21,7 +21,7 @@ import {
   PAPER_SCHEMA, PAPER_SCHEMA_GEMINI, PAPER_SYSTEM, paperPrompt,
   retryPrompt, TOPIC_SCHEMA, TOPIC_SCHEMA_GEMINI, TOPIC_SYSTEM, topicPrompt,
 } from "../../src/lib/brain/prompts.ts";
-import { blankPages, cleanPaper, keptPages, mergeReading, paperFlags, picturePages, placeOnPages, remapPages, textPagesBlock, type PaperContent, type PaperKind } from "../../src/lib/brain/paper.ts";
+import { blankPages, cleanPaper, figuresToLeads, keptPages, mergeReading, paperFlags, picturePages, placeOnPages, remapPages, textPagesBlock, type PaperContent, type PaperKind } from "../../src/lib/brain/paper.ts";
 import {
   checkNumbers, checkWords, cleanDraft, compareDrafts, isReady, missingHeadings, retryNotes, textIndex,
   type Draft, type Problem, type TextIndex, type TreeReport,
@@ -548,19 +548,31 @@ async function runPaper(job: PaperJob) {
       await writeFile(pdf, doc.bytes);
       // Fraction bars from each page's drawing (blank pages and the cover have none worth reading).
       const blank = blankPages(rawPages);
+      const xml = await run("pdftotext", ["-bbox-layout", pdf, "-"]);
+      const pageXml = [...xml.matchAll(/<page [^>]*>[\s\S]*?<\/page>/g)].map((m) => m[0]);
       const bars: Bar[][] = [];
+      // Each labelled figure's drawing with its labels: left out of the outline, so a lead-in is only question text.
+      const figs: Box[][] = [];
       for (let p = 1; p <= rawPages.length; p++) {
         if (p === 1 || blank.includes(p)) {
           bars.push([]);
+          figs.push([]);
           continue;
         }
         const out = join(dir, `bars${p}.svg`);
         await run("pdftocairo", ["-svg", "-f", String(p), "-l", String(p), pdf, out]);
-        bars.push(fractionBars(await readFile(out, "utf8")));
+        const svg = await readFile(out, "utf8");
+        bars.push(fractionBars(svg));
+        try {
+          const lines = textLines(pageXml[p - 1] ?? "");
+          figs.push([...findBoxes(pageArt(svg, p), lines).captions.map((c) => c.box), ...labelBoxes(lines)]);
+        } catch {
+          figs.push([]);
+        }
       }
-      const n = notatedPages(rawPages, await run("pdftotext", ["-bbox-layout", pdf, "-"]), bars);
+      const n = notatedPages(rawPages, xml, bars);
       pages = n.pages;
-      outline = pdfOutline(n.words);
+      outline = pdfOutline(n.words, figs);
       log(`notation: ${n.found} superscripts and subscripts, ${n.fractions} fractions, text from ${n.from}; outline: ${outline.length} questions and parts`);
     } finally {
       await rm(dir, { recursive: true, force: true });
@@ -585,6 +597,8 @@ async function runPaper(job: PaperJob) {
   const save = async (content: PaperContent, gemini: PaperContent | null, final: boolean) => {
     // Gemini alone: its reading is the reading, so there is no second reader to compare with.
     const second = alone ? null : gemini;
+    // A figure printed before a question's first part goes on its lead-in (owner, 9 Nov 2026).
+    content = figuresToLeads(content);
     const flags = paperFlags({ content, pages, gemini: second, outline });
     if (final) await step(`Checks done: ${flags.length} flag${flags.length === 1 ? "" : "s"} for the review screen`, { stage: "checks", state: "done" });
     const own = final && fresh ? {

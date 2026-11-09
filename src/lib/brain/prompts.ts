@@ -117,7 +117,7 @@ export function paperPrompt(kind: "qp" | "ms", paper: string, only: readonly str
   const what = kind === "qp"
     ? `items: every question and question part, in the paper's order and with the paper's own structure.
 - number: as printed, joined: "1", "1(a)", "3(b)(ii)".
-- Lead-ins: a question or part that has parts under it gets its own item holding exactly the words printed before its first part (its lead-in), with marks null and answerLines 0. For example question 9 prints a sentence, then (a) prints a sentence, then (a)(i) and (a)(ii): that is four items, "9", "9(a)", "9(a)(i)", "9(a)(ii)", each with its own words. Leave the item out only when nothing is printed before its first part. Never join a lead-in to its first part or repeat it there.
+- Lead-ins: a question or part that has parts under it gets its own item holding exactly the words printed before its first part (its lead-in), with marks null and answerLines 0. For example question 9 prints a sentence, then (a) prints a sentence, then (a)(i) and (a)(ii): that is four items, "9", "9(a)", "9(a)(i)", "9(a)(ii)", each with its own words. Leave the item out only when nothing is printed before its first part. Never join a lead-in to its first part or repeat it there. A figure printed before the first part ("Fig. 2.1 shows ..." in the lead-in) goes in the lead-in item's figures, not the parts'; its labels and its "Fig. 2.1" line are never part of any item's text.
 - page: the page it starts on (the PDF's page number, 1 for the cover).
 - text: the wording exactly as printed, without its tables (they go in tables) and without answer lines.
 - marks: the [marks] printed for it, or null when none are printed.

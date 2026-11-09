@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { ActionForm } from "@/components/ActionForm";
 import { Notation, PaperTables } from "@/components/Notation";
-import { isLeadIn, isStale, type Flag, type FlagColour, type PaperItem } from "@/lib/brain/paper";
+import { isLeadIn, isSplitFlag, isStale, type Flag, type FlagColour, type PaperItem } from "@/lib/brain/paper";
 import type { FixView } from "@/lib/brain/paperRead";
 
 export type ReviewFigure = { id: string; page: number; caption: string; description: string; shown: boolean; cut: string };
@@ -545,10 +545,10 @@ function FlagBox({ flag, base, busy, item, current, onAdjust, canFix, canRead, o
         ) : (
           <>
             {flag.pdfText && isItem ? (
-              <ActionForm action={fix} messages={MESSAGES} onDone={flag.kind === "structure" ? onFixed([flag.item, flag.key.split(":").at(-1) ?? ""]) : done}>
+              <ActionForm action={fix} messages={MESSAGES} onDone={isSplitFlag(flag) ? onFixed([flag.item, flag.key.split(":").at(-1) ?? ""]) : done}>
                 <input type="hidden" name="action" value="pdf" />
                 <input type="hidden" name="key" value={flag.key} />
-                <button className="btn btn-small" type="submit" disabled={stale}>{flag.kind === "structure" ? "Give it its own part" : "Use the PDF's version"}</button>
+                <button className="btn btn-small" type="submit" disabled={stale}>{isSplitFlag(flag) ? "Give it its own part" : "Use the PDF's version"}</button>
               </ActionForm>
             ) : null}
             {flag.item !== "paper" && canRead ? (

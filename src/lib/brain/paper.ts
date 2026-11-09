@@ -8,7 +8,7 @@
 import { BRAIN } from "../config.ts";
 import { coverage, similarity, squash, textIndex, type TextIndex } from "./topics.ts";
 import type { Box, FigureCut } from "./figures.ts";
-import { leadInProblems, lostNotation, normaliseNotation, notationPlain, withoutLead, type OutlinePart } from "./notation.ts";
+import { leadExtra, leadInProblems, lostNotation, normaliseNotation, notationPlain, withoutLead, type OutlinePart } from "./notation.ts";
 
 export type PaperKind = "qp" | "ms";
 export type PaperOption = { letter: string; text: string };
@@ -70,9 +70,9 @@ export type Flag = {
 
 /**
  * Bump when a check changes what it finds or the text a fix copies (owner, 9 Nov 2026: a flag kept from older checks,
- * for example one Undo put back, must not be fixed with its old text). 2: the outline read as printed.
+ * for example one Undo put back, must not be fixed with its old text). 2: the outline read as printed. 3: figures left out of lead-ins, figures on their lead-in.
  */
-export const CHECKS_VERSION = 2;
+export const CHECKS_VERSION = 3;
 
 /** Raised by older checks: shown with a note, and its "Use the PDF's version" / "Give it its own part" is off. */
 export const isStale = (f: Pick<Flag, "v">) => (f.v ?? 1) < CHECKS_VERSION;
@@ -399,13 +399,52 @@ export function marksAgainstPaper(ms: Pick<PaperContent, "items"> | { items: rea
  * joined to that first part, or left out. Keyed by the first part, with the lead-in's own words for the fix.
  */
 export function structureFlags(items: readonly PaperItem[], outline: readonly OutlinePart[]): Flag[] {
-  return leadInProblems(items, outline).map((p) => {
+  // A lead-in item with a figure's labels or caption read into it: the paper's own lead-in words fix it.
+  const extra = outline.flatMap((p): Flag[] => {
+    const it = items.find((x) => x.number === p.number);
+    if (!it || !isLeadIn(items, p.number) || !leadExtra(it.text, p.text).length) return [];
+    const reason = `Question ${p.number}'s opening text has words the paper prints in a figure or its label, not as question text.`;
+    return [{ key: `structure:${p.number}:lead`, item: p.number, kind: "structure", colour: "red", reason, pdfText: p.text, fingerprint: fingerprint("structure", squash(p.text), "lead"), v: CHECKS_VERSION }];
+  });
+  return [...extra, ...leadInProblems(items, outline).map((p) => {
     const sub = p.child.slice(p.number.length).match(/^\([a-z]+\)/)?.[0] ?? "";
     const reason = p.merged
       ? `Question ${p.number}'s opening text is joined to ${p.child}. In the paper it comes before ${sub}, as its own text.`
       : `Question ${p.number} has opening text in the paper (before ${sub}) that the reading leaves out.`;
     return { key: `structure:${p.child}:${p.number}`, item: p.child, kind: "structure" as const, colour: "red" as const, reason, pdfText: p.lead, fingerprint: fingerprint("structure", squash(p.lead), p.merged ? "merged" : "lost"), v: CHECKS_VERSION };
-  });
+  })];
+}
+
+/** A structure flag whose fix splits a lead-in off its first part (not a lead-in's own words, not a table). */
+export const isSplitFlag = (f: Pick<Flag, "kind" | "key">) => f.kind === "structure" && !/:(lead|table)$/.test(f.key);
+
+/**
+ * Figures on the lead-in that prints them (owner, 9 Nov 2026: Fig. 2.1 belongs to question 2, and (a) and (b) answer
+ * from it): a figure on a part whose question or part has a lead-in item saying "Fig. N.N" moves to that lead-in. Pure.
+ */
+export function figuresToLeads(c: PaperContent): PaperContent {
+  const label = (id: string) => c.figures.find((f) => f.id === id)?.caption.match(/Fig(?:ure)?\.?\s*(\d+\.\d+)/i)?.[1];
+  const says = (text: string, l: string) => new RegExp(`Fig(?:ure)?\\.?\\s*${l.replace(".", "\\.")}(?!\\d)`, "i").test(text);
+  const moves = new Map<string, string>(); // figure id -> lead-in number
+  for (const lead of c.items) {
+    if (!isLeadIn(c.items, lead.number)) continue;
+    for (const part of c.items) {
+      if (!part.number.startsWith(`${lead.number}(`)) continue;
+      for (const id of part.figures) {
+        const l = label(id);
+        if (l && says(lead.text, l) && !lead.figures.includes(id) && !moves.has(id)) moves.set(id, lead.number);
+      }
+    }
+  }
+  if (!moves.size) return c;
+  return {
+    ...c,
+    items: c.items.map((it) => {
+      const kept = it.figures.filter((id) => !moves.has(id) || moves.get(id) === it.number);
+      const add = [...moves].filter(([id, n]) => n === it.number && !it.figures.includes(id)).map(([id]) => id);
+      return kept.length === it.figures.length && !add.length ? it : { ...it, figures: [...add, ...kept] };
+    }),
+  };
 }
 
 /** A lead-in put where the paper has it: its own item before the first part, and taken out of that part's text. */
@@ -416,7 +455,7 @@ export function splitLeadIn(c: PaperContent, child: string, number: string, lead
   const own: PaperItem = { number, page: first.page, text: normaliseNotation(str(lead, BRAIN.maxItemText)), marks: null, options: [], answerLines: 0, figures: [], guidance: "", tables: [] };
   const items = [...c.items];
   items.splice(at, 1, own, { ...first, text: withoutLead(first.text, lead) || first.text });
-  return { ...c, items };
+  return figuresToLeads({ ...c, items });
 }
 
 /** Flags still open: not settled by the admin ("It's fine", "Looks right") and not ruled out for the subject. */
@@ -532,7 +571,9 @@ export function recheckItem(c: PaperContent, flags: readonly Flag[], number: str
     || (w.length >= 3 ? w.filter((x) => pageIdx.text.includes(x)).length / w.length >= BRAIN.minWordCover : isFormula(wording) && w.every((x) => pageIdx.text.includes(x)));
   // A lead-in flag is settled once the question has its own item (its key ends with that question's number).
   const settled = (f: Flag) => f.kind === "structure" && c.items.some((x) => x.number === f.key.split(":").at(-1));
-  const kept = flags.filter((f) => !settled(f) && (f.item !== number || !(f.kind === "words" || f.kind === "numbers" || f.kind === "notation" || (f.kind === "marks" && !f.key.endsWith(":gemini")) || (f.kind === "agree" && found))));
+  // A lead-in's own words flag is settled once its text reads as the paper prints it.
+  const leadOk = (f: Flag) => f.kind === "structure" && f.key === `structure:${number}:lead` && !leadExtra(it.text, f.pdfText).length;
+  const kept = flags.filter((f) => !settled(f) && !leadOk(f) && (f.item !== number || !(f.kind === "words" || f.kind === "numbers" || f.kind === "notation" || (f.kind === "marks" && !f.key.endsWith(":gemini")) || (f.kind === "agree" && found))));
   const add = (kind: FlagKind, reason: string, what: string, keyExtra = "", pdfText = "") =>
     kept.push({ key: `${kind}:${number}${keyExtra}`, item: number, kind, colour: COLOUR[kind], reason, pdfText, fingerprint: fingerprint(kind, squash(what), reason), v: CHECKS_VERSION });
   if (readable) {
