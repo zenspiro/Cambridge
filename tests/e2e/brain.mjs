@@ -723,6 +723,14 @@ try {
   check((await page.locator(`#read-all .batch-list a[href="/admin/library/review/${id22}"]`).count()) === 1, "each paper read links to its review screen");
   await page.goto(`${BASE}/admin/library/0625?ra=extended&ras=s&ray=2024#read-all`);
   check((await page.locator("#read-all").textContent())?.includes("Nothing to read"), "pressing it again finds nothing left to read");
+  // Read all for both tiers (owner, 9 Nov 2026), on the same line as the month and year, bottoms aligned.
+  const pick = page.locator("#read-all form.read-all-pick");
+  check((await pick.locator('button[name=ra][value=any]', { hasText: /^Read all$/ }).count()) === 1, "Read all (both tiers) sits next to Read all Core and Read all Extended");
+  const bottoms = await pick.evaluate((f) => [...f.querySelectorAll("select, button")].map((e) => Math.round(e.getBoundingClientRect().bottom)));
+  check(Math.max(...bottoms) - Math.min(...bottoms) <= 2, `the month, year and Read all buttons line up (${bottoms.join(", ")})`);
+  await pick.locator('button[value=any]').click();
+  await page.waitForURL(/ra=any/);
+  check((await page.locator("#read-all").textContent())?.includes("All papers, Jun 2024"), "Read all chooses every paper of both tiers");
   check((await fetch(`${BASE}/api/brain/next`, { method: "POST", body: "{}" })).status === 401, "the next-paper endpoint refuses unsigned requests");
 
   // 14. Home (owner, 9 Nov 2026): storage, and Needs you can be cleared and brought back.

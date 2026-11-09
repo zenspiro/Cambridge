@@ -161,7 +161,7 @@ export default async function SyllabusOverview({
           year, or leave them on every one.
         </p>
         {batchRun ? <RunProgress key={batchRun.id} runId={batchRun.id} stages={["pdf", "gemini", "claude", "figures", "checks", "save"]} /> : null}
-        <form className="form-actions" method="get" action={`/admin/library/${code}#read-all`}>
+        <form className="form-actions read-all-pick" method="get" action={`/admin/library/${code}#read-all`}>
           <label className="field">
             <span className="label-inline">Month</span>
             <select className="input" name="ras" defaultValue={choice?.session ?? ""}>
@@ -180,6 +180,8 @@ export default async function SyllabusOverview({
             <>
               <button className="btn" type="submit" name="ra" value="core">Read all Core</button>
               <button className="btn" type="submit" name="ra" value="extended">Read all Extended</button>
+              {/* Both tiers at once (owner, 9 Nov 2026). */}
+              <button className="btn" type="submit" name="ra" value="any">Read all</button>
             </>
           ) : <button className="btn" type="submit" name="ra" value="any">Read all</button>}
         </form>

@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-09: Read all for both tiers, aligned
+
+**What:** The subject's Read all card has a third button, Read all (both Core and Extended), beside Read all Core and Read all Extended; the month, year and buttons line up on one line.
+
+**Why:** owner, 9 Nov 2026, with a screenshot of the card.
+
+**Tested:** `npm run check` exits 0. Browser suite from a fresh database, all passing (new: the button is there, the controls' bottoms line up, it chooses every paper of both tiers). Screenshot at 1400 px.
+
 ## 2026-11-09: Whole admin access for team members
 
 **What:** Team access has one more setting, Whole admin: no access, view only, or view and edit. It covers every section and every subject at its level, on top of the Library, Source review and AI review areas. View only: every page opens with its change buttons hidden and fields not editable ("View only" under the title), and the server refuses changes. View and edit: every page and action as the owner has them, paid reading (Read this paper, Read all, topic trees) included inside the monthly cap. Whatever the access says, the Team page and its actions, AI setup's models, prices, cap and checks (AI setup itself is view only), and the owner's sign-in stay the owner's. A whole-admin member gets the owner's Home. Every change is logged under the member.
