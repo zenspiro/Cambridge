@@ -1,6 +1,6 @@
+import { ADMIN_EDIT, ADMIN_VIEW, allowed, requireStaff } from "@/lib/auth/staff";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { requireAdmin } from "@/lib/auth/guard";
 import { getEnv } from "@/lib/env";
 import { AdminShell, Notice } from "@/components/AdminShell";
 import { ActionForm } from "@/components/ActionForm";
@@ -41,7 +41,7 @@ type Page = { id: string; site_id: string; syllabus_code: string; url: string; l
 const day = (ms: number | null) => (ms ? new Date(ms).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }) : "");
 
 export default async function SourcesPage({ searchParams }: { searchParams: Promise<{ e?: string; ref?: string; added?: string; dupes?: string; bad?: string }> }) {
-  await requireAdmin();
+  const staff = await requireStaff(ADMIN_VIEW);
   const q = await searchParams;
   const env = await getEnv();
   const [{ results: sites }, { results: pages }, { results: folders }, subjects, aliases, { results: stored }] = await Promise.all([
@@ -85,6 +85,7 @@ export default async function SourcesPage({ searchParams }: { searchParams: Prom
 
   return (
     <AdminShell
+      readOnly={!allowed(staff, ADMIN_EDIT)}
       current="/admin/sources"
       title="Sources"
       intro="Where each subject's files come from: Cambridge's own pages and shared Google Drive folders. The agent only uses sources that are switched on, and follows each website's robots.txt."

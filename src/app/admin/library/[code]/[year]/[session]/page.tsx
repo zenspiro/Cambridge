@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { requireStaff, allowed } from "@/lib/auth/staff";
+import { requireStaff, allowed, ADMIN_EDIT } from "@/lib/auth/staff";
 import { getEnv } from "@/lib/env";
 import { AdminShell, Notice } from "@/components/AdminShell";
 import { StatusLine } from "@/components/LibraryBits";
@@ -71,7 +71,7 @@ export default async function SessionPage({
           {older ? <Link className="btn" href={sessionHref(code, older.year, older.session)}>‹ {older.label}</Link> : null}
           {newer ? <Link className="btn" href={sessionHref(code, newer.year, newer.session)}>{newer.label} ›</Link> : null}
           {/* Read all for this session (owner, 8 Nov 2026): the subject overview shows what it reads and the cost first. */}
-          {!staff.owner ? null : hasTiers(papers) ? (
+          {!allowed(staff, ADMIN_EDIT) ? null : hasTiers(papers) ? (
             <>
               <Link className="btn" href={`/admin/library/${code}?ra=core&ras=${g.session}&ray=${g.year}#read-all`}>Read all Core</Link>
               <Link className="btn" href={`/admin/library/${code}?ra=extended&ras=${g.session}&ray=${g.year}#read-all`}>Read all Extended</Link>

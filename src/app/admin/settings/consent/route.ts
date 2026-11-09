@@ -1,9 +1,9 @@
-import { adminPost } from "@/lib/adminPost";
+import { ADMIN_EDIT, staffPost } from "@/lib/auth/staff";
 import { checkConsentSettings, getConsentSettings, saveConsentSettings } from "@/lib/account/profile";
 
 /** The default age limit for parent approval. */
 export async function POST(request: Request) {
-  return adminPost(request, "/admin/approval", async ({ db, form, actorId }) => {
+  return staffPost(request, "/admin/approval", ADMIN_EDIT, async ({ db, form, actorId }) => {
     const current = await getConsentSettings(db);
     const v = checkConsentSettings({ ...current, defaultAge: Number(form.get("defaultAge")) });
     if (!v) return "bad_age";

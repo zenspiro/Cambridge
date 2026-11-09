@@ -8,11 +8,16 @@ import { randomId, randomToken, sha256Hex } from "./crypto.ts";
 import { audit } from "./session.ts";
 
 export type Level = "none" | "view" | "edit";
-export type Area = "library" | "sourceReview" | "aiReview";
-export type Access = { library: Level; sourceReview: Level; aiReview: Level; subjects: "all" | string[] };
+export type Area = "library" | "sourceReview" | "aiReview" | "admin";
+/**
+ * `admin` (owner, 9 Nov 2026): the whole admin, every section and every subject; view, or also edit (paid reading
+ * inside the cap included). Team, and AI setup's models, prices, cap and checks, stay the owner's whatever it says.
+ */
+export type Access = { library: Level; sourceReview: Level; aiReview: Level; admin: Level; subjects: "all" | string[] };
 
 export const AREAS: readonly Area[] = ["library", "sourceReview", "aiReview"];
 export const AREA_WORDS: Record<Area, { name: string; what: string }> = {
+  admin: { name: "Whole admin", what: "every section and every subject: view it all, or also make changes and start paid reading inside your cap (Team and AI setup stay yours)" },
   library: { name: "Library", what: "papers and files: view them, or also upload and add files" },
   sourceReview: { name: "Source review", what: "the review screen for papers the AI read: view, or also fix flags" },
   aiReview: { name: "AI review", what: "questions the AI writes: view, or also fix them (when question writing is built)" },
@@ -20,8 +25,8 @@ export const AREA_WORDS: Record<Area, { name: string; what: string }> = {
 export const LEVEL_WORDS: Record<Level, string> = { none: "No access", view: "View only", edit: "View and edit" };
 
 /** Everything, for the owner. */
-export const OWNER_ACCESS: Access = { library: "edit", sourceReview: "edit", aiReview: "edit", subjects: "all" };
-export const NO_ACCESS: Access = { library: "none", sourceReview: "none", aiReview: "none", subjects: [] };
+export const OWNER_ACCESS: Access = { library: "edit", sourceReview: "edit", aiReview: "edit", admin: "edit", subjects: "all" };
+export const NO_ACCESS: Access = { library: "none", sourceReview: "none", aiReview: "none", admin: "none", subjects: [] };
 
 const LEVELS: readonly Level[] = ["none", "view", "edit"];
 const CODE_RE = /^[0-9]{4}$/;
@@ -36,29 +41,31 @@ export function cleanAccess(v: unknown, known: ReadonlySet<string> | null = null
     : Array.isArray(o.subjects)
       ? [...new Set(o.subjects.filter((c): c is string => typeof c === "string" && CODE_RE.test(c) && (!known || known.has(c))))].slice(0, TEAM.maxSubjects).sort()
       : [];
-  return { library: level(o.library), sourceReview: level(o.sourceReview), aiReview: level(o.aiReview), subjects };
+  return { library: level(o.library), sourceReview: level(o.sourceReview), aiReview: level(o.aiReview), admin: level(o.admin), subjects };
 }
 
 /** Access from the invite or edit form: `library`, `sourceReview`, `aiReview` levels, `subject` codes or `all`. Pure. */
 export function accessFromForm(form: { get(k: string): unknown; getAll(k: string): unknown[] }, known: ReadonlySet<string>): Access {
   const subjects = form.get("allSubjects") === "1" ? "all" : form.getAll("subject").map(String);
-  return cleanAccess({ library: form.get("library"), sourceReview: form.get("sourceReview"), aiReview: form.get("aiReview"), subjects }, known);
+  return cleanAccess({ library: form.get("library"), sourceReview: form.get("sourceReview"), aiReview: form.get("aiReview"), admin: form.get("admin"), subjects }, known);
 }
 
 /** Whether access reaches `area` at `level`, for subject `code` when given (none given: any of its subjects). Pure. */
 export function can(a: Access, area: Area, level: Exclude<Level, "none">, code?: string | null): boolean {
-  if (rank(a[area]) < rank(level)) return false;
+  // The whole admin covers every area and every subject at its level.
+  if (rank(a.admin) >= rank(level)) return true;
+  if (area === "admin" || rank(a[area]) < rank(level)) return false;
   if (code === undefined || code === null) return a.subjects === "all" || a.subjects.length > 0;
   return a.subjects === "all" || a.subjects.includes(code);
 }
 
 /** Whether a subject is in the access at all (any area). Pure. */
-export const hasSubject = (a: Access, code: string) => a.subjects === "all" || a.subjects.includes(code);
+export const hasSubject = (a: Access, code: string) => a.admin !== "none" || a.subjects === "all" || a.subjects.includes(code);
 
 /** Access in words for a list: "Library: view only; Source review: view and edit; 0625, 0620". Pure. */
 export function accessWords(a: Access): string {
-  const areas = AREAS.filter((x) => a[x] !== "none").map((x) => `${AREA_WORDS[x].name}: ${LEVEL_WORDS[a[x]].toLowerCase()}`);
-  const subjects = a.subjects === "all" ? "every subject" : a.subjects.length ? a.subjects.join(", ") : "no subjects";
+  const areas = (["admin", ...AREAS] as const).filter((x) => a[x] !== "none").map((x) => `${AREA_WORDS[x].name}: ${LEVEL_WORDS[a[x]].toLowerCase()}`);
+  const subjects = a.subjects === "all" || a.admin !== "none" ? "every subject" : a.subjects.length ? a.subjects.join(", ") : "no subjects";
   return `${areas.length ? areas.join("; ") : "No access"}; ${subjects}`;
 }
 
@@ -114,7 +121,7 @@ export async function createInvite(db: Db, emailIn: unknown, nameIn: unknown, ac
   const name = cleanInviteName(nameIn);
   if (!email) return { ok: false, reason: "bad_email" };
   if (!name) return { ok: false, reason: "no_name" };
-  if (!AREAS.some((a) => access[a] !== "none") || (access.subjects !== "all" && !access.subjects.length)) return { ok: false, reason: "no_access" };
+  if (access.admin === "none" && (!AREAS.some((a) => access[a] !== "none") || (access.subjects !== "all" && !access.subjects.length))) return { ok: false, reason: "no_access" };
   const existing = await db.prepare(`SELECT 1 AS x FROM team_member m JOIN "auth_user" u ON u.id = m.user_id WHERE lower(u.email) = ?1`).bind(email).first();
   if (existing) return { ok: false, reason: "member" };
   const today = await db.prepare(`SELECT COUNT(*) AS n FROM team_invite WHERE created_at >= ?1`).bind(now - 86_400_000).first<{ n: number }>();

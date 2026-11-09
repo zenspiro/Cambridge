@@ -1,10 +1,11 @@
-import { adminPost, formId } from "@/lib/adminPost";
+import { ADMIN_EDIT, staffPost } from "@/lib/auth/staff";
+import { formId } from "@/lib/adminPost";
 import { addDriveFolders } from "@/lib/library/sources";
 import { listSubjects } from "@/lib/library/catalog";
 
 export async function POST(request: Request) {
-  // adminPost checks the admin session before anything else.
-  return adminPost(request, "/admin/sources", async ({ db, form, actorId }) => {
+  // staffPost checks the session (owner, or a team member with the whole admin to edit) before anything else.
+  return staffPost(request, "/admin/sources", ADMIN_EDIT, async ({ db, form, actorId }) => {
     const site = formId(form, "site");
     if (!site) return "missing";
     // Added from a subject's card: the folder is labelled with that subject ("IGCSE Physics (0625)").

@@ -5,7 +5,7 @@ import { AI_USAGE } from "@/lib/config";
 import { AdminEnhance } from "@/components/AdminEnhance";
 import { AppIcon } from "@/components/icons/AppIcon";
 import { readIcons } from "@/lib/icons";
-import { allowed, staffSession, type Need } from "@/lib/auth/staff";
+import { ADMIN_VIEW, allowed, staffSession, type Need } from "@/lib/auth/staff";
 
 /**
  * The sidebar, in groups (owner, 6 Nov 2026). `current` on a page names the item it belongs to. `need`: what a team
@@ -19,27 +19,27 @@ const NAV: readonly { group: string | null; items: readonly NavItem[] }[] = [
     items: [
       { href: "/admin/library", label: "Library", icon: "admin.library", need: { area: "library", level: "view" } },
       { href: "/admin/library/upload", label: "Upload", icon: "admin.upload", need: { area: "library", level: "edit" } },
-      { href: "/admin/sources", label: "Sources", icon: "admin.sources" },
-      { href: "/admin/agent", label: "Agent", icon: "admin.agent" },
+      { href: "/admin/sources", label: "Sources", icon: "admin.sources" , need: ADMIN_VIEW },
+      { href: "/admin/agent", label: "Agent", icon: "admin.agent" , need: ADMIN_VIEW },
     ],
   },
-  { group: "Subject brain", items: [{ href: "/admin/topics", label: "Topic trees", icon: "admin.topics" }] },
+  { group: "Subject brain", items: [{ href: "/admin/topics", label: "Topic trees", icon: "admin.topics" , need: ADMIN_VIEW }] },
   {
     group: "Users",
     items: [
       { href: "/admin/users/team", label: "Team", icon: "admin.team" },
-      { href: "/admin/users/accounts", label: "Students and parents", icon: "admin.accounts" },
-      { href: "/admin/approval", label: "Parent approval", icon: "admin.approval" },
+      { href: "/admin/users/accounts", label: "Students and parents", icon: "admin.accounts" , need: ADMIN_VIEW },
+      { href: "/admin/approval", label: "Parent approval", icon: "admin.approval" , need: ADMIN_VIEW },
     ],
   },
   {
     group: "Settings",
     items: [
-      { href: "/admin/settings", label: "Library settings", icon: "admin.settings" },
-      { href: "/admin/ai", label: "AI setup", icon: "admin.ai" },
-      { href: "/admin/brand", label: "Brand", icon: "admin.brand" },
-      { href: "/admin/themes", label: "Themes", icon: "admin.themes" },
-      { href: "/admin/icons", label: "Icons", icon: "admin.icons" },
+      { href: "/admin/settings", label: "Library settings", icon: "admin.settings" , need: ADMIN_VIEW },
+      { href: "/admin/ai", label: "AI setup", icon: "admin.ai" , need: ADMIN_VIEW },
+      { href: "/admin/brand", label: "Brand", icon: "admin.brand" , need: ADMIN_VIEW },
+      { href: "/admin/themes", label: "Themes", icon: "admin.themes" , need: ADMIN_VIEW },
+      { href: "/admin/icons", label: "Icons", icon: "admin.icons" , need: ADMIN_VIEW },
     ],
   },
 ];
@@ -52,7 +52,7 @@ export type Crumb = { label: string; href?: string };
  * and the page's main actions on the right, kept in view while the page scrolls. Runs going on show on the page that started
  * them and on Home (owner, 9 Nov 2026: not in the sidebar). Pages still call requireAdmin() themselves.
  */
-export async function AdminShell({ current, title, children, intro, actions, crumbs, keepHead = true }: {
+export async function AdminShell({ current, title, children, intro, actions, crumbs, keepHead = true, readOnly = false }: {
   current: string; title: string; children: React.ReactNode;
   /** One or two sentences: what the page is for. */
   intro?: React.ReactNode;
@@ -61,6 +61,11 @@ export async function AdminShell({ current, title, children, intro, actions, cru
   crumbs?: Crumb[];
   /** Keep the header in view while scrolling (off for working screens that need the height, like the review screen). */
   keepHead?: boolean;
+  /**
+   * View only (owner, 9 Nov 2026: a team member with the whole admin to view): the page shows as it is, with the
+   * buttons that change things hidden and form fields not editable. The server refuses changes anyway.
+   */
+  readOnly?: boolean;
 }) {
   const db = (await getEnv()).DB;
   const [ai, icons, staff] = await Promise.all([aiUsageToday(db), readIcons(db), staffSession()]);
@@ -99,7 +104,7 @@ export async function AdminShell({ current, title, children, intro, actions, cru
           </form>
         </div>
       </aside>
-      <main className="admin-main" id="main">
+      <main className={readOnly ? "admin-main admin-readonly" : "admin-main"} id="main">
         <header className={keepHead ? "page-head page-head-kept" : "page-head"}>
           {crumbs?.length ? <Crumbs items={crumbs} /> : null}
           <div className="page-head-row">
@@ -107,6 +112,7 @@ export async function AdminShell({ current, title, children, intro, actions, cru
             {actions ? <div className="page-actions">{actions}</div> : null}
           </div>
           {intro ? <p className="page-intro">{intro}</p> : null}
+          {readOnly ? <p className="notice readonly-note">View only: you can see this page, but changes are not part of your access.</p> : null}
         </header>
         {children}
       </main>

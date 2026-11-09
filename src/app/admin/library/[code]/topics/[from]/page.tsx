@@ -1,7 +1,7 @@
+import { ADMIN_EDIT, ADMIN_VIEW, allowed, requireStaff } from "@/lib/auth/staff";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { requireAdmin } from "@/lib/auth/guard";
 import { getEnv } from "@/lib/env";
 import { AdminShell } from "@/components/AdminShell";
 import { TreeStatusLine, TreeView } from "@/components/TopicTree";
@@ -16,7 +16,7 @@ export const metadata: Metadata = { title: "Topic tree" };
 const pct = (x: number) => `${Math.round(x * 1000) / 10}%`;
 
 export default async function TreePage({ params }: { params: Promise<{ code: string; from: string }> }) {
-  await requireAdmin();
+  const staff = await requireStaff(ADMIN_VIEW);
   const { code, from } = await params;
   if (!/^\d{4}$/.test(code) || !/^\d{4}$/.test(from)) notFound();
   const env = await getEnv();
@@ -33,6 +33,7 @@ export default async function TreePage({ params }: { params: Promise<{ code: str
 
   return (
     <AdminShell
+      readOnly={!allowed(staff, ADMIN_EDIT)}
       current="/admin/library"
       title={`Topic tree: ${header.subject_name} ${code}, ${row.fromYear} to ${row.toYear}`}
       crumbs={[

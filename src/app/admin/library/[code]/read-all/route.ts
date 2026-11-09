@@ -1,4 +1,4 @@
-import { adminPost } from "@/lib/adminPost";
+import { ADMIN_EDIT, staffPost } from "@/lib/auth/staff";
 import { BRAIN, SESSION_LABELS } from "@/lib/config";
 import { reportError } from "@/lib/errors";
 import { allow, limitKey } from "@/lib/ratelimit";
@@ -17,7 +17,7 @@ import { loadPapers } from "@/lib/library/papers";
 export async function POST(request: Request, { params }: { params: Promise<{ code: string }> }) {
   const { code } = await params;
   const base = /^[0-9]{4}$/.test(code) ? `/admin/library/${code}` : "/admin/library";
-  return adminPost(request, base, async ({ db, env, form, actorId }) => {
+  return staffPost(request, base, ADMIN_EDIT, async ({ db, env, form, actorId }) => {
     const lib = await getLibrarySettings(db);
     const filter = readFilter((k) => (form.get(k) as string | null) ?? null, libraryYears(lib));
     if (!filter || base === "/admin/library") return "bad";

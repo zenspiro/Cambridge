@@ -1,5 +1,5 @@
+import { ADMIN_EDIT, ADMIN_VIEW, allowed, requireStaff } from "@/lib/auth/staff";
 import type { Metadata } from "next";
-import { requireAdmin } from "@/lib/auth/guard";
 import { getEnv } from "@/lib/env";
 import { AdminShell, Notice } from "@/components/AdminShell";
 import { ActionForm } from "@/components/ActionForm";
@@ -18,12 +18,13 @@ const MESSAGES = {
 
 /** Settings > Icons (owner, 9 Nov 2026): every place an icon shows, its icon now, Change (the picker) and Default. */
 export default async function IconsPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
-  await requireAdmin();
+  const staff = await requireStaff(ADMIN_VIEW);
   const q = await searchParams;
   const icons = await readIcons((await getEnv()).DB);
   const groups = [...new Set(ICON_SLOTS.map((s) => s.group))];
   return (
     <AdminShell
+      readOnly={!allowed(staff, ADMIN_EDIT)}
       current="/admin/icons"
       title="Icons"
       crumbs={[{ label: "Settings" }, { label: "Icons" }]}

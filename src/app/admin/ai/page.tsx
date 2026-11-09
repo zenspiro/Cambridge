@@ -1,5 +1,5 @@
+import { ADMIN_VIEW, requireStaff } from "@/lib/auth/staff";
 import type { Metadata } from "next";
-import { requireAdmin } from "@/lib/auth/guard";
 import { getEnv } from "@/lib/env";
 import { AdminShell, Notice } from "@/components/AdminShell";
 import { ActionForm } from "@/components/ActionForm";
@@ -34,7 +34,7 @@ const pill = (s: ModelStatus) => (s === "ok" ? "pill pill-ok" : s === "untested"
 // the spend is worked out from; and the last Gemini check's full list. Checks and runs happen on GitHub, where the
 // keys are.
 export default async function AiSetupPage({ searchParams }: { searchParams: Promise<{ e?: string; ref?: string; month?: string }> }) {
-  await requireAdmin();
+  const staff = await requireStaff(ADMIN_VIEW);
   const q = await searchParams;
   const env = await getEnv();
   const db = env.DB;
@@ -63,6 +63,7 @@ export default async function AiSetupPage({ searchParams }: { searchParams: Prom
 
   return (
     <AdminShell
+      readOnly={!staff.owner}
       current="/admin/ai"
       title="AI setup"
       intro="Which AI models the subject brain uses, checks that each key works, and what the AIs cost this month against your cap."

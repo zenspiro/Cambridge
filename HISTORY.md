@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-09: Whole admin access for team members
+
+**What:** Team access has one more setting, Whole admin: no access, view only, or view and edit. It covers every section and every subject at its level, on top of the Library, Source review and AI review areas. View only: every page opens with its change buttons hidden and fields not editable ("View only" under the title), and the server refuses changes. View and edit: every page and action as the owner has them, paid reading (Read this paper, Read all, topic trees) included inside the monthly cap. Whatever the access says, the Team page and its actions, AI setup's models, prices, cap and checks (AI setup itself is view only), and the owner's sign-in stay the owner's. A whole-admin member gets the owner's Home. Every change is logged under the member.
+
+**Why:** owner, 9 Nov 2026: "one more setting for the team member access, that should allow them to view or edit all the different sections that are in the admin"; paid reading allowed inside the cap, the team and money settings kept with the owner (as recommended).
+
+**Tested:** `npm run check` exits 0 (245 unit tests; new: the whole admin covering every area and subject at its level and not more, invites with only the whole admin, the access test now listing the owner-only pages and nothing else). Browser suite from a fresh database, all passing (new: the owner sets Whole admin view only, the member's menu gains every section but Team, the owner's Home marked view only, no change button on Sources, the server refusing a change, every subject open; then edit: buttons show, a change goes through, AI setup stays view only, the cap and the team refused).
+
 ## 2026-11-09: Read with: choose the AI for one reading
 
 **What:** Read this paper and Read it again have a "Read with" list: the saved Reading AI first (marked), every other Claude model the key offered at the last AI setup check, and Gemini alone (no second reader). Each choice shows its rough cost for this paper; one past the monthly cap cannot be picked, and the server checks the chosen one's cost again. The choice is for that reading only: the Reading AI on AI setup stays as it is. The run keeps the choice (`params.reader`, a Claude model id or "gemini", anything else dropped); the job gives it to the script as `models.reading` or `readWith: "gemini"`. Gemini alone: Gemini reads, Claude is never asked (no Claude key needed), the checks run without a second reader, and the reading's score is listed as "Gemini ... alone". Reading one item again from a flag still uses the Reading AI.

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { allowed, staffForDoc } from "@/lib/auth/staff";
+import { allowed, staffForDoc, ADMIN_EDIT } from "@/lib/auth/staff";
 import { redirect } from "next/navigation";
 import { getEnv } from "@/lib/env";
 import { AdminShell } from "@/components/AdminShell";
@@ -55,7 +55,8 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
   const access = await staffForDoc(id);
   if (!access) redirect("/admin?e=no_access");
   const canFix = allowed(access.staff, { area: "sourceReview", level: "edit", code: access.code });
-  const canRead = access.staff.owner;
+  // Paid reading (owner, 9 Nov 2026): the owner, or the whole admin to edit, inside the monthly cap.
+  const canRead = allowed(access.staff, ADMIN_EDIT);
   const env = await getEnv();
   const doc = await loadReviewDoc(env.DB, id);
   if (!doc) notFound();

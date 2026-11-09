@@ -9,6 +9,14 @@ export function AccessFields({ subjects, value, idPrefix }: { subjects: SubjectO
   const all = value.subjects === "all";
   return (
     <div className="access-fields">
+      {/* Whole admin (owner, 9 Nov 2026): every section and subject at once; the areas below then add nothing. */}
+      <label className="field access-whole">
+        <span className="label-inline">{AREA_WORDS.admin.name}</span>
+        <select className="input" name="admin" defaultValue={value.admin} aria-describedby={`${idPrefix}-admin-hint`}>
+          {(["none", "view", "edit"] as Level[]).map((l) => <option key={l} value={l}>{LEVEL_WORDS[l]}</option>)}
+        </select>
+        <span className="hint" id={`${idPrefix}-admin-hint`}>{AREA_WORDS.admin.what}. When set, it covers the areas and subjects below.</span>
+      </label>
       <div className="access-areas">
         {AREAS.map((a) => (
           <label className="field" key={a}>

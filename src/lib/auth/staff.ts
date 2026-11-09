@@ -15,6 +15,9 @@ import { can, OWNER_ACCESS, readMember, type Access, type Area } from "./team.ts
 
 export type Staff = { actorId: string; owner: boolean; name: string; access: Access };
 export type Need = { area: Area; level: "view" | "edit"; code?: string | null } | null;
+/** The whole admin (owner, 9 Nov 2026): every section, view or change. */
+export const ADMIN_VIEW: Need = { area: "admin", level: "view" };
+export const ADMIN_EDIT: Need = { area: "admin", level: "edit" };
 
 /** The signed-in owner or team member, or null. A paused member, or one signed in too long ago, is not one. */
 export async function staffSession(): Promise<Staff | null> {

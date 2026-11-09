@@ -1,6 +1,6 @@
+import { ADMIN_EDIT, ADMIN_VIEW, allowed, requireStaff } from "@/lib/auth/staff";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { requireAdmin } from "@/lib/auth/guard";
 import { currentBrand } from "@/lib/env";
 import { AdminShell } from "@/components/AdminShell";
 import { ActionForm } from "@/components/ActionForm";
@@ -26,10 +26,11 @@ const IMAGE_MESSAGES = {
 };
 
 export default async function BrandPage() {
-  await requireAdmin();
+  const staff = await requireStaff(ADMIN_VIEW);
   const brand = await currentBrand();
   return (
     <AdminShell
+      readOnly={!allowed(staff, ADMIN_EDIT)}
       current="/admin/brand"
       title="Brand"
       intro="The name, wording and pictures every student, parent and teacher page uses. Changes show at once."

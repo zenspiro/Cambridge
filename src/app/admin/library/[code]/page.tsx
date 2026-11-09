@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { requireStaff, allowed } from "@/lib/auth/staff";
+import { requireStaff, allowed, ADMIN_EDIT, ADMIN_VIEW } from "@/lib/auth/staff";
 import { getEnv } from "@/lib/env";
 import { AdminShell, Notice } from "@/components/AdminShell";
 import { CellLink, StatusLine } from "@/components/LibraryBits";
@@ -54,7 +54,9 @@ export default async function SyllabusOverview({
   // Team members: their subjects only; uploads with library edit; Read all, the agent, topic trees and essential
   // variants stay with the owner (owner, 9 Nov 2026).
   const staff = await requireStaff({ area: "library", level: "view", code });
-  const owner = staff.owner;
+  // The whole admin (owner, 9 Nov 2026): view sees the agent and topic tree links; edit also Read all and variants.
+  const owner = allowed(staff, ADMIN_EDIT);
+  const adminView = allowed(staff, ADMIN_VIEW);
   const canEdit = allowed(staff, { area: "library", level: "edit", code });
   const q = await searchParams;
   const env = await getEnv();
@@ -124,8 +126,8 @@ export default async function SyllabusOverview({
       crumbs={[{ label: "Library", href: "/admin/library" }, { label: header.qualification_name }, { label: `${header.subject_name} ${code}` }]}
       actions={<>
         {canEdit ? <Link className="btn btn-primary" href={`/admin/library/folder?code=${code}`}>Upload a folder</Link> : null}
-        {owner ? <Link className="btn" href={`/admin/agent?code=${code}`}>Run the agent</Link> : null}
-        {owner ? <Link className="btn" href={`/admin/library/${code}/topics`}>Topic tree</Link> : null}
+        {adminView ? <Link className="btn" href={`/admin/agent?code=${code}`}>Run the agent</Link> : null}
+        {adminView ? <Link className="btn" href={`/admin/library/${code}/topics`}>Topic tree</Link> : null}
       </>}
     >
       <Notice code={q.e} messages={MESSAGES} errorRef={q.ref} />

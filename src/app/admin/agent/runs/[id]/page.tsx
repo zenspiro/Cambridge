@@ -1,8 +1,8 @@
+import { ADMIN_EDIT, ADMIN_VIEW, allowed, requireStaff } from "@/lib/auth/staff";
 import { AGENT_ERRORS as ERRORS } from "@/lib/agent/labels";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireAdmin } from "@/lib/auth/guard";
 import { getEnv } from "@/lib/env";
 import { AdminShell } from "@/components/AdminShell";
 import { closeStaleRuns, getRun, type RunParams } from "@/lib/agent/runs";
@@ -77,7 +77,7 @@ export default async function RunPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ cancel?: string; ref?: string; r?: string; f?: string; at?: string }>;
 }) {
-  await requireAdmin();
+  const staff = await requireStaff(ADMIN_VIEW);
   const { id } = await params;
   const q = await searchParams;
   const env = await getEnv();
@@ -128,6 +128,7 @@ export default async function RunPage({
 
   return (
     <AdminShell
+      readOnly={!allowed(staff, ADMIN_EDIT)}
       current="/admin/agent"
       title="Agent run"
       crumbs={[{ label: "Agent", href: "/admin/agent" }, { label: "Run" }]}

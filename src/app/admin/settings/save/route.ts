@@ -1,9 +1,9 @@
-import { adminPost } from "@/lib/adminPost";
+import { ADMIN_EDIT, staffPost } from "@/lib/auth/staff";
 import { checkLibrarySettings, saveLibrarySettings } from "@/lib/settings";
 
 export async function POST(request: Request) {
-  // adminPost checks the admin session before anything else.
-  return adminPost(request, "/admin/settings", async ({ db, form, actorId }) => {
+  // staffPost checks the session (owner, or a team member with the whole admin to edit) before anything else.
+  return staffPost(request, "/admin/settings", ADMIN_EDIT, async ({ db, form, actorId }) => {
     const num = (k: string) => Number(String(form.get(k) ?? "").trim() || NaN);
     const value = checkLibrarySettings({
       fromYear: num("fromYear"),
