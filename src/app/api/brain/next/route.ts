@@ -21,8 +21,9 @@ export async function POST(request: Request) {
     return json({ done: true });
   }
   const sizes = await a.db.prepare(`SELECT MAX(size_bytes) AS n FROM source_document WHERE id IN (SELECT value FROM json_each(?1))`).bind(JSON.stringify(rest)).first<{ n: number | null }>();
-  const cost = await paperCostCheck(a.db, a.env, sizes?.n ?? 0);
-  if (cost.verdict !== "ok") {
+  // A check batch asks no AI, so the cap does not apply.
+  const cost = params.check ? null : await paperCostCheck(a.db, a.env, sizes?.n ?? 0);
+  if (cost && cost.verdict !== "ok") {
     await failBrainRun(a.db, jobId, cost.verdict === "over_cap" ? "batch_cap" : "batch_price");
     return json({ done: true, stopped: cost.verdict });
   }
@@ -30,6 +31,6 @@ export async function POST(request: Request) {
   if (!docId) return json({ done: true });
   const next = await activeBrainRun(a.db, jobId);
   if (next?.task !== "paper") return json({ error: "no_run" }, 409);
-  const payload = await paperJobPayload(a.db, a.env.FILES, docId, next.scope, next.batch, await aiModels(a.db, a.env), brainLimits());
+  const payload = await paperJobPayload(a.db, a.env.FILES, docId, next.scope, next.batch, await aiModels(a.db, a.env), brainLimits(), undefined, next.check);
   return payload ? json(payload) : json({ error: "no_paper" }, 404);
 }

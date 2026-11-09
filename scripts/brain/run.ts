@@ -47,6 +47,8 @@ type PaperJob = {
   batch?: { at: number; of: number; label: string };
   /** "Read with" (owner, 9 Nov 2026): "gemini" reads with Gemini alone, no Claude and no second reader. */
   readWith?: "claude" | "gemini";
+  /** Run the checks again (owner, 9 Nov 2026): no AI; today's checks on the stored reading, figures with no box cut. */
+  check?: boolean;
 };
 type Stage = "pdf" | "gemini" | "claude" | "retry" | "figures" | "checks" | "save";
 type StepEvent = { stage: Stage; state: "start" | "wait" | "done" | "fail" | "skip"; model?: string; tokens?: number };
@@ -519,9 +521,12 @@ async function runPaper(job: PaperJob) {
   // The Reading AI reads papers (owner, 8 Nov 2026); without one the main AI does.
   const reader = job.models.reading || job.models.claude;
   const alone = job.readWith === "gemini";
-  if (!CLAUDE_KEY && !alone) throw new Stop("claude_key", "the GitHub secret CLAUDE_API_KEY is not set");
-  if (!GEMINI_KEY) throw new Stop("gemini_key", "the GitHub secret GEMINI_API_KEY is not set");
-  if ((!reader && !alone) || !job.models.gemini) throw new Stop("models", "no Claude or Gemini model is set (AI setup page or wrangler.jsonc)");
+  // A check asks no AI, so it needs no keys or models.
+  if (!job.check) {
+    if (!CLAUDE_KEY && !alone) throw new Stop("claude_key", "the GitHub secret CLAUDE_API_KEY is not set");
+    if (!GEMINI_KEY) throw new Stop("gemini_key", "the GitHub secret GEMINI_API_KEY is not set");
+    if ((!reader && !alone) || !job.models.gemini) throw new Stop("models", "no Claude or Gemini model is set (AI setup page or wrangler.jsonc)");
+  }
   if (job.pdfBytes > job.limits.maxPdfBytes) throw new Stop("pdf_too_big");
 
   await step(job.batch ? `Paper ${job.batch.at} of ${job.batch.of}: ${job.paper}` : "Fetching the paper", { stage: "pdf", state: "start" });
@@ -570,10 +575,10 @@ async function runPaper(job: PaperJob) {
   const sentPages = slim.kept.length || pages.length;
 
   const scoped = job.scope.items.length > 0 || job.scope.figures.length > 0;
-  const figuresOnly = scoped && job.scope.items.length === 0;
+  const figuresOnly = !!job.check || (scoped && job.scope.items.length === 0);
   const prior = job.prior.content ? cleanPaper(job.prior.content, job.kind) : null;
   const priorGemini = job.prior.gemini ? cleanPaper(job.prior.gemini, job.kind) : null;
-  const client = new Anthropic({ apiKey: CLAUDE_KEY, maxRetries: TEST_MODE ? 0 : 3, timeout: 30 * 60_000, ...(CLAUDE_BASE ? { baseURL: CLAUDE_BASE } : {}) });
+  const client = new Anthropic({ apiKey: CLAUDE_KEY || "not-set", maxRetries: TEST_MODE ? 0 : 3, timeout: 30 * 60_000, ...(CLAUDE_BASE ? { baseURL: CLAUDE_BASE } : {}) });
   // A full reading's own result before it is merged with what was kept: its score is this run's read accuracy, with
   // the models that read it (owner, 8 Nov 2026: compare a cheaper Claude with the one in use).
   let fresh: PaperContent | null = null;
@@ -598,7 +603,7 @@ async function runPaper(job: PaperJob) {
     const g = await timed("gemini", job.models.gemini, "Gemini is reading the paper", () =>
       askGemini({ model: job.models.gemini, system: PAPER_SYSTEM, schema: PAPER_SCHEMA_GEMINI, prompt: paperPrompt(job.kind, job.paper), pdf64, pages: sentPages, limits: job.limits }));
     gemini = placeOnPages(remapPages(cleanPaper(g.raw, job.kind), slim.kept), pages);
-  } else await note("Gemini: not needed to cut a figure again", { stage: "gemini", state: "skip" });
+  } else await note(job.check ? "Gemini: not asked (checking the reading again)" : "Gemini: not needed to cut a figure again", { stage: "gemini", state: "skip" });
 
   let content = prior;
   if (!figuresOnly && alone) {
@@ -634,7 +639,7 @@ async function runPaper(job: PaperJob) {
     content = placeOnPages(mergeReading(prior, read, new Set(job.prior.open), scoped ? job.scope : undefined), pages);
     await step("Saving Claude's reading", { stage: "save", state: "start" });
     await save(content, gemini, false);
-  } else await note("Claude: not needed to cut a figure again", { stage: "claude", state: "skip" });
+  } else await note(job.check ? "Claude: not asked (checking the reading again)" : "Claude: not needed to cut a figure again", { stage: "claude", state: "skip" });
   if (!content) throw new Stop("no_reading", "there is no reading to cut figures for");
 
   content = await cutFigures(job, content, doc.bytes);

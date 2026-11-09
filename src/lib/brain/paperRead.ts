@@ -169,8 +169,50 @@ export type PaperView = {
   flags: Flag[];
   open: Flag[];
   ready: boolean;
-  fixes: { id: string; action: string; item: string | null; at: number; undone: boolean }[];
+  fixes: FixView[];
 };
+
+/**
+ * One change on the paper, for the review screen's Changes list (owner, 9 Nov 2026: every change can be opened where
+ * it was made): what was done in words, the part or figure, who, when, and the words before and after.
+ */
+export type FixView = {
+  id: string; action: string; item: string | null; at: number; undone: boolean;
+  what: string; who: string; before: string; after: string;
+};
+
+const FIX_WHAT: Record<string, string> = {
+  pdf: "Used the PDF's version", edit: "Edited", fine: "Marked a flag as fine", looks_right: "Figure looks right", override: "Marked ready anyway",
+};
+const FLAG_KIND_WORDS: Record<string, string> = {
+  words: "wording", numbers: "number", marks: "marks", numbering: "numbering", figure: "figure", agree: "Claude and Gemini differ",
+  missing: "missing part", text: "unreadable text", notation: "notation", structure: "lead-in or table",
+};
+
+/** A stored fix in words, with its before and after text. Pure. */
+export function fixView(r: { id: string; action: string; item: string | null; flag_key: string | null; before: string | null; after: string | null; at: number; undone_at: number | null }, who: string): FixView {
+  const b = (safeJson(r.before ?? "{}") ?? {}) as Record<string, unknown>;
+  const a = (safeJson(r.after ?? "{}") ?? {}) as Record<string, unknown>;
+  const item = b.item && typeof b.item === "object" ? (b.item as Record<string, unknown>) : null;
+  const text = (v: unknown) => (typeof v === "string" ? v.slice(0, 600) : "");
+  let what = FIX_WHAT[r.action] ?? r.action;
+  let before = "", after = "";
+  if (b.figure) {
+    what = "Moved the figure's box";
+  } else if (r.action === "pdf" && typeof b.lead === "string") {
+    what = `Gave question ${b.lead}'s lead-in its own part`;
+    before = text(item?.text);
+  } else if (r.action === "pdf" || r.action === "edit") {
+    before = text(item?.text);
+    after = text(a.text);
+    if (r.action === "edit" && typeof a.marks === "number" && item && a.marks !== item.marks) what = `Edited (marks ${String(item.marks ?? "none")} to ${a.marks})`;
+  } else if (r.action === "fine" && r.flag_key) {
+    what = `Marked a ${FLAG_KIND_WORDS[r.flag_key.split(":")[0] ?? ""] ?? ""} flag as fine`.replace("a  flag", "a flag");
+  } else if (r.action === "override" && typeof b.open === "number") {
+    what = `Marked ready anyway with ${b.open} flag${b.open === 1 ? "" : "s"} open`;
+  }
+  return { id: r.id, action: r.action, item: r.item, at: r.at, undone: r.undone_at !== null, what, who, before, after };
+}
 
 /** Everything the review screen shows for one paper. */
 export async function paperView(db: Db, bucket: Bucket, doc: DocInfo): Promise<PaperView> {
@@ -185,13 +227,15 @@ export async function paperView(db: Db, bucket: Bucket, doc: DocInfo): Promise<P
   }
   const open = openFlags(flags, new Set(row?.dismissed ?? []), rules);
   const { results } = await db
-    .prepare(`SELECT id, action, item, at, undone_at FROM paper_fix WHERE doc_id = ?1 ORDER BY at DESC LIMIT 30`)
+    .prepare(`SELECT f.id, f.action, f.item, f.flag_key, f.before, f.after, f.actor, f.at, f.undone_at, u.name AS member
+              FROM paper_fix f LEFT JOIN "auth_user" u ON f.actor LIKE 'team:%' AND u.id = substr(f.actor, 6)
+              WHERE f.doc_id = ?1 ORDER BY f.at DESC LIMIT 100`)
     .bind(doc.id)
-    .all<{ id: string; action: string; item: string | null; at: number; undone_at: number | null }>();
+    .all<{ id: string; action: string; item: string | null; flag_key: string | null; before: string | null; after: string | null; actor: string; at: number; undone_at: number | null; member: string | null }>();
   return {
     row, content, flags, open,
     ready: !!content && (open.length === 0 || !!row?.overrideAt),
-    fixes: results.map((r) => ({ id: r.id, action: r.action, item: r.item, at: r.at, undone: r.undone_at !== null })),
+    fixes: results.map((r) => fixView(r, r.actor === "platform-admin" ? "Owner" : r.member ?? (r.actor.startsWith("team:") ? "A team member" : r.actor))),
   };
 }
 

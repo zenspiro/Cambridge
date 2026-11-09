@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as
 import { ActionForm } from "@/components/ActionForm";
 import { Notation, PaperTables } from "@/components/Notation";
 import { isLeadIn, type Flag, type FlagColour, type PaperItem } from "@/lib/brain/paper";
+import type { FixView } from "@/lib/brain/paperRead";
 
 export type ReviewFigure = { id: string; page: number; caption: string; description: string; shown: boolean; cut: string };
 
@@ -25,6 +26,8 @@ type Props = {
   /** Fixes (source review edit) and Read it again (the owner: paid runs). View-only team members see the flags only. */
   canFix?: boolean;
   canRead?: boolean;
+  /** Every change made on the paper, newest first (owner, 9 Nov 2026: each can be opened where it was made). */
+  fixes?: FixView[];
 };
 
 const MESSAGES = {
@@ -67,7 +70,9 @@ function remember(docId: string, page: number, flag: string | null) {
   }
 }
 
-export function PaperReview({ docId, pdfUrl, kind, items, figures, flags, pageCount, revision, busy, canFix = true, canRead = true }: Props) {
+const dateTime = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
+
+export function PaperReview({ docId, pdfUrl, kind, items, figures, flags, pageCount, revision, busy, canFix = true, canRead = true, fixes = [] }: Props) {
   const pages = useMemo(() => Math.max(pageCount, ...items.map((i) => i.page), ...figures.map((f) => f.page), 1), [items, figures, pageCount]);
   const firstPage = useMemo(() => Math.min(...items.map((i) => i.page), pages), [items, pages]);
   const [page, setPage] = useState(firstPage);
@@ -75,6 +80,9 @@ export function PaperReview({ docId, pdfUrl, kind, items, figures, flags, pageCo
   const [filter, setFilter] = useState<"all" | FlagColour>("all");
   const [current, setCurrent] = useState<string | null>(null);
   const [listOpen, setListOpen] = useState(true);
+  // The panel's lists (owner, 9 Nov 2026): open flags, every page, every change; each row opens its page on both sides.
+  const [tab, setTab] = useState<"flags" | "pages" | "changes">(flags.length ? "flags" : "pages");
+  const [focus, setFocus] = useState<string | null>(null);
   const [adjusting, setAdjusting] = useState<string | null>(null);
   const closeEditor = useCallback(() => setAdjusting(null), []);
   const lastIndex = useRef(0);
@@ -91,6 +99,13 @@ export function PaperReview({ docId, pdfUrl, kind, items, figures, flags, pageCo
   const index = current ? visible.findIndex((f) => f.key === current) : -1;
 
   const go = (p: number) => setPage(Math.min(pages, Math.max(1, p)));
+  /** Open a part or figure where it is: both sides turn to its page and it is marked. */
+  const openPart = (id: string | null, p?: number) => {
+    const at = p ?? (id ? itemPage.get(id) ?? figPage.get(id) : undefined);
+    if (at) setPage(at);
+    setCurrent(null);
+    setFocus(id);
+  };
   const select = useCallback((f: Flag | undefined) => {
     if (!f) return;
     setShow(true);
@@ -126,6 +141,13 @@ export function PaperReview({ docId, pdfUrl, kind, items, figures, flags, pageCo
     if (current && visible.length) select(visible[Math.min(lastIndex.current, visible.length - 1)]);
     else if (current && !visible.length) setCurrent(null);
   }, [index, current, visible, select]);
+
+  // Bring a part opened from Pages or Changes into view.
+  useEffect(() => {
+    if (!focus) return;
+    const el = document.getElementById(`item-${focus}`) ?? document.getElementById(`figure-${focus}`);
+    el?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [focus, page]);
 
   // Bring the chosen flag into view and mark it.
   useEffect(() => {
@@ -164,7 +186,7 @@ export function PaperReview({ docId, pdfUrl, kind, items, figures, flags, pageCo
     const f = figures.find((x) => x.id === id);
     const ff = show ? byItem.get(id) ?? [] : [];
     return (
-      <figure key={id} className={`pq-figure${ff.length ? " pq-flag pq-blue" : ""}`} id={`figure-${id}`}>
+      <figure key={id} className={`pq-figure${ff.length ? " pq-flag pq-blue" : ""}${focus === id ? " pq-focus" : ""}`} id={`figure-${id}`}>
         {f?.shown ? <img src={`${base}/figure/${encodeURIComponent(id)}?r=${revision}`} alt={`Figure ${id}${f.caption ? `: ${f.caption}` : ""}`} /> : <p className="muted">Figure {id} has no box yet.</p>}
         <figcaption className="pq-figcaption">
           <span>{f?.caption || `Figure ${id}`}</span>
@@ -197,35 +219,100 @@ export function PaperReview({ docId, pdfUrl, kind, items, figures, flags, pageCo
           <label className="check-inline"><input type="checkbox" checked={show} onChange={(e) => setShow(e.target.checked)} /> Show flags</label>
         </div>
       </div>
-      {flags.length ? (
-        <section className="flag-panel" aria-label="Open flags">
-          <div className="flag-panel-head">
-            <div className="flag-filters" role="group" aria-label="Show flags of one kind">
-              {FILTERS.map((k) => (
-                <button key={k} type="button" className={`flag-filter flag-filter-${k}`} aria-pressed={filter === k} onClick={() => setFilter(k)} disabled={k !== "all" && !counts[k]}>
-                  {FILTER_WORDS[k]} <span className="flag-filter-count">{counts[k]}</span>
-                </button>
-              ))}
+      <section className="flag-panel" aria-label="Flags, pages and changes">
+        <div className="panel-tabs" role="tablist" aria-label="What to list">
+          {([["flags", `Flags (${flags.length})`], ["pages", `Pages (${pages})`], ["changes", `Changes (${fixes.length})`]] as const).map(([k, label]) => (
+            <button key={k} type="button" role="tab" className="panel-tab" aria-selected={tab === k} onClick={() => setTab(k)}>{label}</button>
+          ))}
+        </div>
+        {tab === "flags" ? (flags.length ? (
+          <>
+  <div className="flag-panel-head">
+              <div className="flag-filters" role="group" aria-label="Show flags of one kind">
+                {FILTERS.map((k) => (
+                  <button key={k} type="button" className={`flag-filter flag-filter-${k}`} aria-pressed={filter === k} onClick={() => setFilter(k)} disabled={k !== "all" && !counts[k]}>
+                    {FILTER_WORDS[k]} <span className="flag-filter-count">{counts[k]}</span>
+                  </button>
+                ))}
+              </div>
+              <span className="muted">Keys: J next, K previous</span>
+              <button className="link" type="button" onClick={() => setListOpen(!listOpen)} aria-expanded={listOpen}>{listOpen ? "Hide the list" : "Show the list"}</button>
             </div>
-            <span className="muted">Keys: J next, K previous</span>
-            <button className="link" type="button" onClick={() => setListOpen(!listOpen)} aria-expanded={listOpen}>{listOpen ? "Hide the list" : "Show the list"}</button>
-          </div>
-          {listOpen ? (
-            <ol className="flag-list">
-              {visible.map((f) => (
-                <li key={f.key}>
-                  <button type="button" className={`flag-row${f.key === current ? " flag-row-current" : ""}`} aria-current={f.key === current ? "true" : undefined} onClick={() => select(f)}>
-                    <span className={`flag-dot flag-dot-${f.colour}`} aria-hidden="true" />
-                    <span className="flag-row-item">{f.item === "paper" ? "Whole paper" : f.item}</span>
-                    <span className="flag-row-page">{pageOf(f) ? `p. ${pageOf(f)}` : ""}</span>
-                    <span className="flag-row-reason">{f.reason}</span>
+            {listOpen ? (
+              <ol className="flag-list">
+                {visible.map((f) => (
+                  <li key={f.key}>
+                    <button type="button" className={`flag-row${f.key === current ? " flag-row-current" : ""}`} aria-current={f.key === current ? "true" : undefined} onClick={() => select(f)}>
+                      <span className={`flag-dot flag-dot-${f.colour}`} aria-hidden="true" />
+                      <span className="flag-row-item">{f.item === "paper" ? "Whole paper" : f.item}</span>
+                      <span className="flag-row-page">{pageOf(f) ? `p. ${pageOf(f)}` : ""}</span>
+                      <span className="flag-row-reason">{f.reason}</span>
+                    </button>
+                  </li>
+                ))}
+              </ol>
+            ) : null}
+          </>
+        ) : <p className="muted m-0">No open flags.</p>) : null}
+        {tab === "pages" ? (
+          <ol className="flag-list">
+            {Array.from({ length: pages }, (_, k) => k + 1).map((p) => {
+              const parts = items.filter((i) => i.page === p).map((i) => i.number);
+              const figs = figures.filter((f) => f.page === p).map((f) => f.id);
+              const open = flags.filter((f) => pageOf(f) === p).length;
+              const changed = fixes.filter((f) => !f.undone && f.item && (itemPage.get(f.item) ?? figPage.get(f.item)) === p).length;
+              return (
+                <li key={p}>
+                  <button type="button" className={`flag-row${p === page ? " flag-row-current" : ""}`} aria-current={p === page ? "page" : undefined} onClick={() => openPart(null, p)}>
+                    <span className={`flag-dot ${open ? "flag-dot-amber" : parts.length || figs.length ? "flag-dot-ok" : "flag-dot-none"}`} aria-hidden="true" />
+                    <span className="flag-row-item">Page {p}</span>
+                    <span className="flag-row-page">{open ? `${open} flag${open === 1 ? "" : "s"}` : ""}</span>
+                    <span className="flag-row-reason">
+                      {parts.length || figs.length ? [...parts, ...figs].join(", ") : "Nothing from our reading (cover, blank or instructions)"}
+                      {changed ? <span className="muted"> ({changed} change{changed === 1 ? "" : "s"})</span> : null}
+                    </span>
                   </button>
                 </li>
-              ))}
-            </ol>
-          ) : null}
-        </section>
-      ) : null}
+              );
+            })}
+          </ol>
+        ) : null}
+        {tab === "changes" ? (fixes.length ? (
+          <ol className="flag-list change-list">
+            {fixes.map((f) => {
+              const p = f.item ? itemPage.get(f.item) ?? figPage.get(f.item) : undefined;
+              return (
+                <li key={f.id} className={f.undone ? "change-undone" : undefined} data-fix={f.id}>
+                  <div className="change-row">
+                    {p ? (
+                      <button type="button" className="flag-row" onClick={() => openPart(f.item, p)}>
+                        <span className={`flag-dot ${f.undone ? "flag-dot-none" : "flag-dot-blue"}`} aria-hidden="true" />
+                        <span className="flag-row-item">{f.item}</span>
+                        <span className="flag-row-page">p. {p}</span>
+                        <span className="flag-row-reason">{f.what}</span>
+                      </button>
+                    ) : <span className="flag-row"><span className={`flag-dot ${f.undone ? "flag-dot-none" : "flag-dot-blue"}`} aria-hidden="true" /><span className="flag-row-item">{f.item ?? "Paper"}</span><span /><span className="flag-row-reason">{f.what}</span></span>}
+                    <span className="muted change-meta">{f.who}, {dateTime.format(f.at)} UTC{f.undone ? " (undone)" : ""}</span>
+                    {!f.undone && canFix ? (
+                      <ActionForm className="inline-form fix-undo" action={`${base}/fix`} messages={MESSAGES}>
+                        <input type="hidden" name="action" value="undo" />
+                        <input type="hidden" name="fix" value={f.id} />
+                        <button className="btn btn-small" type="submit">Undo</button>
+                      </ActionForm>
+                    ) : null}
+                  </div>
+                  {f.before || f.after ? (
+                    <div className="change-diff">
+                      {f.before ? <p className="m-0"><span className="muted">Before:</span> <Notation text={f.before} /></p> : null}
+                      {f.after ? <p className="m-0"><span className="muted">After:</span> <Notation text={f.after} /></p> : null}
+                    </div>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ol>
+        ) : <p className="muted m-0">No changes yet. Every fix made here is listed, with a link to where it was made.</p>) : null}
+      </section>
       <div className="review">
         <section className="review-pane" aria-label="The PDF as stored">
           <h2 className="review-head">The PDF as stored</h2>
@@ -239,7 +326,7 @@ export function PaperReview({ docId, pdfUrl, kind, items, figures, flags, pageCo
               const fl = show ? (byItem.get(it.number) ?? []).filter((f) => f.kind !== "missing") : [];
               const colour = fl.find((f) => f.colour === "red")?.colour ?? fl[0]?.colour;
               return (
-                <article key={it.number} className={`pq${isLeadIn(items, it.number) ? " pq-lead" : ""}${colour ? ` pq-flag pq-${colour}` : ""}`} id={`item-${it.number}`}>
+                <article key={it.number} className={`pq${isLeadIn(items, it.number) ? " pq-lead" : ""}${colour ? ` pq-flag pq-${colour}` : ""}${focus === it.number ? " pq-focus" : ""}`} id={`item-${it.number}`}>
                   <div className="pq-row">
                     <span className="pq-num">{it.number}</span>
                     <div className="pq-main">

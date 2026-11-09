@@ -25,6 +25,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       label: r.params.batch.label.slice(5),
       at: r.params.batch.docs.indexOf(current) + 1,
       of: r.params.batch.docs.length,
+      // A check batch (owner, 9 Nov 2026): the same list, in the words of checking.
+      check: !!r.params.check,
       papers: list.map((p) => ({ docId: p.docId, name: describeFile(p.fileName, p.syllabusId, look), read: p.read, flags: p.flags, now: p.docId === current })),
     };
   }

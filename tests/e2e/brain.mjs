@@ -614,8 +614,18 @@ try {
   check((await page.locator("#figure-F2.pq-blue").count()) === 1, "the figure cut without a label is boxed in blue");
   await page.locator("#figure-F2 button", { hasText: "Looks right" }).click();
   await page.locator("#reading .pill", { hasText: "Ready" }).waitFor({ timeout: 15_000 }).then(() => check(true, "every flag cleared: the paper is Ready"), () => check(false, "every flag cleared: the paper is Ready"));
-  await page.locator("#reading summary", { hasText: "Fixes on this paper" }).click();
-  await page.locator("#reading .fix-list li", { hasText: "Looks right" }).locator("button", { hasText: "Undo" }).click();
+  // Changes (owner, 9 Nov 2026): every change listed with who, when, before and after, opening where it was made.
+  await page.locator(".panel-tab", { hasText: "Changes" }).click();
+  const pdfChange = page.locator(".change-list li", { hasText: "Used the PDF's version" }).first();
+  check((await pdfChange.textContent())?.includes("Owner") && (await pdfChange.locator(".change-diff").textContent())?.includes("Before:") && (await pdfChange.locator(".change-diff").textContent())?.includes("Calculate its average speed"), "Changes lists each fix with who made it and its words before and after");
+  await pdfChange.locator("button.flag-row").click();
+  check((await page.locator(".page-bar-count").textContent()) === "Page 2 of 4" && (await page.locator("iframe.review-pdf").getAttribute("src"))?.endsWith("#page=2") && (await page.locator("#item-1\\(b\\).pq-focus").count()) === 1, "a change opens its page on both sides, the part marked");
+  await page.locator(".panel-tab", { hasText: "Pages" }).click();
+  check((await page.locator(".flag-list .flag-row").count()) === 4, "Pages lists every page of the paper");
+  await page.locator(".flag-list .flag-row", { hasText: "Page 4" }).click();
+  check((await page.locator(".page-bar-count").textContent()) === "Page 4 of 4" && (await page.locator("iframe.review-pdf").getAttribute("src"))?.endsWith("#page=4") && (await page.locator("#item-2\\(a\\)").count()) === 1, "a page in the list opens on both sides");
+  await page.locator(".panel-tab", { hasText: "Changes" }).click();
+  await page.locator(".change-list li", { hasText: "Figure looks right" }).locator("button", { hasText: "Undo" }).click();
   await page.locator("#reading .pill", { hasText: "1 flag open" }).waitFor({ timeout: 15_000 }).then(() => check(true, "Undo brings a flag back"), () => check(false, "Undo brings a flag back"));
   await page.locator("#reading button", { hasText: "Mark ready anyway" }).click();
   await page.locator("#reading button", { hasText: "Yes" }).click();
@@ -623,8 +633,8 @@ try {
   check(rows(`SELECT COUNT(*) AS n FROM audit_log WHERE action = 'paper.override'`)[0].n >= 1, "the override is audited");
 
   // Cutting figures again is free: no AI is asked, the words stay, a box drawn by hand stays.
-  const cutBtn = page.locator("#reading button", { hasText: "Cut figures from the PDF (free)" });
-  check((await cutBtn.count()) === 1, "a read paper offers Cut figures from the PDF (free)");
+  const cutBtn = page.locator("#reading button", { hasText: "Cut figures again" });
+  check((await cutBtn.count()) === 1 && (await page.locator("#reading button", { hasText: "Run the checks again" }).count()) === 1, "a read paper offers Run the checks again and Cut figures again");
   await cutBtn.click();
   await page.locator("#reading button", { hasText: "Yes" }).click();
   await page.locator("#reading .action-note", { hasText: "GITHUB_TOKEN" }).waitFor({ timeout: 10_000 }).then(() => check(true, "cutting figures is not stopped by the cost check (only by the missing GitHub token here)"), () => check(false, "cutting figures is not stopped by the cost check (only by the missing GitHub token here)"));
@@ -641,6 +651,7 @@ try {
   await page.locator("#item-1\\(b\\)").scrollIntoViewIfNeeded().catch(() => {});
 
   // A figure's box drawn by hand on its page.
+  await page.locator(".panel-tab", { hasText: "Flags" }).click();
   await page.locator(".flag-filter", { hasText: "Figures" }).click();
   await page.locator(".flag-list .flag-row").first().click();
   await page.locator("#figure-F2 .flag-box button", { hasText: "Adjust box" }).click();
@@ -664,6 +675,10 @@ try {
 
   await page.goto(`${BASE}/admin/library/0625`);
   check((await page.locator(`#papers-read a[href="/admin/library/review/${paperId}"]`).count()) === 1 && (await page.locator("#papers-read .score-red").count()) === 1, "the subject overview lists papers read with their read accuracy");
+  await page.locator("#papers-read button", { hasText: "Run the checks again on all" }).click();
+  check((await page.locator("#papers-read .confirm").textContent())?.includes("No AI is asked"), "Run the checks again on all asks first, saying no AI is asked");
+  await page.locator("#papers-read button", { hasText: "Yes, check them" }).click();
+  await page.locator("#papers-read .action-note", { hasText: "GITHUB_TOKEN" }).waitFor({ timeout: 10_000 }).then(() => check(true, "it starts with no cost check (only the missing GitHub token stops it here)"), () => check(false, "it starts with no cost check (only the missing GitHub token stops it here)"));
   await page.goto(`${BASE}/admin/library/0625/2024/june`);
   check((await page.locator("#to-review .score-red").count()) === 1, "the session page shows the read accuracy beside Review");
   check(rows(`SELECT first_items, first_clean FROM paper_read WHERE doc_id = '${paperId}'`)[0].first_items === 3, "the first reading's numbers are kept, unchanged by the free figure cut");
@@ -680,6 +695,15 @@ try {
   const rAlone = await runBrain(alone);
   check(rAlone.status === 0 && ai.seq.filter((x) => x !== "claude").join(",") === "gemini-paper" && !ai.seq.includes("claude-paper"), `Gemini alone reads it and Claude is never asked (${ai.seq.join(",")})${rAlone.status ? ": " + rAlone.out.slice(-500) : ""}`);
   check(rows(`SELECT COUNT(*) AS n FROM ai_spend WHERE job_id = '${alone}' AND provider = 'claude'`)[0].n === 0, "no Claude spend for a Gemini-alone reading");
+
+  // Run the checks again (owner, 9 Nov 2026): no AI, the reading as it stands checked again and saved.
+  const recheck = `e2ek${Date.now()}`;
+  sql(`INSERT INTO job (id, type, status, params, created_by, created_at) VALUES ('${recheck}', 'brain', 'queued', '{"task":"paper","docId":"${paperId}","scope":{"items":[],"figures":[]},"check":true}', 'platform-admin', ${Date.now()})`);
+  sql(`UPDATE paper_read SET job_id = '${recheck}' WHERE doc_id = '${paperId}'`);
+  ai.seq.length = 0;
+  const rCheck = await runBrain(recheck);
+  check(rCheck.status === 0 && ai.seq.length === 0 && rCheck.out.includes("not asked (checking the reading again)"), `Run the checks again asks no AI (${ai.seq.join(",") || "none"})${rCheck.status ? ": " + rCheck.out.slice(-500) : ""}`);
+  check(rows(`SELECT COUNT(*) AS n FROM ai_spend WHERE job_id = '${recheck}'`)[0].n === 0 && rows(`SELECT status FROM job WHERE id = '${recheck}'`)[0].status === "succeeded", "it records no spend and finishes");
 
   // 13. Read all (owner, 8 Nov 2026): the choice shows what it reads and the cost; one run reads the papers in turn.
   sql(`DELETE FROM source_document WHERE file_name IN ('0625_s24_qp_22.pdf', '0625_s24_qp_62.pdf')`);
@@ -723,6 +747,14 @@ try {
   check((await page.locator(`#read-all .batch-list a[href="/admin/library/review/${id22}"]`).count()) === 1, "each paper read links to its review screen");
   await page.goto(`${BASE}/admin/library/0625?ra=extended&ras=s&ray=2024#read-all`);
   check((await page.locator("#read-all").textContent())?.includes("Nothing to read"), "pressing it again finds nothing left to read");
+  // Read all for both tiers (owner, 9 Nov 2026), on the same line as the month and year, bottoms aligned.
+  const pick = page.locator("#read-all form.read-all-pick");
+  check((await pick.locator('button[name=ra][value=any]', { hasText: /^Read all$/ }).count()) === 1, "Read all (both tiers) sits next to Read all Core and Read all Extended");
+  const bottoms = await pick.evaluate((f) => [...f.querySelectorAll("select, button")].map((e) => Math.round(e.getBoundingClientRect().bottom)));
+  check(Math.max(...bottoms) - Math.min(...bottoms) <= 2, `the month, year and Read all buttons line up (${bottoms.join(", ")})`);
+  await pick.locator('button[value=any]').click();
+  await page.waitForURL(/ra=any/);
+  check((await page.locator("#read-all").textContent())?.includes("All papers, Jun 2024"), "Read all chooses every paper of both tiers");
   check((await fetch(`${BASE}/api/brain/next`, { method: "POST", body: "{}" })).status === 401, "the next-paper endpoint refuses unsigned requests");
 
   // 14. Home (owner, 9 Nov 2026): storage, and Needs you can be cleared and brought back.
