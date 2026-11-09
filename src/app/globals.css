@@ -360,6 +360,9 @@
   /* Superscripts and subscripts stay readable (nothing below 14 px). */
   .admin sup, .admin sub { font-size: 0.875rem; }
   .nota-stack { @apply inline-flex flex-col items-end align-middle text-sm leading-none; }
+  .nota-frac { @apply mx-0.5 inline-flex flex-col items-center align-middle leading-tight; }
+  .nota-num { @apply border-b border-current px-0.5; }
+  .nota-den { @apply px-0.5; }
   .flag-box { @apply mt-2 flex flex-col gap-2 rounded-lg border-l-4 bg-paper p-3; }
   .flag-red { @apply border-red-500; }
   .flag-amber { @apply border-amber-500; }

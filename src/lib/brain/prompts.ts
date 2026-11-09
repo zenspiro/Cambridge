@@ -143,7 +143,7 @@ totalMarks: the maximum mark printed, or null.`;
   const scope = only.length ? `\n\nOnly copy these items: ${only.join(", ")}. Leave every other item out.` : "";
   const how = parts && parts.textPages.length
     ? `The paper reaches you in two parts. The attached PDF holds only the pages with figures: the paper's pages ${parts.picturePages.join(", ")}, in that order${parts.picturePages.length ? "" : " (none)"}. Every other page is given below as the text taken from the PDF, under markers such as "=== Page 4 ===". Together they are the whole paper, in page order. For page, give the paper's own page number (from the marker, or from the list above for a PDF page).
-Superscripts and subscripts in this text were worked out from where each character sits in the PDF and are already written as ^{...} and _{...}: keep them exactly. Where the text still has a power or index flat ("cm3", "10–2"), write it in the same markup. Dotted lines are answer lines (shown as [line] in the text): count them for answerLines and leave them out of text. Words split after a capital letter are one word ("W rite" is "Write").
+Superscripts, subscripts and stacked fractions in this text were worked out from where each character sits in the PDF and are already written as ^{...}, _{...} and \\frac{...}{...}: keep them exactly. Where the text still has a power or index flat ("cm3", "10–2"), write it in the same markup. Dotted lines are answer lines (shown as [line] in the text): count them for answerLines and leave them out of text. Words split after a capital letter are one word ("W rite" is "Write").
 
 `
     : "";
@@ -151,7 +151,7 @@ Superscripts and subscripts in this text were worked out from where each charact
 
 ${what}
 
-Copy notation exactly as printed, in one markup, the same way every time: every superscript as ^{...} and every subscript as _{...}, for example 10^{−3}, cm^{3}, m/s^{2}, x^{2}, H_{2}O, SO_{4}^{2−}, Fe^{3+}, v_{1}, and a nuclide with its mass number above and atomic number below its symbol as ^{90}_{38}Sr. Never write a power, index or nuclide flat (not "cm3", "10-3" or "90 38 Sr"). Fractions as a/b with brackets where needed ((x + 1)/3), and the signs ×, ÷, −, √, π, ≤, ≥, ≠, →, ⇌ and ° as printed. Greek letters as printed (α, β, γ, λ, Ω, μ). Keep program code exactly: one line per line, with its line numbers, its indentation (spaces) and its symbols such as ←.
+Copy notation exactly as printed, in one markup, the same way every time: every superscript as ^{...} and every subscript as _{...}, for example 10^{−3}, cm^{3}, m/s^{2}, x^{2}, H_{2}O, SO_{4}^{2−}, Fe^{3+}, v_{1}, and a nuclide with its mass number above and atomic number below its symbol as ^{90}_{38}Sr. Never write a power, index or nuclide flat (not "cm3", "10-3" or "90 38 Sr"). Every fraction as \\frac{numerator}{denominator} (\\frac{4}{x − 1}, \\frac{y^{8}}{16x^{16}}), a mixed number as 43\\frac{1}{3}; never as a/b or with its parts run together. The signs ×, ÷, −, √, π, ≤, ≥, ≠, →, ⇌ and ° as printed. Greek letters as printed (α, β, γ, λ, Ω, μ). Keep program code exactly: one line per line, with its line numbers, its indentation (spaces) and its symbols such as ←.
 
 Keep the paper's order. Do not summarise, merge, split, reword, correct or answer anything.${scope}`;
 }

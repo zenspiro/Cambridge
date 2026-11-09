@@ -16,7 +16,7 @@ import { join } from "node:path";
 import { assignBoxes, findBoxes, pageArt, textLines, type Box, type FigureCut } from "../../src/lib/brain/figures.ts";
 import { signRequest } from "../../src/lib/agent/sign.ts";
 import { allPagesInfo, allPagesText } from "../../src/lib/pdf/firstPage.ts";
-import { notatedPages, pdfOutline, type OutlinePart } from "../../src/lib/brain/notation.ts";
+import { fractionBars, notatedPages, pdfOutline, type Bar, type OutlinePart } from "../../src/lib/brain/notation.ts";
 import {
   PAPER_SCHEMA, PAPER_SCHEMA_GEMINI, PAPER_SYSTEM, paperPrompt,
   retryPrompt, TOPIC_SCHEMA, TOPIC_SCHEMA_GEMINI, TOPIC_SYSTEM, topicPrompt,
@@ -538,10 +538,22 @@ async function runPaper(job: PaperJob) {
     try {
       const pdf = join(dir, "paper.pdf");
       await writeFile(pdf, doc.bytes);
-      const n = notatedPages(rawPages, await run("pdftotext", ["-bbox-layout", pdf, "-"]));
+      // Fraction bars from each page's drawing (blank pages and the cover have none worth reading).
+      const blank = blankPages(rawPages);
+      const bars: Bar[][] = [];
+      for (let p = 1; p <= rawPages.length; p++) {
+        if (p === 1 || blank.includes(p)) {
+          bars.push([]);
+          continue;
+        }
+        const out = join(dir, `bars${p}.svg`);
+        await run("pdftocairo", ["-svg", "-f", String(p), "-l", String(p), pdf, out]);
+        bars.push(fractionBars(await readFile(out, "utf8")));
+      }
+      const n = notatedPages(rawPages, await run("pdftotext", ["-bbox-layout", pdf, "-"]), bars);
       pages = n.pages;
       outline = pdfOutline(n.words);
-      log(`notation: ${n.found} superscripts and subscripts, text from ${n.from}; outline: ${outline.length} questions and parts`);
+      log(`notation: ${n.found} superscripts and subscripts, ${n.fractions} fractions, text from ${n.from}; outline: ${outline.length} questions and parts`);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -590,7 +602,7 @@ async function runPaper(job: PaperJob) {
     const readable = pages.join("").replace(/\s/g, "").length >= BRAIN.minPaperTextChars;
     const blank = blankPages(rawPages);
     // Pictures are chosen on our reader's text (its scattered formula pieces are what makes a page a picture).
-    const pics = picturePages(rawPages, blank, info);
+    const pics = picturePages(rawPages, blank, info, pages);
     const textOnly = keptPages(pages.length, [...blank, ...pics]);
     const mixed = readable && textOnly.length > 0;
     const claudePdf = mixed ? (pics.length ? (await slimPdf(doc.bytes, pics, pages.length)).pdf64 : "") : pdf64;

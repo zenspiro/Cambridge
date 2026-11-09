@@ -215,7 +215,9 @@ function notationFlag(it: PaperItem, pages: readonly string[]): { reason: string
   if (!lost) return null;
   const inText = lostNotation(it.text, near);
   return {
-    reason: `The paper prints ${notationPlain(lost.marked)} here; the reading has it flat ("${lost.flat}").`,
+    reason: lost.marked.startsWith("\\frac{")
+      ? `The paper prints the fraction ${notationPlain(lost.marked)} here; the reading has "${lost.flat}", which reads differently.`
+      : `The paper prints ${notationPlain(lost.marked)} here; the reading has it flat ("${lost.flat}").`,
     what: `${lost.marked}|${lost.flat}`,
     pdfText: inText ? inText.repaired : "",
   };
@@ -639,7 +641,7 @@ const CODE_LINE = /^(?:\d{2}\s+\S|(?:OUTPUT|INPUT|IF|THEN|ELSE|ENDIF|WHILE|ENDWH
  * - almost no text and no [marks] (probably a picture page).
  * Blank pages and the cover are never pictures. Pure.
  */
-export function picturePages(pages: readonly string[], blank: readonly number[], drawn: readonly PageDrawn[] = []): number[] {
+export function picturePages(pages: readonly string[], blank: readonly number[], drawn: readonly PageDrawn[] = [], notated?: readonly string[]): number[] {
   // Page furniture (corner marks, bar codes) is the same on every page: the plainest inner page shows how much it is.
   const inner = drawn.slice(1).map((d) => d.paths);
   const furniture = inner.length ? Math.min(...inner) : 0;
@@ -647,19 +649,38 @@ export function picturePages(pages: readonly string[], blank: readonly number[],
     const p = i + 1;
     if (p === 1 || blank.includes(p)) return [];
     const lines = aiPageText(text).split("\n").map((l) => l.trim()).filter(Boolean);
-    const all = text.split("\n").slice(1).map((l) => l.trim()).filter(Boolean);
-    // Formula fragments: short lines that are not a mark, a part label like "(a)" or a row of dots...
-    const fragments = all.filter((l) => l.length <= 4 && !/^\[\s*\d+\s*\]$/.test(l) && !/^\([a-z]{1,4}\)$/.test(l) && !/^\.+$/.test(l)).length;
-    // ...and the scrambled pieces a formula leaves: empty brackets "()", letters run into numbers "xx72", "yx xx31".
-    const garbled = all.filter((l) => /\(\s*\)/.test(l) || /\b[a-z]{1,3}\d{2,}\b/.test(l) || /\b[a-z]{2}\s[a-z]{2}\d/.test(l)).length;
     const code = lines.filter((l) => CODE_LINE.test(l)).length;
     const paths = drawn[i]?.paths ?? 0;
     if (/\bFig\.?\s*\d+\.\d+/i.test(text)) return [p];
     if (drawn.length && paths > furniture + 8) return [p];
     if ((drawn[i]?.images ?? 0) > Math.min(...drawn.slice(1).map((d) => d.images ?? 0))) return [p];
-    if (fragments >= 2 || garbled >= 1 || code >= 4) return [p];
+    if (code >= 4) return [p];
+    // Formulas: the scattered pieces our reader leaves. With the page rebuilt from where its words sit (fractions as
+    // \frac, powers as ^{}), a page whose pieces are all put back goes as text (owner, 9 Nov 2026).
+    if (scattered(text) && !rebuiltClean(notated?.[i])) return [p];
     return squash(aiPageText(text)).length < 80 && !/\[\s*\d+\s*\]/.test(text) ? [p] : [];
   });
+}
+
+/** A page whose formulas came out of the text layer in pieces: short fragment lines or scrambled ones. */
+function scattered(text: string): boolean {
+  const all = text.split("\n").slice(1).map((l) => l.trim()).filter(Boolean);
+  // Formula fragments: short lines that are not a mark, a part label like "(a)" or a row of dots...
+  const fragments = all.filter((l) => l.length <= 4 && !/^\[\s*\d+\s*\]$/.test(l) && !/^\([a-z]{1,4}\)$/.test(l) && !/^\.+$/.test(l)).length;
+  // ...and the scrambled pieces a formula leaves: empty brackets "()", letters run into numbers "xx72", "yx xx31".
+  const garbled = all.filter((l) => /\(\s*\)/.test(l) || /\b[a-z]{1,3}\d{2,}\b/.test(l) || /\b[a-z]{2}\s[a-z]{2}\d/.test(l)).length;
+  return fragments >= 2 || garbled >= 1;
+}
+
+/**
+ * A page rebuilt from where its words sit that can stand in for its picture: its fractions were found (\frac), and
+ * nothing is left in pieces: no fragment lines (page number aside), no scrambled runs, no stray letter against a
+ * fraction (a tall bracket the text layer reads as "f" or "p"). Pure.
+ */
+function rebuiltClean(text: string | undefined): boolean {
+  if (!text || !text.includes("\\frac{")) return false;
+  const body = text.split("\n").slice(1).join("\n");
+  return !scattered(`x\n${body}`) && !/[A-Za-z]\\frac\{|\}[A-Za-z]\^\{[−+-]\}|\}[a-z](?![a-z])/.test(body);
 }
 
 /** A page's text as Claude gets it: the margin warnings, bar codes and footers that Cambridge prints on every page left out. */
