@@ -2,11 +2,12 @@
 // the footer statement. No server or client APIs, so server pages and the theme gallery (client) both use it.
 import type { ReactNode } from "react";
 import type { ThemeId } from "@/lib/config";
-import { Icon, type IconName } from "./Icons";
+import { AppIcon } from "@/components/icons/AppIcon";
 
 /** What the frame needs from the Brand page, already turned into addresses and text. */
 export type FrameBrand = { name: string; logoUrl?: string; squareUrl?: string; footer: string };
-export type NavItem = { href: string; label: string; icon: IconName };
+/** A menu item; `icon` is an icon name from the set (src/components/icons/set.ts), resolved by the page from its slot. */
+export type NavItem = { href: string; label: string; icon: string };
 
 export function StudentFrame({
   brand,
@@ -45,7 +46,7 @@ export function StudentFrame({
             <nav className="s-nav" aria-label="Main">
               {nav.map((n) => (
                 <a key={n.href} className="s-nav-link" href={n.href} aria-current={n.href === current ? "page" : undefined}>
-                  <Icon name={n.icon} />
+                  <AppIcon name={n.icon} className="s-icon" />
                   {n.label}
                 </a>
               ))}

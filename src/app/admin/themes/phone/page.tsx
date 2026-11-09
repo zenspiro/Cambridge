@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { requireAdmin } from "@/lib/auth/guard";
-import { currentBrand } from "@/lib/env";
+import { currentBrand, getEnv } from "@/lib/env";
+import { readIcons } from "@/lib/icons";
 import { frameBrand } from "@/lib/brand";
 import { ThemeGallery } from "@/components/student/ThemeGallery";
 import { THEMES, type ThemeId } from "@/lib/config";
@@ -13,5 +14,5 @@ export default async function ThemePhonePage({ searchParams }: { searchParams: P
   const brand = await currentBrand();
   const asked = (await searchParams).theme;
   const theme: ThemeId = THEMES.find((t) => t.id === asked)?.id ?? brand.defaultTheme;
-  return <ThemeGallery brand={frameBrand(brand)} initial={theme} boxed={false} />;
+  return <ThemeGallery brand={frameBrand(brand)} initial={theme} boxed={false} icons={await readIcons((await getEnv()).DB)} />;
 }

@@ -4,28 +4,31 @@ import { aiUsageToday } from "@/lib/agent/usage";
 import { AI_USAGE } from "@/lib/config";
 import { activeRuns } from "@/lib/adminStatus";
 import { AdminEnhance } from "@/components/AdminEnhance";
+import { AppIcon } from "@/components/icons/AppIcon";
+import { readIcons } from "@/lib/icons";
 
 /** The sidebar, in groups (owner, 6 Nov 2026). `current` on a page names the item it belongs to. */
-const NAV: readonly { group: string | null; items: readonly { href: string; label: string }[] }[] = [
-  { group: null, items: [{ href: "/admin", label: "Home" }] },
+const NAV: readonly { group: string | null; items: readonly { href: string; label: string; icon: string }[] }[] = [
+  { group: null, items: [{ href: "/admin", label: "Home", icon: "admin.home" }] },
   {
     group: "Library",
     items: [
-      { href: "/admin/library", label: "Library" },
-      { href: "/admin/library/upload", label: "Upload" },
-      { href: "/admin/sources", label: "Sources" },
-      { href: "/admin/agent", label: "Agent" },
+      { href: "/admin/library", label: "Library", icon: "admin.library" },
+      { href: "/admin/library/upload", label: "Upload", icon: "admin.upload" },
+      { href: "/admin/sources", label: "Sources", icon: "admin.sources" },
+      { href: "/admin/agent", label: "Agent", icon: "admin.agent" },
     ],
   },
-  { group: "Subject brain", items: [{ href: "/admin/topics", label: "Topic trees" }] },
-  { group: "Students and parents", items: [{ href: "/admin/approval", label: "Parent approval" }] },
+  { group: "Subject brain", items: [{ href: "/admin/topics", label: "Topic trees", icon: "admin.topics" }] },
+  { group: "Students and parents", items: [{ href: "/admin/approval", label: "Parent approval", icon: "admin.approval" }] },
   {
     group: "Settings",
     items: [
-      { href: "/admin/settings", label: "Library settings" },
-      { href: "/admin/ai", label: "AI setup" },
-      { href: "/admin/brand", label: "Brand" },
-      { href: "/admin/themes", label: "Themes" },
+      { href: "/admin/settings", label: "Library settings", icon: "admin.settings" },
+      { href: "/admin/ai", label: "AI setup", icon: "admin.ai" },
+      { href: "/admin/brand", label: "Brand", icon: "admin.brand" },
+      { href: "/admin/themes", label: "Themes", icon: "admin.themes" },
+      { href: "/admin/icons", label: "Icons", icon: "admin.icons" },
     ],
   },
 ];
@@ -49,7 +52,7 @@ export async function AdminShell({ current, title, children, intro, actions, cru
   keepHead?: boolean;
 }) {
   const db = (await getEnv()).DB;
-  const [ai, runs] = await Promise.all([aiUsageToday(db), activeRuns(db)]);
+  const [ai, runs, icons] = await Promise.all([aiUsageToday(db), activeRuns(db), readIcons(db)]);
   return (
     <div className="admin">
       <a className="skip-link" href="#main">Skip to the page</a>
@@ -60,6 +63,7 @@ export async function AdminShell({ current, title, children, intro, actions, cru
               {g.group ? <p className="side-heading">{g.group}</p> : null}
               {g.items.map((n) => (
                 <Link key={n.href} href={n.href} className="side-link" aria-current={n.href === current ? "page" : undefined}>
+                  <AppIcon name={icons[n.icon] ?? "circle-help"} className="side-icon" />
                   {n.label}
                 </Link>
               ))}

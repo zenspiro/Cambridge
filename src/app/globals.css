@@ -53,7 +53,20 @@
   .side-nav { @apply flex flex-col gap-5; }
   .side-group { @apply flex flex-col gap-0.5; }
   .side-heading { @apply px-3 pb-1 text-sm font-semibold uppercase tracking-wide text-muted; }
-  .side-link { @apply rounded-lg px-3 py-2 text-base font-medium text-muted hover:bg-wash hover:text-ink; }
+  .side-link { @apply flex items-center gap-2.5 rounded-lg px-3 py-2 text-base font-medium text-muted hover:bg-wash hover:text-ink; }
+  .side-icon { @apply h-5 w-5 shrink-0; }
+  .app-icon { @apply inline-block h-5 w-5 shrink-0 align-middle; }
+  /* Settings > Icons and its picker (owner, 9 Nov 2026). */
+  .icon-preview { @apply h-6 w-6; }
+  .icon-dialog { @apply m-auto flex max-h-[85vh] w-[min(900px,90vw)] flex-col gap-3 rounded-xl border border-line bg-paper p-5 text-ink shadow-xl; }
+  .icon-dialog:not([open]) { @apply hidden; }
+  .icon-dialog::backdrop { @apply bg-black/40; }
+  .icon-dialog-head { @apply flex items-center justify-between gap-3; }
+  .icon-grid { @apply grid min-h-0 flex-1 grid-cols-6 content-start gap-2 overflow-y-auto pr-1; }
+  .icon-choice { @apply flex flex-col items-center gap-1 rounded-lg border border-line bg-paper px-1 py-2 text-sm text-ink hover:bg-wash focus-visible:outline-2 disabled:opacity-60; }
+  .icon-choice-current { @apply border-ink bg-wash font-semibold; }
+  .icon-choice-svg { @apply h-6 w-6; }
+  .icon-choice-name { @apply w-full truncate text-center; }
   .side-link[aria-current="page"] { @apply bg-wash font-semibold text-ink; }
   .side-foot { @apply flex flex-col gap-3 px-3; }
   .admin-main { @apply min-w-0 px-8 pb-12 pt-0; }
@@ -137,6 +150,8 @@
   .tile-stat-label { @apply text-sm font-medium text-muted; }
   .tile-stat-value { @apply text-2xl font-semibold tabular-nums; }
   .tile-stat-note { @apply text-sm text-muted; }
+  .tile-wide { @apply col-span-full; }
+  .tile-stat-foot { @apply mt-1 flex flex-wrap items-center justify-between gap-3; }
   .btn-small { @apply min-h-9 px-3 py-1; }
   .btn-danger { @apply border-red-300 text-red-800 hover:bg-red-50; }
   .notice { @apply mt-4 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-base text-green-800; }

@@ -705,6 +705,45 @@ try {
   check((await page.locator("#read-all").textContent())?.includes("Nothing to read"), "pressing it again finds nothing left to read");
   check((await fetch(`${BASE}/api/brain/next`, { method: "POST", body: "{}" })).status === 401, "the next-paper endpoint refuses unsigned requests");
 
+  // 14. Home (owner, 9 Nov 2026): storage, and Needs you can be cleared and brought back.
+  await page.goto(`${BASE}/admin`);
+  const storage = (await page.locator("#storage").textContent()) ?? "";
+  check(storage.includes("Storage") && storage.includes("Database") && /papers [\d.]+ (B|KB|MB)/.test(storage) && storage.includes("app files"), `Home shows storage: database, papers and app files (${storage.slice(0, 160)})`);
+  await page.locator("#storage button", { hasText: "Count again" }).click();
+  await page.locator("#storage .action-note", { hasText: "counted again" }).waitFor({ timeout: 10_000 }).then(() => check(true, "Count again counts in place"), () => check(false, "Count again counts in place"));
+  const paperRow = page.locator("#needs-you .need-row", { has: page.locator(`a[href="/admin/library/review/${id22}"]`) });
+  check((await paperRow.count()) === 1, "a paper with open flags is in Needs you");
+  await paperRow.locator("button", { hasText: "Clear" }).click();
+  await paperRow.waitFor({ state: "detached", timeout: 10_000 }).then(() => check(true, "Clear takes it off Needs you in place"), () => check(false, "Clear takes it off Needs you in place"));
+  check((await page.locator("#cleared-today").count()) === 1, "Cleared today lists it for undo");
+  await page.locator("#cleared-today summary").click();
+  await page.locator("#cleared-today button", { hasText: "Undo" }).first().click();
+  await page.locator("#needs-you .need-row", { has: page.locator(`a[href="/admin/library/review/${id22}"]`) }).waitFor({ timeout: 10_000 }).then(() => check(true, "Undo brings it back"), () => check(false, "Undo brings it back"));
+  check(rows(`SELECT cleared_at FROM paper_read WHERE doc_id = '${id22}'`)[0].cleared_at === null, "undo clears the mark");
+  const stopped = await page.locator("#needs-you h3", { hasText: "Runs that stopped" }).count();
+  if (stopped) {
+    await page.locator("#needs-you .card-head", { hasText: "Runs that stopped" }).locator("button", { hasText: "Clear all" }).click();
+    await page.locator("#needs-you .confirm button", { hasText: "Yes, clear" }).click();
+    await page.locator("#needs-you h3", { hasText: "Runs that stopped" }).waitFor({ state: "detached", timeout: 10_000 }).then(() => check(true, "Clear all empties the stopped runs, after asking"), () => check(false, "Clear all empties the stopped runs, after asking"));
+  }
+
+  // 15. Icons (owner, 9 Nov 2026): Lucide icons in the menus, chosen on Settings > Icons with the picker.
+  check((await page.locator('.side-link[href="/admin/library"] svg.lucide-library').count()) === 1, "the admin menu has its icons");
+  await page.goto(`${BASE}/admin/icons`);
+  const libRow = page.locator('tr[data-slot="admin.library"]');
+  await libRow.locator("button", { hasText: "Change" }).click();
+  const dlg = page.locator("dialog.icon-dialog[open]");
+  check((await dlg.count()) === 1 && (await dlg.locator(".icon-choice").count()) >= 200, "Change opens the picker with the whole set");
+  await dlg.locator("input[type=search]").fill("book open");
+  check((await dlg.locator(".icon-choice").count()) >= 1 && (await dlg.locator(".icon-choice", { hasText: "chart" }).count()) === 0, "search narrows the icons");
+  await dlg.locator('.icon-choice[title="book open"]').click();
+  await page.locator('.side-link[href="/admin/library"] svg.lucide-book-open').waitFor({ timeout: 10_000 }).then(() => check(true, "a choice saves in place and the menu shows it"), () => check(false, "a choice saves in place and the menu shows it"));
+  check((await page.locator("dialog.icon-dialog[open]").count()) === 0, "the picker closes after a choice");
+  await libRow.locator("button", { hasText: "Default" }).click();
+  await page.locator('.side-link[href="/admin/library"] svg.lucide-library').waitFor({ timeout: 10_000 }).then(() => check(true, "Default puts the original back"), () => check(false, "Default puts the original back"));
+  await page.goto(`${BASE}/admin/themes/phone?theme=b`);
+  check((await page.locator(".s-nav svg.lucide").count()) === 4 && (await page.locator(".s-streak svg.lucide-flame").count()) === 1, "student pages use the icons too");
+
   // 11. Signed endpoints refuse unsigned calls.
   const unsigned = await fetch(`${BASE}/api/brain/job`, { method: "POST", body: "{}" });
   check(unsigned.status === 401, "brain endpoints refuse unsigned requests");

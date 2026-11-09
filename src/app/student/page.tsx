@@ -7,7 +7,8 @@ import { listSubjects, subjectLabel } from "@/lib/library/catalog";
 import { SESSION_LABELS } from "@/lib/config";
 import { StudentFrame } from "@/components/student/StudentFrame";
 import { SignOut } from "@/components/student/SignOut";
-import { STUDENT_NAV } from "@/components/student/nav";
+import { STUDENT_NAV, withIcons } from "@/components/student/nav";
+import { readIcons } from "@/lib/icons";
 import { ActionForm } from "@/components/ActionForm";
 
 export const metadata: Metadata = { title: "Home" };
@@ -20,7 +21,7 @@ export default async function StudentHome() {
   const [profile, plans] = await Promise.all([getProfile(db, s.userId), listExamPlans(db, s.userId)]);
   const subjects = plans.length ? await listSubjects(db) : [];
   return (
-    <StudentFrame brand={frameBrand(brand)} theme={s.theme ?? brand.defaultTheme} nav={STUDENT_NAV} current="/student" actions={<SignOut />}>
+    <StudentFrame brand={frameBrand(brand)} theme={s.theme ?? brand.defaultTheme} nav={withIcons(STUDENT_NAV, await readIcons(db))} current="/student" actions={<SignOut />}>
       <h1 className="s-h1">Hi, {s.firstName}</h1>
       {!plans.length && !profile.examSkippedAt ? (
         <section className="s-card s-feature" aria-label="Your exams">
