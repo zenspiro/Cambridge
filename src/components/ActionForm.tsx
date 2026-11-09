@@ -20,6 +20,8 @@ type Props = {
   className?: string;
   /** Add the folder counts from the redirect ("Added 2, already listed 0, not a folder link 1."). */
   counts?: boolean;
+  /** Told the outcome once the answer is back, before the page's data is refreshed. */
+  onDone?: (ok: boolean, code: string) => void;
 };
 
 function folderCounts(q: URLSearchParams): string {
@@ -27,7 +29,7 @@ function folderCounts(q: URLSearchParams): string {
   return q.has("added") ? `Added ${n("added")}, already listed ${n("dupes")}, not a folder link ${n("bad")}.` : "";
 }
 
-export function ActionForm({ action, children, messages, confirm, className, counts, yes = "Yes", no = "Never mind" }: Props) {
+export function ActionForm({ action, children, messages, confirm, className, counts, onDone, yes = "Yes", no = "Never mind" }: Props) {
   const router = useRouter();
   const form = useRef<HTMLFormElement>(null);
   const [asking, setAsking] = useState<FormData | null>(null);
@@ -45,6 +47,7 @@ export function ActionForm({ action, children, messages, confirm, className, cou
       const text = [messages[code] ?? (ok ? "Done." : "That did not work. Please try again."), counts ? folderCounts(q) : ""].filter(Boolean).join(" ");
       setNote({ ok, text });
       window.dispatchEvent(new CustomEvent("admin-toast", { detail: { ok, text } })); // the corner toast (AdminEnhance)
+      onDone?.(ok, code);
       if (ok) {
         form.current?.reset();
         router.refresh(); // fresh data from the server, same scroll position
