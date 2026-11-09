@@ -13,7 +13,7 @@ export type PaperScope = { items: string[]; figures: string[] };
 export type BrainParams =
   | { task: "topics"; syllabusId: string }
   | { task: "check"; which: "claude" | "gemini" | null }
-  | { task: "paper"; docId: string; scope: PaperScope; batch?: Batch; reader?: string };
+  | { task: "paper"; docId: string; scope: PaperScope; batch?: Batch; reader?: string; check?: boolean };
 /** Read all (owner, 8 Nov 2026): one run reads these papers in turn; `docId` is the one being read now. */
 export type Batch = { docs: string[]; label: string };
 export type TreeStatus = "none" | "ready" | "not_ready";
@@ -81,26 +81,29 @@ export async function finishCheckRun(db: Db, id: string, now = Date.now()): Prom
  * "Read this paper" (or read one question again, or redraw one figure): a brain run for one question paper or mark
  * scheme. An empty scope reads the whole paper (keeping what is confirmed).
  */
-export async function startPaperRun(db: Db, docId: string, scope: PaperScope, actorId: string, now = Date.now(), reader?: string): Promise<string | null> {
+export async function startPaperRun(db: Db, docId: string, scope: PaperScope, actorId: string, now = Date.now(), reader?: string, check = false): Promise<string | null> {
   // `reader` (owner, 9 Nov 2026): the AI chosen for this one reading ("Read with"); the saved Reading AI stays as it is.
   const r = reader && isReader(reader) ? reader : undefined;
-  const id = await startBrainRun(db, { task: "paper", docId, scope, ...(r ? { reader: r } : {}) }, actorId, now);
+  // `check` (owner, 9 Nov 2026): no AI; the stored reading is checked again with today's checks (and figures without a
+  // box are cut).
+  const id = await startBrainRun(db, { task: "paper", docId, scope, ...(r && !check ? { reader: r } : {}), ...(check ? { check: true } : {}) }, actorId, now);
   if (!id) return null;
   await db
     .prepare(`INSERT INTO paper_read (doc_id, job_id, updated_at) VALUES (?1, ?2, ?3) ON CONFLICT (doc_id) DO UPDATE SET job_id = ?2, updated_at = ?3`)
     .bind(docId, id, now)
     .run();
-  await audit(db, { actorId, action: "brain.paper_start", entity: "source_document", entityId: docId, detail: { job: id, items: scope.items.length, figures: scope.figures.length, ...(r ? { reader: r } : {}) } }, now);
+  await audit(db, { actorId, action: "brain.paper_start", entity: "source_document", entityId: docId, detail: { job: id, items: scope.items.length, figures: scope.figures.length, ...(r ? { reader: r } : {}), ...(check ? { check: true } : {}) } }, now);
   return id;
 }
 
 const DOC_ID_RE = /^[A-Za-z0-9_-]{10,64}$/;
 
 /** Read all: one run for many papers, the first one claimed now (each later one when the script asks for it). */
-export async function startBatchRun(db: Db, docs: readonly string[], label: string, actorId: string, now = Date.now()): Promise<string | null> {
+export async function startBatchRun(db: Db, docs: readonly string[], label: string, actorId: string, now = Date.now(), check = false): Promise<string | null> {
   const list = docs.filter((d) => DOC_ID_RE.test(d)).slice(0, BRAIN.maxBatchPapers);
   if (!list.length) return null;
-  const id = await startBrainRun(db, { task: "paper", docId: list[0]!, scope: { items: [], figures: [] }, batch: { docs: list, label: label.slice(0, 120) } }, actorId, now);
+  // A check batch (owner, 9 Nov 2026): the papers already read, checked again with no AI.
+  const id = await startBrainRun(db, { task: "paper", docId: list[0]!, scope: { items: [], figures: [] }, batch: { docs: list, label: label.slice(0, 120) }, ...(check ? { check: true } : {}) }, actorId, now);
   if (!id) return null;
   await claimPaper(db, list[0]!, id, now);
   await audit(db, { actorId, action: "brain.batch_start", entity: "job", entityId: id, detail: { papers: list.length, label: label.slice(0, 120) } }, now);
@@ -125,7 +128,8 @@ export async function nextBatchPaper(db: Db, jobId: string, now = Date.now()): P
   const rest = p.batch.docs.slice(p.batch.docs.indexOf(p.docId) + 1);
   for (const docId of rest) {
     const done = await db.prepare(`SELECT read_at FROM paper_read WHERE doc_id = ?1`).bind(docId).first<{ read_at: number | null }>();
-    if (done?.read_at) continue;
+    // Reading skips papers read meanwhile; checking skips papers with no reading to check.
+    if (p.check ? !done?.read_at : done?.read_at) continue;
     const row = await db
       .prepare(`UPDATE job SET params = ?2, heartbeat_at = ?3 WHERE id = ?1 AND type = 'brain' AND status = 'running' RETURNING id`)
       .bind(jobId, JSON.stringify({ ...p, docId }), now)
@@ -264,7 +268,7 @@ const readParams = (s: string): BrainParams | null => {
       const docs = b && Array.isArray(b.docs) ? b.docs.filter((x): x is string => typeof x === "string" && DOC_ID_RE.test(x)).slice(0, BRAIN.maxBatchPapers) : [];
       const batch = docs.includes(p.docId) ? { docs, label: typeof b?.label === "string" ? b.label.slice(0, 120) : "" } : undefined;
       const reader = typeof p.reader === "string" && isReader(p.reader) ? p.reader : undefined;
-      return { task: "paper", docId: p.docId, scope: { items: list(sc.items), figures: list(sc.figures) }, ...(batch ? { batch } : {}), ...(reader ? { reader } : {}) };
+      return { task: "paper", docId: p.docId, scope: { items: list(sc.items), figures: list(sc.figures) }, ...(batch ? { batch } : {}), ...(reader ? { reader } : {}), ...(p.check === true ? { check: true } : {}) };
     }
     return p?.task === "topics" && typeof p.syllabusId === "string" ? { task: "topics", syllabusId: p.syllabusId } : null;
   } catch {

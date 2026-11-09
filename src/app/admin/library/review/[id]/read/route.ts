@@ -25,7 +25,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     // "Read with" (owner, 9 Nov 2026): the AI for this reading only, one of the choices the page offered; empty is the
     // saved Reading AI. Its own rough cost is checked against the cap.
     let reader: string | undefined;
-    if (items.length || !figures.length) {
+    // Run the checks again (owner, 9 Nov 2026): no AI, so no cost check; only for a paper that has a reading.
+    const check = form.get("check") === "1";
+    if (check && !(await db.prepare(`SELECT read_at FROM paper_read WHERE doc_id = ?1`).bind(id).first<{ read_at: number | null }>())?.read_at) return "not_read";
+    if (!check && (items.length || !figures.length)) {
       const want = String(form.get("reader") ?? "");
       const choice = (await readerChoices(db, env, size?.size_bytes ?? 0)).find((c) => c.value === want);
       if (!choice) return "bad";
@@ -33,7 +36,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       reader = choice.value || undefined;
     }
     if (!(await allow(db, await limitKey("brain-run", actorId), BRAIN.runsPerHour, 3_600_000))) return "busy";
-    const jobId = await startPaperRun(db, id, { items, figures }, actorId, Date.now(), reader);
+    const jobId = await startPaperRun(db, id, check ? { items: [], figures: [] } : { items, figures }, actorId, Date.now(), reader, check);
     if (!jobId) return "running";
     let failure: string | null = null;
     try {

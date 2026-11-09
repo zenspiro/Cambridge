@@ -359,6 +359,18 @@
   .pq-cell-blank { @apply min-w-16 bg-slate-50; }
   /* Superscripts and subscripts stay readable (nothing below 14 px). */
   .admin sup, .admin sub { font-size: 0.875rem; }
+  /* The review panel's lists (owner, 9 Nov 2026): flags, pages and changes, each row opening its page on both sides. */
+  .panel-tabs { @apply flex flex-wrap gap-1 border-b border-line pb-2; }
+  .panel-tab { @apply rounded-lg px-3 py-1.5 font-medium text-muted hover:bg-wash; }
+  .panel-tab[aria-selected="true"] { @apply bg-ink text-paper; }
+  .flag-dot-ok { @apply bg-green-600; }
+  .flag-dot-none { @apply border border-line bg-transparent; }
+  .change-row { @apply flex flex-wrap items-center gap-2; }
+  .change-row > .flag-row { @apply min-w-0 flex-1; }
+  .change-meta { @apply whitespace-nowrap; }
+  .change-diff { @apply ml-4 flex flex-col gap-1 border-l-2 border-line py-1 pl-3; }
+  .change-undone { @apply opacity-60; }
+  .pq-focus { @apply ring-2 ring-blue-500; }
   /* View only (owner, 9 Nov 2026): change buttons hidden, fields shown but not editable; the server refuses changes. */
   .admin-readonly form[method="post"] button, .admin-readonly .edit-only { @apply hidden; }
   .admin-readonly form[method="post"] :is(input, select, textarea) { @apply pointer-events-none bg-wash; }
@@ -400,7 +412,7 @@
   .flag-filter[aria-pressed="true"] { @apply border-brand bg-brand text-brand-ink hover:bg-brand; }
   .flag-filter-count { @apply rounded-full bg-wash px-2 text-sm text-ink; }
   .flag-list { @apply m-0 flex max-h-56 list-none flex-col gap-0.5 overflow-y-auto p-0; }
-  .flag-row { @apply grid w-full grid-cols-[1rem_6.5rem_3.5rem_minmax(0,1fr)] items-center gap-2 rounded-md px-2 py-1 text-left text-base text-ink hover:bg-wash; }
+  .flag-row { @apply grid w-full grid-cols-[1rem_6.5rem_4.5rem_minmax(0,1fr)] items-center gap-2 rounded-md px-2 py-1 text-left text-base text-ink hover:bg-wash; }
   .flag-row-current { @apply bg-blue-50 outline outline-2 outline-blue-600; }
   .flag-row-item { @apply font-semibold; }
   .flag-row-page { @apply text-sm text-muted; }

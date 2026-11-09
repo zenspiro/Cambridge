@@ -28,7 +28,7 @@ export function describeRun(r: { id: string; type: string; status: string; param
       const at = b.docs.indexOf(p.docId) + 1;
       const code = typeof b.label === "string" && /^[0-9]{4} /.test(b.label) ? b.label.slice(0, 4) : "";
       // Watched where it was started: the subject's Read all card (owner, 9 Nov 2026).
-      return { id: r.id, label: `Read all: paper ${at} of ${b.docs.length}`, href: code ? `/admin/library/${code}#read-all` : `/admin/library/review/${encodeURIComponent(p.docId)}`, step: r.step, queued };
+      return { id: r.id, label: `${p.check ? "Checking again" : "Read all"}: paper ${at} of ${b.docs.length}`, href: code ? `/admin/library/${code}#read-all` : `/admin/library/review/${encodeURIComponent(p.docId)}`, step: r.step, queued };
     }
     if (p.task === "paper" && typeof p.docId === "string") return { id: r.id, label: "Reading a paper", href: `/admin/library/review/${encodeURIComponent(p.docId)}`, step: r.step, queued };
     if (p.task === "check") return { id: r.id, label: "AI setup check", href: "/admin/ai", step: r.step, queued };

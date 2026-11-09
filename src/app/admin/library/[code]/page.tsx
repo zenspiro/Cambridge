@@ -30,7 +30,9 @@ const MESSAGES = {
   ok_variants: "Essential variants saved for this syllabus.",
   bad_variants: "Tick at least one variant for each session.",
   busy: "Too many changes this hour. Please wait a little.",
-  ok_batch: "Read all started. It reads the papers one after another; Running now in the sidebar shows where it is.",
+  ok_batch: "Read all started. It reads the papers one after another; the Read all card shows where it is.",
+  ok_check: "The checks are running again on every paper read. No AI is asked; the Read all card shows where it is, and new flags show on each paper's review screen.",
+  check_none: "No paper of this subject has been read yet, so there is nothing to check.",
   batch_none: "Nothing to read: every stored paper in this choice is read already.",
   over_cap: "This would go past your monthly AI cap, so it did not start. Raise the cap on AI setup, or read fewer papers.",
   no_price: "A model in use has no price, so the cap cannot be checked. Set its price on AI setup.",
@@ -220,7 +222,16 @@ export default async function SyllabusOverview({
 
       {read.length ? (
         <section className="card stack" id="papers-read">
-          <h2 className="subtitle">Papers read ({read.length})</h2>
+          <div className="card-head">
+            <h2 className="subtitle">Papers read ({read.length})</h2>
+            {/* Run the checks again on all of them (owner, 9 Nov 2026): no AI, so nothing is spent. */}
+            {owner ? (
+              <ActionForm action={`/admin/library/${code}/check-all`} messages={MESSAGES} yes="Yes, check them" no="No"
+                confirm={`Check all ${Math.min(read.length, BRAIN.maxBatchPapers)} readings again with the latest checks? No AI is asked, so nothing is spent. Fixes stay; new flags show on each paper.`}>
+                <button className="btn" type="submit">Run the checks again on all</button>
+              </ActionForm>
+            ) : null}
+          </div>
           <p className="muted m-0">Read accuracy: how well the AIs read each paper by themselves on its first reading. Weakest first.</p>
           <ul className="review-list">
             {read.map((r) => (

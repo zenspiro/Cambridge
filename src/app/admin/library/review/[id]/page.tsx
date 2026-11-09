@@ -41,9 +41,6 @@ const MESSAGES = {
   bad: "That did not work. Please reload the page and try again.",
 };
 
-const FIX_WORDS: Record<string, string> = {
-  pdf: "Used the PDF's version", edit: "Edited", fine: "It's fine", looks_right: "Looks right", override: "Marked ready anyway",
-};
 const PAPER_STAGES = ["pdf", "gemini", "claude", "figures", "checks", "save"] as const;
 const RECENT_MS = 15 * 60_000;
 
@@ -123,6 +120,7 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
           busy={busy}
           canFix={canFix}
           canRead={canRead}
+          fixes={view.fixes}
         />
       ) : (
       <div className="review">
@@ -200,12 +198,21 @@ function ReadingCard({ docId, view, choices, run, busy, facts, canFix, canRead }
             <button className="btn btn-primary" type="submit">{read ? "Read it again" : "Read this paper"}</button>
           </ActionForm>
         ) : null}
-        {/* Free (owner, 7 Nov 2026): cuts every figure again from the PDF with no AI; words, fixes and hand-drawn boxes stay. */}
+        {/* Run the checks again (owner, 9 Nov 2026): no AI; the reading as it stands, fixes included, checked with today's
+            checks, so new flags show before anything is paid for. Figures with no box are cut too. */}
+        {!busy && canRead && read ? (
+          <ActionForm action={`${base}/read`} messages={MESSAGES} yes="Yes, check it" no="No"
+            confirm="Check this reading again with the latest checks? No AI is asked, so nothing is spent. Your fixes stay; anything new is flagged here.">
+            <input type="hidden" name="check" value="1" />
+            <button className="btn" type="submit">Run the checks again</button>
+          </ActionForm>
+        ) : null}
+        {/* No AI (owner, 7 Nov 2026): cuts every figure again from the PDF with no AI; words, fixes and hand-drawn boxes stay. */}
         {!busy && canRead && cutAgain.length ? (
           <ActionForm action={`${base}/read`} messages={MESSAGES} yes="Yes, proceed" no="No"
             confirm={`Cut ${cutAgain.length} figure${cutAgain.length === 1 ? "" : "s"} again from the PDF? No AI is used, so it costs nothing; boxes you drew by hand stay. Proceed?`}>
             {cutAgain.map((id) => <input key={id} type="hidden" name="figure" value={id} />)}
-            <button className="btn" type="submit">Cut figures from the PDF (free)</button>
+            <button className="btn" type="submit">Cut figures again</button>
           </ActionForm>
         ) : null}
         {canFix && read && view.open.length > 0 && !override ? (
@@ -243,25 +250,7 @@ function ReadingCard({ docId, view, choices, run, busy, facts, canFix, canRead }
           </ul>
         </div>
       ) : null}
-      {view.fixes.length ? (
-        <details>
-          <summary className="link">Fixes on this paper ({view.fixes.length})</summary>
-          <ul className="list-plain fix-list">
-            {view.fixes.map((f) => (
-              <li key={f.id}>
-                {FIX_WORDS[f.action] ?? f.action}{f.item ? ` (${f.item})` : ""}, {dateFmt.format(f.at)}
-                {f.undone ? <span className="muted"> (undone)</span> : !canFix ? null : (
-                  <ActionForm className="inline-form fix-undo" action={`${base}/fix`} messages={MESSAGES}>
-                    <input type="hidden" name="action" value="undo" />
-                    <input type="hidden" name="fix" value={f.id} />
-                    <button className="btn btn-small" type="submit">Undo</button>
-                  </ActionForm>
-                )}
-              </li>
-            ))}
-          </ul>
-        </details>
-      ) : null}
+      {view.fixes.length ? <p className="muted m-0">{view.fixes.length} change{view.fixes.length === 1 ? "" : "s"} on this paper: see Changes beside the flags, each with a link to where it was made.</p> : null}
       <details>
         <summary className="link">About this file</summary>
         {facts}
