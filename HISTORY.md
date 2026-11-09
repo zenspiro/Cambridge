@@ -2,6 +2,22 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-09: Run the checks again, and the review screen's Pages and Changes
+
+**What:** "Run the checks again" on every read paper (mark schemes included) and "Run the checks again on all" on the subject's Papers read card: no AI is asked and nothing is spent (no cost check); the reading as it stands, fixes included, is checked with today's checks (notation, lead-ins, tables, fractions) and saved with its new flags, and figures with no box are cut. The run is a paper run (or a batch) with `check: true`; the script needs no AI keys for it, and a check batch skips papers with no reading. "Cut figures from the PDF (free)" is now "Cut figures again". The review screen's panel has three tabs: Flags (as before), Pages (every page with its parts and figures, open flags and changes; a click opens that page on both sides) and Changes (every fix with what was done in words, the part, who (Owner or the team member), when, the words before and after, Undo; a click opens its page on both sides with the part marked). The Reading card's fold of fixes is gone.
+
+**Why:** owner, 9 Nov 2026: build the re-check (not labelled "free"); papers already reviewed could not be gone through page by page like flags; fixes were only descriptive, so checking what changed meant looking it up by hand.
+
+**Tested:** `npm run check` exits 0. Browser suite from a fresh database, all passing (new: a check run asks no AI, records no spend and finishes; Run the checks again on all asks first and starts with no cost check; Changes lists a fix with who, before and after, and opens its page on both sides with the part marked; Pages lists every page and opens one on both sides; Undo from Changes). Screenshots of the tabs on Mar 2025 Paper 42 at 1400 px.
+
+## 2026-11-09: Read all for both tiers, aligned
+
+**What:** The subject's Read all card has a third button, Read all (both Core and Extended), beside Read all Core and Read all Extended; the month, year and buttons line up on one line.
+
+**Why:** owner, 9 Nov 2026, with a screenshot of the card.
+
+**Tested:** `npm run check` exits 0. Browser suite from a fresh database, all passing (new: the button is there, the controls' bottoms line up, it chooses every paper of both tiers). Screenshot at 1400 px.
+
 ## 2026-11-09: Whole admin access for team members
 
 **What:** Team access has one more setting, Whole admin: no access, view only, or view and edit. It covers every section and every subject at its level, on top of the Library, Source review and AI review areas. View only: every page opens with its change buttons hidden and fields not editable ("View only" under the title), and the server refuses changes. View and edit: every page and action as the owner has them, paid reading (Read this paper, Read all, topic trees) included inside the monthly cap. Whatever the access says, the Team page and its actions, AI setup's models, prices, cap and checks (AI setup itself is view only), and the owner's sign-in stay the owner's. A whole-admin member gets the owner's Home. Every change is logged under the member.

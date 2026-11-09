@@ -375,6 +375,9 @@
   .admin-readonly form[method="post"] button, .admin-readonly .edit-only { @apply hidden; }
   .admin-readonly form[method="post"] :is(input, select, textarea) { @apply pointer-events-none bg-wash; }
   .readonly-note { @apply mt-2; }
+  /* Read all's month, year and buttons on one line, bottoms aligned (owner, 9 Nov 2026). */
+  .read-all-pick { @apply items-end; }
+  .read-all-pick .input { @apply min-h-11; }
   /* "Read with" (owner, 9 Nov 2026): the AI for one reading, beside Read it again. */
   .read-with { @apply inline-flex items-center gap-2; }
   .read-with .input { @apply mt-0 w-auto max-w-xl; }
