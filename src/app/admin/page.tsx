@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { requireAdmin } from "@/lib/auth/guard";
+import { requireStaff, type Staff } from "@/lib/auth/staff";
+import { AREAS, AREA_WORDS, LEVEL_WORDS, hasSubject, can } from "@/lib/auth/team";
+import { Notice } from "@/components/AdminShell";
 import { recentAudit } from "@/lib/auth/session";
 import { getEnv } from "@/lib/env";
 import { AdminShell, Empty } from "@/components/AdminShell";
@@ -23,6 +25,7 @@ const MESSAGES = {
   ok_counted: "Storage counted again.",
   gone: "That item was already sorted.",
   bad: "That could not be cleared. Please try again.",
+  no_access: "That page is not part of your access. Ask the owner if you need it.",
   busy: "Too many changes this hour. Please wait a little.",
 };
 
@@ -54,8 +57,10 @@ function ClearAll({ kind, n }: { kind: "run" | "paper"; n: number }) {
  * Home (owner, 8 Nov 2026: a functional admin): what needs the admin now, in one place. Runs that stopped, papers
  * with flags to review, the month's AI spend against the cap, then the latest activity in words.
  */
-export default async function AdminHome() {
-  await requireAdmin();
+export default async function AdminHome({ searchParams }: { searchParams: Promise<{ e?: string }> }) {
+  const staff = await requireStaff(null);
+  const q = await searchParams;
+  if (!staff.owner) return <TeamHome staff={staff} e={q.e} />;
   const env = await getEnv();
   const db = env.DB;
   const month = monthBounds(undefined);
@@ -87,6 +92,7 @@ export default async function AdminHome() {
         <Link className="btn" href="/admin/agent">Run the agent</Link>
       </>}
     >
+      <Notice code={q.e} messages={MESSAGES} />
       <div className="tiles" id="home-tiles">
         <Link className="tile-stat card-link" href="/admin/library">
           <span className="tile-stat-label">Source library</span>
@@ -103,10 +109,16 @@ export default async function AdminHome() {
           <span className="tile-stat-value">{usdWords(spend.total)}</span>
           <span className="tile-stat-note">{cap > 0 ? `of your ${usdWords(cap)} cap` : "no monthly cap set"}{spend.unpriced.length ? `; ${spend.unpriced.length} model${spend.unpriced.length === 1 ? "" : "s"} without a price` : ""}</span>
         </Link>
-        <div className="tile-stat">
+        <div className="tile-stat" id="running-now">
           <span className="tile-stat-label">Running now</span>
           <span className="tile-stat-value">{running.length}</span>
-          <span className="tile-stat-note">{running.length ? "listed in the sidebar, with links" : "nothing running"}</span>
+          {running.length ? (
+            <ul className="tile-runs">
+              {running.map((r) => (
+                <li key={r.id}><a className="link" href={r.href}>{r.label}</a> <span className="muted">{r.queued ? "waiting to start" : r.step ?? "working"}</span></li>
+              ))}
+            </ul>
+          ) : <span className="tile-stat-note">nothing running</span>}
         </div>
         {/* Storage (owner, 9 Nov 2026): database and buckets against Cloudflare's free allowances. */}
         <div className="tile-stat tile-wide" id="storage">
@@ -213,6 +225,49 @@ export default async function AdminHome() {
           </ul>
         )}
       </section>
+    </AdminShell>
+  );
+}
+
+/**
+ * Home for a team member (owner, 9 Nov 2026): what they have access to, and the papers with flags in their subjects
+ * when they review sources. No spend, storage or runs (the owner's).
+ */
+async function TeamHome({ staff, e }: { staff: Staff; e?: string }) {
+  const db = (await getEnv()).DB;
+  const reviews = can(staff.access, "sourceReview", "view") ? await papersToReview(db, 500) : null;
+  const mine = reviews ? reviews.list.filter((r) => hasSubject(staff.access, r.code)).slice(0, 20) : [];
+  const codes = [...new Set(mine.map((r) => r.code))];
+  const lookups = new Map(await Promise.all(codes.map(async (c) => [c, paperLookup((await loadPapers(db, c)).papers)] as const)));
+  const subjects = staff.access.subjects === "all" ? "every subject" : staff.access.subjects.join(", ");
+  return (
+    <AdminShell current="/admin" title={`Welcome, ${staff.name}`} intro="What you can work on. The menu shows the parts you have access to.">
+      <Notice code={e} messages={MESSAGES} />
+      <section className="card stack" id="my-access">
+        <h2 className="subtitle">Your access</h2>
+        <ul className="list">
+          {AREAS.map((a) => (
+            <li className="list-row" key={a}><span>{AREA_WORDS[a].name}</span><span className={staff.access[a] === "none" ? "muted" : ""}>{LEVEL_WORDS[staff.access[a]]}</span></li>
+          ))}
+          <li className="list-row"><span>Subjects</span><span>{subjects}</span></li>
+        </ul>
+        {can(staff.access, "library", "view") ? <p className="m-0"><Link className="link" href="/admin/library">Open the library</Link></p> : null}
+      </section>
+      {reviews ? (
+        <section className="card stack" id="needs-you">
+          <h2 className="subtitle">Papers with flags to review</h2>
+          {mine.length ? (
+            <ul className="list">
+              {mine.map((r) => (
+                <li className="need-row" key={r.docId}>
+                  <span>{describeFile(r.fileName, r.syllabusId, lookups.get(r.code) ?? paperLookup([]))} <span className="muted">{r.open} flag{r.open === 1 ? "" : "s"} open</span></span>
+                  <a className="btn btn-small" href={`/admin/library/review/${encodeURIComponent(r.docId)}`}>Review</a>
+                </li>
+              ))}
+            </ul>
+          ) : <Empty title="Nothing to review right now.">Every paper read in your subjects is ready.</Empty>}
+        </section>
+      ) : null}
     </AdminShell>
   );
 }

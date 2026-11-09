@@ -21,6 +21,9 @@ type Props = {
   pageCount: number;
   revision: number;
   busy: boolean;
+  /** Fixes (source review edit) and Read it again (the owner: paid runs). View-only team members see the flags only. */
+  canFix?: boolean;
+  canRead?: boolean;
 };
 
 const MESSAGES = {
@@ -63,7 +66,7 @@ function remember(docId: string, page: number, flag: string | null) {
   }
 }
 
-export function PaperReview({ docId, pdfUrl, kind, items, figures, flags, pageCount, revision, busy }: Props) {
+export function PaperReview({ docId, pdfUrl, kind, items, figures, flags, pageCount, revision, busy, canFix = true, canRead = true }: Props) {
   const pages = useMemo(() => Math.max(pageCount, ...items.map((i) => i.page), ...figures.map((f) => f.page), 1), [items, figures, pageCount]);
   const firstPage = useMemo(() => Math.min(...items.map((i) => i.page), pages), [items, pages]);
   const [page, setPage] = useState(firstPage);
@@ -153,7 +156,7 @@ export function PaperReview({ docId, pdfUrl, kind, items, figures, flags, pageCo
   const onPage = items.filter((i) => i.page === page);
   const base = `/admin/library/review/${encodeURIComponent(docId)}`;
   const box = (f: Flag, item: PaperItem | undefined) => (
-    <FlagBox key={f.key} flag={f} base={base} busy={busy} item={item} current={f.key === current} onAdjust={setAdjusting} />
+    <FlagBox key={f.key} flag={f} base={base} busy={busy} item={item} current={f.key === current} onAdjust={setAdjusting} canFix={canFix} canRead={canRead} />
   );
 
   const figureCard = (id: string) => {
@@ -379,14 +382,14 @@ function BoxEditor({ base, figure, revision, onClose }: { base: string; figure: 
 }
 
 /** One open flag: its colour and reason, and the fixes that fit it. */
-function FlagBox({ flag, base, busy, item, current, onAdjust }: { flag: Flag; base: string; busy: boolean; item: PaperItem | undefined; current: boolean; onAdjust: (id: string) => void }) {
+function FlagBox({ flag, base, busy, item, current, onAdjust, canFix, canRead }: { flag: Flag; base: string; busy: boolean; item: PaperItem | undefined; current: boolean; onAdjust: (id: string) => void; canFix: boolean; canRead: boolean }) {
   const fix = `${base}/fix`;
   const isItem = flag.item !== "paper" && flag.kind !== "figure" && flag.kind !== "missing";
   return (
     <div className={`flag-box flag-${flag.colour}${current ? " flag-current" : ""}`} data-flag={flag.key}>
       <p className="flag-reason"><span className="flag-tag">{COLOUR_WORDS[flag.colour]}</span> {flag.reason}</p>
       {flag.pdfText && isItem ? <p className="flag-pdf"><span className="muted">The PDF says:</span> {flag.pdfText}</p> : null}
-      <div className="row-actions">
+      {canFix ? <div className="row-actions">
         {flag.kind === "figure" ? (
           <>
             <ActionForm action={fix} messages={MESSAGES}>
@@ -405,7 +408,7 @@ function FlagBox({ flag, base, busy, item, current, onAdjust }: { flag: Flag; ba
                 <button className="btn btn-small" type="submit">Use the PDF&apos;s version</button>
               </ActionForm>
             ) : null}
-            {flag.item !== "paper" ? (
+            {flag.item !== "paper" && canRead ? (
               <ActionForm action={`${base}/read`} messages={MESSAGES}>
                 <input type="hidden" name="item" value={flag.item} />
                 <button className="btn btn-small" type="submit" disabled={busy}>Read it again</button>
@@ -418,8 +421,8 @@ function FlagBox({ flag, base, busy, item, current, onAdjust }: { flag: Flag; ba
             </ActionForm>
           </>
         )}
-      </div>
-      {item && isItem ? (
+      </div> : null}
+      {item && isItem && canFix ? (
         <details className="flag-edit">
           <summary className="link">Edit it yourself</summary>
           <ActionForm className="stack-tight" action={fix} messages={MESSAGES}>

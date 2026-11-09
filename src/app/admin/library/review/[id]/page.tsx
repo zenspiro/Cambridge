@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireAdmin } from "@/lib/auth/guard";
+import { allowed, staffForDoc } from "@/lib/auth/staff";
+import { redirect } from "next/navigation";
 import { getEnv } from "@/lib/env";
 import { AdminShell } from "@/components/AdminShell";
 import { docTypeLabel } from "@/lib/config";
@@ -47,9 +48,14 @@ const PAPER_STAGES = ["pdf", "gemini", "claude", "figures", "checks", "save"] as
 const RECENT_MS = 15 * 60_000;
 
 export default async function ReviewPage({ params }: { params: Promise<{ id: string }> }) {
-  await requireAdmin();
   const { id } = await params;
   if (!/^[A-Za-z0-9_-]{10,64}$/.test(id)) notFound();
+  // The owner, or a team member who may view this file's subject. Fixes need source review edit; reading (paid runs)
+  // stays with the owner (owner, 9 Nov 2026).
+  const access = await staffForDoc(id);
+  if (!access) redirect("/admin?e=no_access");
+  const canFix = allowed(access.staff, { area: "sourceReview", level: "edit", code: access.code });
+  const canRead = access.staff.owner;
   const env = await getEnv();
   const doc = await loadReviewDoc(env.DB, id);
   if (!doc) notFound();
@@ -102,7 +108,7 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
           </nav>
         ) : <span />}
       </div>
-      {view && cost ? <ReadingCard docId={doc.id} view={view} cost={cost} run={run} busy={busy} facts={facts} /> : null}
+      {view && cost ? <ReadingCard docId={doc.id} view={view} cost={cost} run={run} busy={busy} facts={facts} canFix={canFix} canRead={canRead} /> : null}
       {view?.content ? (
         <PaperReview
           docId={doc.id}
@@ -114,6 +120,8 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
           pageCount={pageCount}
           revision={view.row?.revision ?? 0}
           busy={busy}
+          canFix={canFix}
+          canRead={canRead}
         />
       ) : (
       <div className="review">
@@ -151,8 +159,8 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
 }
 
 /** The paper's reading: its state, Read this paper (with the rough cost), ready anyway, live progress and recent fixes. */
-function ReadingCard({ docId, view, cost, run, busy, facts }: {
-  docId: string; view: PaperView; cost: CostCheck; run: Awaited<ReturnType<typeof runState>>; busy: boolean; facts: React.ReactNode;
+function ReadingCard({ docId, view, cost, run, busy, facts, canFix, canRead }: {
+  docId: string; view: PaperView; cost: CostCheck; run: Awaited<ReturnType<typeof runState>>; busy: boolean; facts: React.ReactNode; canFix: boolean; canRead: boolean;
 }) {
   const base = `/admin/library/review/${encodeURIComponent(docId)}`;
   const read = !!view.content;
@@ -173,34 +181,34 @@ function ReadingCard({ docId, view, cost, run, busy, facts }: {
       {/* Live while it runs; afterwards the steps stay for a while (or until the next run), and a stopped run says why. */}
       {run && (busy || run.status === "failed" || (run.finishedAt !== null && Date.now() - run.finishedAt < RECENT_MS)) ? <RunProgress runId={run.id} stages={PAPER_STAGES} /> : null}
       <div className="row-actions">
-        {!busy ? (
+        {!busy && canRead ? (
           <ActionForm action={`${base}/read`} messages={MESSAGES} yes="Yes, proceed" no="No"
             confirm={`${read ? "Read the paper again? Confirmed items stay; flagged and missing ones are read again." : "Read this paper?"} This uses AI tokens: ${cost.estimate.usd === null ? "cost unknown" : `about ${usdWords(cost.estimate.usd)}`}. Proceed?`}>
             <button className="btn btn-primary" type="submit">{read ? "Read it again" : "Read this paper"}</button>
           </ActionForm>
         ) : null}
         {/* Free (owner, 7 Nov 2026): cuts every figure again from the PDF with no AI; words, fixes and hand-drawn boxes stay. */}
-        {!busy && cutAgain.length ? (
+        {!busy && canRead && cutAgain.length ? (
           <ActionForm action={`${base}/read`} messages={MESSAGES} yes="Yes, proceed" no="No"
             confirm={`Cut ${cutAgain.length} figure${cutAgain.length === 1 ? "" : "s"} again from the PDF? No AI is used, so it costs nothing; boxes you drew by hand stay. Proceed?`}>
             {cutAgain.map((id) => <input key={id} type="hidden" name="figure" value={id} />)}
             <button className="btn" type="submit">Cut figures from the PDF (free)</button>
           </ActionForm>
         ) : null}
-        {read && view.open.length > 0 && !override ? (
+        {canFix && read && view.open.length > 0 && !override ? (
           <ActionForm action={`${base}/fix`} messages={MESSAGES} confirm={`Mark it ready with ${view.open.length} flag${view.open.length === 1 ? "" : "s"} still open? They are recorded as ignored.`}>
             <input type="hidden" name="action" value="override" />
             <button className="btn" type="submit">Mark ready anyway</button>
           </ActionForm>
         ) : null}
-        {override ? (
+        {override && canFix ? (
           <ActionForm action={`${base}/fix`} messages={MESSAGES}>
             <input type="hidden" name="action" value="unoverride" />
             <button className="btn btn-small" type="submit">Take back ready</button>
           </ActionForm>
         ) : null}
       </div>
-      {!busy ? (
+      {!busy && canRead ? (
         <p className={cost.verdict === "ok" ? "muted" : "alert"}>
           {estimateWords(cost.estimate)}
           {cost.cap > 0 ? ` This month: ${usdWords(cost.spent)} of your ${usdWords(cost.cap)} cap.` : ""}
@@ -229,7 +237,7 @@ function ReadingCard({ docId, view, cost, run, busy, facts }: {
             {view.fixes.map((f) => (
               <li key={f.id}>
                 {FIX_WORDS[f.action] ?? f.action}{f.item ? ` (${f.item})` : ""}, {dateFmt.format(f.at)}
-                {f.undone ? <span className="muted"> (undone)</span> : (
+                {f.undone ? <span className="muted"> (undone)</span> : !canFix ? null : (
                   <ActionForm className="inline-form fix-undo" action={`${base}/fix`} messages={MESSAGES}>
                     <input type="hidden" name="action" value="undo" />
                     <input type="hidden" name="fix" value={f.id} />

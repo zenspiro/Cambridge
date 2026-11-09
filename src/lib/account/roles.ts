@@ -66,3 +66,11 @@ export function cleanCode(v: unknown): string | null {
   const s = v.replace(/\s+/g, "");
   return new RegExp(`^\\d{${ACCOUNT.codeLength}}$`).test(s) ? s : null;
 }
+
+/**
+ * Where a sign-in may go instead of the person's home (owner, 9 Nov 2026: team members sign in with the email code):
+ * the admin, or a team invite's page. Anything else is ignored. Pure.
+ */
+export function safeNext(v: unknown): string | null {
+  return typeof v === "string" && /^\/(admin|team\/join\/[A-Za-z0-9_-]{20,100})$/.test(v) ? v : null;
+}

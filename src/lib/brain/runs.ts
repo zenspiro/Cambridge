@@ -144,7 +144,7 @@ export async function finishBatchRun(db: Db, jobId: string, now = Date.now()): P
 }
 
 /** A brain run's state for its page (and the live progress panel). */
-export async function runState(db: Db, id: string, now = Date.now()): Promise<(RunState & { events: RunEvent[]; task: string }) | null> {
+export async function runState(db: Db, id: string, now = Date.now()): Promise<(RunState & { events: RunEvent[]; task: string; params: BrainParams | null }) | null> {
   await closeStaleBrainRuns(db, now);
   const r = await db
     .prepare(`SELECT id, status, step, error_ref, created_at, finished_at, events, params FROM job WHERE id = ?1 AND type = 'brain'`)
@@ -153,8 +153,52 @@ export async function runState(db: Db, id: string, now = Date.now()): Promise<(R
   if (!r) return null;
   return {
     id: r.id, status: r.status, step: r.step, errorRef: r.error_ref, createdAt: r.created_at, finishedAt: r.finished_at,
-    events: cleanEvents(r.events), task: readParams(r.params)?.task ?? "",
+    events: cleanEvents(r.events), task: readParams(r.params)?.task ?? "", params: readParams(r.params),
   };
+}
+
+export type BatchPaper = { docId: string; fileName: string; syllabusId: string; read: boolean; flags: number };
+
+/**
+ * Read all's papers for the live card (owner, 9 Nov 2026: the status where the read was started): each paper of the
+ * batch, whether this run has read it yet (a reading saved since the run began) and how many flags it has open.
+ */
+export async function batchPapers(db: Db, docs: readonly string[], since: number): Promise<BatchPaper[]> {
+  if (!docs.length) return [];
+  const { results } = await db
+    .prepare(`SELECT d.id, d.file_name, d.syllabus_id, p.read_at, p.flags, p.dismissed FROM source_document d LEFT JOIN paper_read p ON p.doc_id = d.id
+              WHERE d.id IN (SELECT value FROM json_each(?1))`)
+    .bind(JSON.stringify(docs))
+    .all<{ id: string; file_name: string; syllabus_id: string; read_at: number | null; flags: string | null; dismissed: string | null }>();
+  const byId = new Map(results.map((r) => [r.id, r]));
+  const open = (flags: string | null, dismissed: string | null) => {
+    try {
+      const f = JSON.parse(flags ?? "[]") as { fingerprint?: string }[];
+      const gone = new Set(JSON.parse(dismissed ?? "[]") as string[]);
+      return Array.isArray(f) ? f.filter((x) => !gone.has(String(x?.fingerprint ?? ""))).length : 0;
+    } catch {
+      return 0;
+    }
+  };
+  return docs.flatMap((id) => {
+    const r = byId.get(id);
+    return r ? [{ docId: id, fileName: r.file_name, syllabusId: r.syllabus_id, read: (r.read_at ?? 0) >= since, flags: open(r.flags, r.dismissed) }] : [];
+  });
+}
+
+/** The latest Read all of a subject: running, or finished within `recentMs`; null otherwise. */
+export async function latestBatch(db: Db, code: string, now = Date.now(), recentMs = 30 * 60_000): Promise<{ id: string; active: boolean } | null> {
+  const { results } = await db
+    .prepare(`SELECT id, status, finished_at, params FROM job WHERE type = 'brain' AND created_at >= ?1 ORDER BY created_at DESC LIMIT 20`)
+    .bind(now - 86_400_000)
+    .all<{ id: string; status: string; finished_at: number | null; params: string }>();
+  for (const r of results) {
+    const p = readParams(r.params);
+    if (p?.task !== "paper" || !p.batch || !p.batch.label.startsWith(`${code} `)) continue;
+    const active = r.status === "queued" || r.status === "running";
+    return active || (r.finished_at ?? 0) >= now - recentMs ? { id: r.id, active } : null;
+  }
+  return null;
 }
 
 // ---------- Live progress (owner, 7 Nov 2026: real progress per model, not a page that reloads) ----------

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { requireAdmin } from "@/lib/auth/guard";
+import { requireStaff, allowed } from "@/lib/auth/staff";
 import { getEnv } from "@/lib/env";
 import { AdminShell, Notice } from "@/components/AdminShell";
 import { CellLink, StatusLine } from "@/components/LibraryBits";
@@ -17,6 +17,8 @@ import { SubjectMapVersion } from "@/components/SubjectMap";
 import { ScoreBadge } from "@/components/ScoreBadge";
 import { rowScore } from "@/lib/brain/paperRead";
 import { ActionForm } from "@/components/ActionForm";
+import { RunProgress } from "@/components/RunProgress";
+import { latestBatch } from "@/lib/brain/runs";
 import { RagDot } from "@/components/RagDot";
 import { filterWords, hasTiers, planBatch, ragOf, readFilter, readStates, rowDocIds } from "@/lib/brain/readAll";
 import { batchCostCheck, estimateWords, usdWords } from "@/lib/brain/spend";
@@ -48,8 +50,12 @@ export default async function SyllabusOverview({
   params: Promise<{ code: string }>;
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  await requireAdmin();
   const { code } = await params;
+  // Team members: their subjects only; uploads with library edit; Read all, the agent, topic trees and essential
+  // variants stay with the owner (owner, 9 Nov 2026).
+  const staff = await requireStaff({ area: "library", level: "view", code });
+  const owner = staff.owner;
+  const canEdit = allowed(staff, { area: "library", level: "edit", code });
   const q = await searchParams;
   const env = await getEnv();
   const lib = await getLibrarySettings(env.DB);
@@ -99,6 +105,8 @@ export default async function SyllabusOverview({
   const choice = readFilter((k) => q[k], yearNums);
   const tiered = hasTiers(papers);
   const plan = choice ? planBatch(list, papers, choice, states) : null;
+  // The Read all running for this subject, or the last one (finished in the last 30 minutes): shown live in the card.
+  const batchRun = await latestBatch(env.DB, code);
   const batchCost = plan?.toRead.length ? await batchCostCheck(env.DB, env, plan.toRead.map((d) => d.bytes)) : null;
   // Papers read so far, with their read accuracy (owner, 7 Nov 2026), weakest first so they stand out.
   const { results: readRows } = await env.DB
@@ -115,20 +123,20 @@ export default async function SyllabusOverview({
       title={`${header.subject_name} ${code}`}
       crumbs={[{ label: "Library", href: "/admin/library" }, { label: header.qualification_name }, { label: `${header.subject_name} ${code}` }]}
       actions={<>
-        <Link className="btn btn-primary" href={`/admin/library/folder?code=${code}`}>Upload a folder</Link>
-        <Link className="btn" href={`/admin/agent?code=${code}`}>Run the agent</Link>
-        <Link className="btn" href={`/admin/library/${code}/topics`}>Topic tree</Link>
+        {canEdit ? <Link className="btn btn-primary" href={`/admin/library/folder?code=${code}`}>Upload a folder</Link> : null}
+        {owner ? <Link className="btn" href={`/admin/agent?code=${code}`}>Run the agent</Link> : null}
+        {owner ? <Link className="btn" href={`/admin/library/${code}/topics`}>Topic tree</Link> : null}
       </>}
     >
       <Notice code={q.e} messages={MESSAGES} errorRef={q.ref} />
       <nav className="jump" aria-label="On this page">
         <span className="muted">On this page:</span>
-        <a className="link" href="#read-all">Read all</a>
+        {owner ? <a className="link" href="#read-all">Read all</a> : null}
         {read.length ? <a className="link" href="#papers-read">Papers read</a> : null}
         {!view.filtered ? <a className="link" href="#map">Subject map</a> : null}
         <a className="link" href="#find">Search the files</a>
         <a className="link" href="#papers">Papers and routes</a>
-        <a className="link" href="#variants">Essential variants</a>
+        {owner ? <a className="link" href="#variants">Essential variants</a> : null}
       </nav>
 
       <section className="card stack" id="status">
@@ -143,13 +151,14 @@ export default async function SyllabusOverview({
         )}
       </section>
 
-      <section className="card stack" id="read-all">
+      {owner ? <section className="card stack" id="read-all">
         <div className="card-head"><h2 className="subtitle">Read all</h2></div>
         <p className="hint m-0">
           Reads every stored question paper and mark scheme of the essential variants that is not read yet, one after
           another in one run. Papers read already are skipped; fix their flags on the review screen. Pick a month and a
           year, or leave them on every one.
         </p>
+        {batchRun ? <RunProgress key={batchRun.id} runId={batchRun.id} stages={["pdf", "gemini", "claude", "figures", "checks", "save"]} /> : null}
         <form className="form-actions" method="get" action={`/admin/library/${code}#read-all`}>
           <label className="field">
             <span className="label-inline">Month</span>
@@ -205,7 +214,7 @@ export default async function SyllabusOverview({
             ) : <p className="notice m-0">Nothing to read: every stored paper in this choice is read already.</p>}
           </div>
         ) : null}
-      </section>
+      </section> : null}
 
       {read.length ? (
         <section className="card stack" id="papers-read">
@@ -375,7 +384,7 @@ export default async function SyllabusOverview({
             </details>
           ) : null}
 
-          <form className="card stack" method="post" action="/admin/library/variants" id="variants">
+          {owner ? <form className="card stack" method="post" action="/admin/library/variants" id="variants">
             <h2 className="subtitle">Essential variants for {code}</h2>
             <p className="muted">Which variants of each paper must be stored for a session to be complete. Pakistan sits variant 2.</p>
             <input type="hidden" name="code" value={code} />
@@ -394,7 +403,7 @@ export default async function SyllabusOverview({
               ))}
             </div>
             <button className="btn" type="submit">Save variants</button>
-          </form>
+          </form> : null}
         </>
       )}
       <Legend />

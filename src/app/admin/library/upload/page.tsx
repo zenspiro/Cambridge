@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { requireAdmin } from "@/lib/auth/guard";
+import { requireStaff } from "@/lib/auth/staff";
 import { getEnv } from "@/lib/env";
 import { AdminShell, Notice } from "@/components/AdminShell";
 import { LIBRARY } from "@/lib/config";
@@ -20,7 +20,7 @@ const MESSAGES = {
 };
 
 export default async function UploadPage({ searchParams }: { searchParams: Promise<{ job?: string; e?: string }> }) {
-  const { actorId } = await requireAdmin();
+  const { actorId } = await requireStaff({ area: "library", level: "edit" });
   const q = await searchParams;
   const env = await getEnv();
   const lib = await getLibrarySettings(env.DB);

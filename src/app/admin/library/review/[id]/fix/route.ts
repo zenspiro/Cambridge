@@ -1,4 +1,4 @@
-import { adminPost } from "@/lib/adminPost";
+import { docSubject, staffPost } from "@/lib/auth/staff";
 import { applyFix, PAPER_KINDS, paperDoc, type FixAction } from "@/lib/brain/paperRead";
 import type { PaperKind } from "@/lib/brain/paper";
 
@@ -14,7 +14,9 @@ const field = (form: FormData, name: string, max: number) => {
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const back = /^[A-Za-z0-9_-]{10,64}$/.test(id) ? `/admin/library/review/${id}` : "/admin/library";
-  return adminPost(request, back, async ({ db, env, form, actorId }) => {
+  // The owner, or a team member with source review edit for this paper's subject (owner, 9 Nov 2026).
+  return staffPost(request, back, { area: "sourceReview", level: "edit" }, async ({ db, env, form, actorId, check }) => {
+    if (!check({ area: "sourceReview", level: "edit", code: await docSubject(db, id) })) return "no_access";
     const doc = await paperDoc(db, id);
     const action = ACTIONS.find((a) => a === form.get("action"));
     if (!doc || !PAPER_KINDS.includes(doc.docType as PaperKind) || !action) return "bad";

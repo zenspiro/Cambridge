@@ -58,3 +58,19 @@ export function consentEmail(platform: string, to: string, child: string, link: 
   const html = `<p>${esc(child)} wants to use ${esc(platform)}, a study app for Cambridge exams, and gave your email as their parent or guardian.</p><p><a href="${esc(link)}">Approve or decline</a></p><p>The link works for ${days} days. If you decline, their account and everything in it is deleted.</p><p>If you do not know who this is, you can ignore this email.</p>`;
   return { to, subject: `Please approve ${child}'s ${platform} account`, text, html };
 }
+
+/** A team invite (owner, 9 Nov 2026): who invites, what access, the one-time link, how long it works. */
+export function teamInviteEmail(platform: string, to: string, name: string, access: string, link: string, days: number): Email {
+  const text = [
+    `Hello ${name},`,
+    "",
+    `You are invited to help with ${platform}'s admin. Your access: ${access}.`,
+    "",
+    `Accept here: ${link}`,
+    "",
+    `You sign in with a code sent to this email address; there is no password. The link works for ${days} days and only once.`,
+    "If you did not expect this, you can ignore this email.",
+  ].join("\n");
+  const html = `<p>Hello ${esc(name)},</p><p>You are invited to help with ${esc(platform)}'s admin. Your access: ${esc(access)}.</p><p><a href="${esc(link)}">Accept the invite</a></p><p>You sign in with a code sent to this email address; there is no password. The link works for ${days} days and only once.</p><p>If you did not expect this, you can ignore this email.</p>`;
+  return { to, subject: `You are invited to the ${platform} team`, text, html };
+}

@@ -16,7 +16,8 @@ export type StoreReason =
   | "no_syllabus" // no syllabus version for that code and year
   | "same_name" // a file with this name is already stored
   | "same_content" // the same file is stored under another name
-  | "storage"; // storage write failed (logged with a reference)
+  | "storage" // storage write failed (logged with a reference)
+  | "no_access"; // a team member without library edit for that subject (owner, 9 Nov 2026)
 
 export type StoreOutcome =
   | { fileName: string; ok: true; id: string }

@@ -1,4 +1,5 @@
-import { adminSession } from "@/lib/auth/guard";
+import { allowed, mainCode, staffFor } from "@/lib/auth/staff";
+import { parseCambridgeName } from "@/lib/library/names";
 import { LIBRARY } from "@/lib/config";
 import { getEnv } from "@/lib/env";
 import { newErrorRef, reportError } from "@/lib/errors";
@@ -7,10 +8,11 @@ import { createJob, finishJob } from "@/lib/jobs";
 import { allow, limitKey } from "@/lib/ratelimit";
 import { storeDocument, type StoreOutcome } from "@/lib/library/store";
 
-// Manual upload POST. Admin only, same origin, rate limited, one job row per batch.
+// Manual upload POST. The owner or a team member with library edit (each file only for their subjects), same origin,
+// rate limited, one job row per batch.
 export async function POST(request: Request) {
   if (!isSameOrigin(request)) return new Response("Forbidden", { status: 403 });
-  const session = await adminSession();
+  const session = await staffFor({ area: "library", level: "edit" });
   if (!session) return redirectTo(request, "/admin/login");
   const back = (e: string) => redirectTo(request, `/admin/library/upload?e=${e}`);
 
@@ -37,6 +39,11 @@ export async function POST(request: Request) {
   let errorRef: string | null = null;
   for (const f of files) {
     try {
+      const p = parseCambridgeName(String(f.name));
+      if (p && !allowed(session, { area: "library", level: "edit", code: await mainCode(env.DB, p.code) })) {
+        outcomes.push({ fileName: String(f.name).slice(0, 80), ok: false, reason: "no_access" });
+        continue;
+      }
       const bytes = new Uint8Array(await f.arrayBuffer());
       outcomes.push(
         await storeDocument(env.DB, env.SOURCE, { fileName: f.name, bytes, actorId: session.actorId, origin: "upload", jobId }),

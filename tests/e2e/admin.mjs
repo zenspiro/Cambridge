@@ -12,8 +12,10 @@ const check = (ok, label) => {
   console.log(`${ok ? "ok  " : "FAIL"} ${label}`);
   if (!ok) failures++;
 };
-// Each run uses its own made-up network, so lockouts never leak between runs.
-const net = () => `198.51.100.${Math.floor(Math.random() * 250) + 1}`;
+// Each visitor gets its own made-up network, so a lockout never leaks to another one: numbers in turn from a random
+// start (two random picks once drew the same network and the "another network" check failed, CI #99).
+let nextNet = Math.floor(Math.random() * 200);
+const net = () => `198.51.100.${(nextNet++ % 250) + 1}`;
 
 const browser = await chromium.launch();
 // Admin is desktop only (owner decision): tested at desktop width.
@@ -53,7 +55,7 @@ for (const width of [1400]) {
       fits: aside ? aside.scrollWidth <= aside.clientWidth : false,
     };
   });
-  check(side.groups.join("|") === "Library|Subject brain|Students and parents|Settings" && side.current === "Home", `${width}px sidebar in groups with the current page marked`);
+  check(side.groups.join("|") === "Library|Subject brain|Users|Settings" && side.current === "Home", `${width}px sidebar in groups with the current page marked`);
   check(side.fills && side.fits, `${width}px sidebar and page fill the whole width`);
 
   await page.click("text=Sign out");

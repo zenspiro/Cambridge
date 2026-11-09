@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { requireAdmin } from "@/lib/auth/guard";
+import { mainCode, requireStaff } from "@/lib/auth/staff";
 import { getEnv } from "@/lib/env";
 import { AdminShell, Notice } from "@/components/AdminShell";
 import { LIBRARY } from "@/lib/config";
@@ -24,11 +24,11 @@ const MESSAGES: Record<string, string> = {
 };
 
 export default async function AddPage({ searchParams }: { searchParams: Promise<{ file?: string; e?: string; ref?: string }> }) {
-  await requireAdmin();
   const q = await searchParams;
   const p = parseCambridgeName(q.file ?? "");
   if (!p) redirect("/admin/library");
   const env = await getEnv();
+  await requireStaff({ area: "library", level: "edit", code: await mainCode(env.DB, p.code) });
   const [existing, { results: sites }, { papers }, version] = await Promise.all([
     env.DB.prepare(`SELECT id FROM source_document WHERE file_name = ?1 AND status = 'stored'`).bind(p.fileName).first<{ id: string }>(),
     env.DB.prepare(LIST_SITES).all<{ id: string; name: string; base_url: string; enabled: number }>(),

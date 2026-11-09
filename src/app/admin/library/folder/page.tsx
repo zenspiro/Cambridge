@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { requireAdmin } from "@/lib/auth/guard";
+import { requireStaff } from "@/lib/auth/staff";
+import { can } from "@/lib/auth/team";
 import { getEnv } from "@/lib/env";
 import { AdminShell } from "@/components/AdminShell";
 import { FolderUpload } from "@/components/FolderUpload";
@@ -13,10 +14,10 @@ import { getLibrarySettings } from "@/lib/settings";
 export const metadata: Metadata = { title: "Upload a folder" };
 
 export default async function FolderPage({ searchParams }: { searchParams: Promise<{ code?: string }> }) {
-  await requireAdmin();
+  const staff = await requireStaff({ area: "library", level: "edit" });
   const q = await searchParams;
   const env = await getEnv();
-  const [subjects, known, lib, { results: stored }, { results: allPapers }, { results: allVersions }] = await Promise.all([
+  const [allSubjects, known, lib, { results: stored }, { results: allPapers }, { results: allVersions }] = await Promise.all([
     listSubjects(env.DB),
     knownSubjects(env.DB),
     getLibrarySettings(env.DB),
@@ -24,6 +25,8 @@ export default async function FolderPage({ searchParams }: { searchParams: Promi
     env.DB.prepare(`SELECT syllabus_id, paper, name FROM syllabus_paper`).bind().all<{ syllabus_id: string; paper: number; name: string }>(),
     env.DB.prepare(`SELECT id, code, valid_from_year, valid_to_year FROM syllabus`).bind().all<{ id: string; code: string; valid_from_year: number; valid_to_year: number }>(),
   ]);
+  // A team member picks only from subjects they may edit (owner, 9 Nov 2026).
+  const subjects = staff.owner ? allSubjects : allSubjects.filter((s) => can(staff.access, "library", "edit", s.code));
   const code = subjects.some((s) => s.code === q.code) ? q.code! : (subjects.find((s) => s.code === "0625") ?? subjects[0])?.code ?? "";
   const years: number[] = [];
   for (let y = lib.toYear; y >= lib.fromYear; y--) years.push(y);

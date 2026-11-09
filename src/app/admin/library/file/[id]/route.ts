@@ -1,4 +1,4 @@
-import { adminSession } from "@/lib/auth/guard";
+import { staffForDoc } from "@/lib/auth/staff";
 import { audit } from "@/lib/auth/session";
 import { getEnv } from "@/lib/env";
 import { redirectTo } from "@/lib/http";
@@ -7,10 +7,12 @@ import { GET_DOCUMENT } from "@/lib/library/queries";
 // Admin-only download of one source file (brief 3.1, 3.2). Always an attachment,
 // never shown inline, never cached, and every download is audited.
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await adminSession();
-  if (!session) return redirectTo(request, "/admin/login");
   const { id } = await params;
   if (!/^[A-Za-z0-9_-]{10,64}$/.test(id)) return new Response("Not found", { status: 404 });
+  // The owner, or a team member who may view this file's subject (library or source review).
+  const access = await staffForDoc(id);
+  if (!access) return redirectTo(request, "/admin/login");
+  const session = access.staff;
 
   const env = await getEnv();
   const doc = await env.DB.prepare(GET_DOCUMENT).bind(id).first<{ id: string; file_name: string; r2_key: string }>();
