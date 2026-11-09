@@ -1,4 +1,4 @@
-import { adminPost } from "@/lib/adminPost";
+import { ADMIN_EDIT, staffPost } from "@/lib/auth/staff";
 import { AGENT } from "@/lib/config";
 import { reportError } from "@/lib/errors";
 import { allow, limitKey } from "@/lib/ratelimit";
@@ -8,8 +8,8 @@ import { dispatchAgent } from "@/lib/agent/github";
 import { listSubjects } from "@/lib/library/catalog";
 
 export async function POST(request: Request) {
-  // adminPost checks the admin session before anything else.
-  return adminPost(request, "/admin/agent", async ({ db, env, form, actorId }) => {
+  // staffPost checks the session (owner, or a team member with the whole admin to edit) before anything else.
+  return staffPost(request, "/admin/agent", ADMIN_EDIT, async ({ db, env, form, actorId }) => {
     const params = checkRunParams(
       { code: form.get("code"), years: form.getAll("years"), sessions: form.getAll("sessions"), mode: form.get("mode") },
       await getLibrarySettings(db),

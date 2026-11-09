@@ -1,6 +1,6 @@
+import { ADMIN_EDIT, ADMIN_VIEW, allowed, requireStaff } from "@/lib/auth/staff";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { requireAdmin } from "@/lib/auth/guard";
 import { currentBrand, getEnv } from "@/lib/env";
 import { readIcons } from "@/lib/icons";
 import { frameBrand } from "@/lib/brand";
@@ -11,11 +11,12 @@ import { PARENT_THEME, THEMES } from "@/lib/config";
 export const metadata: Metadata = { title: "Themes" };
 
 export default async function ThemesPage() {
-  await requireAdmin();
+  const staff = await requireStaff(ADMIN_VIEW);
   const brand = await currentBrand();
   const parent = THEMES.find((t) => t.id === PARENT_THEME)?.label;
   return (
     <AdminShell
+      readOnly={!allowed(staff, ADMIN_EDIT)}
       current="/admin/themes"
       title="Themes"
       actions={<Link className="btn" href="/admin/themes/phone">Open as a full page</Link>}

@@ -1,5 +1,5 @@
+import { ADMIN_EDIT, ADMIN_VIEW, allowed, requireStaff } from "@/lib/auth/staff";
 import type { Metadata } from "next";
-import { requireAdmin } from "@/lib/auth/guard";
 import { getEnv } from "@/lib/env";
 import { AdminShell, Empty } from "@/components/AdminShell";
 import { listAccounts } from "@/lib/account/list";
@@ -12,13 +12,14 @@ const ROLE_WORDS: Record<string, string> = { student: "Student", parent: "Parent
 
 /** Users > Students and parents (owner only, 9 Nov 2026): every sign-in account, searchable, read-only for now. */
 export default async function AccountsPage({ searchParams }: { searchParams: Promise<{ q?: string; role?: string }> }) {
-  await requireAdmin();
+  const staff = await requireStaff(ADMIN_VIEW);
   const sp = await searchParams;
   const q = (sp.q ?? "").slice(0, 100);
   const role = sp.role === "student" || sp.role === "parent" || sp.role === "team" ? sp.role : null;
   const { rows, total } = await listAccounts((await getEnv()).DB, { q, role });
   return (
     <AdminShell
+      readOnly={!allowed(staff, ADMIN_EDIT)}
       current="/admin/users/accounts"
       title="Students and parents"
       crumbs={[{ label: "Users" }, { label: "Students and parents" }]}

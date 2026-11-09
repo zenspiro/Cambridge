@@ -1,5 +1,5 @@
+import { ADMIN_VIEW, requireStaff } from "@/lib/auth/staff";
 import type { Metadata } from "next";
-import { requireAdmin } from "@/lib/auth/guard";
 import { currentBrand, getEnv } from "@/lib/env";
 import { readIcons } from "@/lib/icons";
 import { frameBrand } from "@/lib/brand";
@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: "Theme preview" };
 
 /** The theme gallery as a whole page, without the admin frame: exactly what a student would see. */
 export default async function ThemePhonePage({ searchParams }: { searchParams: Promise<{ theme?: string }> }) {
-  await requireAdmin();
+  const staff = await requireStaff(ADMIN_VIEW);
   const brand = await currentBrand();
   const asked = (await searchParams).theme;
   const theme: ThemeId = THEMES.find((t) => t.id === asked)?.id ?? brand.defaultTheme;

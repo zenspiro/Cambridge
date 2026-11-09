@@ -1,6 +1,6 @@
+import { ADMIN_EDIT, ADMIN_VIEW, allowed, requireStaff } from "@/lib/auth/staff";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { requireAdmin } from "@/lib/auth/guard";
 import { getEnv } from "@/lib/env";
 import { AdminShell } from "@/components/AdminShell";
 import { listSubjects, subjectLabel } from "@/lib/library/catalog";
@@ -12,7 +12,7 @@ const STATUS = { ready: ["pill pill-ok", "Ready"], not_ready: ["pill pill-gap", 
 
 // Every subject's topic trees on one page (the sidebar's "Topic trees"). Drafting stays on each subject's page.
 export default async function TopicTreesPage() {
-  await requireAdmin();
+  const staff = await requireStaff(ADMIN_VIEW);
   const env = await getEnv();
   const [rows, subjects] = await Promise.all([allTrees(env.DB), listSubjects(env.DB)]);
   const byCode = new Map<string, TreeRow[]>();
@@ -20,6 +20,7 @@ export default async function TopicTreesPage() {
   const ready = rows.filter((r) => r.status === "ready").length;
   return (
     <AdminShell
+      readOnly={!allowed(staff, ADMIN_EDIT)}
       current="/admin/topics"
       title="Topic trees"
       intro={<>{ready} of {rows.length} syllabus versions have a ready topic tree. Open a subject to draft or redraft its trees.</>}

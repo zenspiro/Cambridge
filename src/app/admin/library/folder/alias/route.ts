@@ -1,4 +1,4 @@
-import { adminSession } from "@/lib/auth/guard";
+import { ADMIN_EDIT, staffFor } from "@/lib/auth/staff";
 import { audit } from "@/lib/auth/session";
 import { getEnv } from "@/lib/env";
 import { isSameOrigin } from "@/lib/http";
@@ -12,7 +12,8 @@ const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { sta
 // files come in under their own names. Only a code with exactly one matching subject is linked.
 export async function POST(request: Request) {
   if (!isSameOrigin(request)) return json({ error: "forbidden" }, 403);
-  const session = await adminSession();
+  // Linking a new code changes the library for everyone: the owner, or a team member with the whole admin to edit.
+  const session = await staffFor(ADMIN_EDIT);
   if (!session) return json({ error: "signed_out" }, 401);
   if (Number(request.headers.get("content-length") ?? "0") > 4 * 1024) return json({ error: "bad_request" }, 400);
   let body: Record<string, unknown> | null = null;

@@ -1,4 +1,5 @@
-import { adminPost, formId } from "@/lib/adminPost";
+import { ADMIN_EDIT, staffPost } from "@/lib/auth/staff";
+import { formId } from "@/lib/adminPost";
 import { readReport } from "@/lib/agent/labels";
 import { getRun } from "@/lib/agent/runs";
 import { removeDocument, renameDocument } from "@/lib/library/store";
@@ -6,8 +7,8 @@ import { removeDocument, renameDocument } from "@/lib/library/store";
 // Library check: rename a stored file to what its first page says, or remove it. The file is
 // read from the run's report by its position, never from the form.
 export async function POST(request: Request) {
-  // adminPost checks the admin session before anything else.
-  return adminPost(request, "/admin/agent", async ({ db, env, form, actorId }) => {
+  // staffPost checks the session (owner, or a team member with the whole admin to edit) before anything else.
+  return staffPost(request, "/admin/agent", ADMIN_EDIT, async ({ db, env, form, actorId }) => {
     const id = formId(form);
     if (!id) return "missing";
     const i = Number(form.get("i"));

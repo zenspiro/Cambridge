@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { requireStaff, type Staff } from "@/lib/auth/staff";
+import { ADMIN_EDIT, ADMIN_VIEW, allowed, requireStaff, type Staff } from "@/lib/auth/staff";
 import { AREAS, AREA_WORDS, LEVEL_WORDS, hasSubject, can } from "@/lib/auth/team";
 import { Notice } from "@/components/AdminShell";
 import { recentAudit } from "@/lib/auth/session";
@@ -60,7 +60,8 @@ function ClearAll({ kind, n }: { kind: "run" | "paper"; n: number }) {
 export default async function AdminHome({ searchParams }: { searchParams: Promise<{ e?: string }> }) {
   const staff = await requireStaff(null);
   const q = await searchParams;
-  if (!staff.owner) return <TeamHome staff={staff} e={q.e} />;
+  // The whole admin (owner, 9 Nov 2026) sees the owner's Home; edit also clears and counts.
+  if (!staff.owner && !allowed(staff, ADMIN_VIEW)) return <TeamHome staff={staff} e={q.e} />;
   const env = await getEnv();
   const db = env.DB;
   const month = monthBounds(undefined);
@@ -84,6 +85,7 @@ export default async function AdminHome({ searchParams }: { searchParams: Promis
 
   return (
     <AdminShell
+      readOnly={!allowed(staff, ADMIN_EDIT)}
       current="/admin"
       title="Admin"
       intro="What needs you now: runs that stopped and papers with flags to review. Everything else is in the menu."

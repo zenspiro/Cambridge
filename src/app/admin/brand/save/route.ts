@@ -1,10 +1,10 @@
-import { adminPost } from "@/lib/adminPost";
+import { ADMIN_EDIT, staffPost } from "@/lib/auth/staff";
 import { checkBrandText, saveBrandText } from "@/lib/brand";
 import { fallbackName } from "@/lib/env";
 
 /** Name, short name, description, footer statement and default theme. */
 export async function POST(request: Request) {
-  return adminPost(request, "/admin/brand", async ({ db, form, actorId }) => {
+  return staffPost(request, "/admin/brand", ADMIN_EDIT, async ({ db, form, actorId }) => {
     const text = checkBrandText({
       name: form.get("name"),
       shortName: form.get("shortName"),

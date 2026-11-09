@@ -1,4 +1,5 @@
-import { adminPost, formId } from "@/lib/adminPost";
+import { ADMIN_EDIT, staffPost } from "@/lib/auth/staff";
+import { formId } from "@/lib/adminPost";
 import { BRAIN } from "@/lib/config";
 import { reportError } from "@/lib/errors";
 import { allow, limitKey } from "@/lib/ratelimit";
@@ -11,7 +12,7 @@ import { topicsCostCheck } from "@/lib/brain/spend";
 export async function POST(request: Request, { params }: { params: Promise<{ code: string }> }) {
   const { code } = await params;
   const back = /^\d{4}$/.test(code) ? `/admin/library/${code}/topics` : "/admin/library";
-  return adminPost(request, back, async ({ db, env, form, actorId }) => {
+  return staffPost(request, back, ADMIN_EDIT, async ({ db, env, form, actorId }) => {
     const id = formId(form, "syllabus");
     const y = id ? await db.prepare(`SELECT id FROM syllabus WHERE id = ?1 AND code = ?2`).bind(id, code).first<{ id: string }>() : null;
     if (!y) return "bad";

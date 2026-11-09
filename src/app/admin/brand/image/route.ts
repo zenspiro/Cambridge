@@ -1,11 +1,11 @@
-import { adminPost } from "@/lib/adminPost";
+import { ADMIN_EDIT, staffPost } from "@/lib/auth/staff";
 import { IMAGE_KINDS, saveBrandImage } from "@/lib/brand";
 import { BRAND, type BrandImageKind } from "@/lib/config";
 import { fallbackName } from "@/lib/env";
 
 /** One brand image (logo, square logo or favicon): PNG, JPEG or WebP, checked by its bytes. */
 export async function POST(request: Request) {
-  return adminPost(request, "/admin/brand", async ({ db, env, form, actorId }) => {
+  return staffPost(request, "/admin/brand", ADMIN_EDIT, async ({ db, env, form, actorId }) => {
     const kind = form.get("kind");
     if (typeof kind !== "string" || !IMAGE_KINDS.includes(kind as BrandImageKind)) return "bad_kind";
     const file = form.get("file");

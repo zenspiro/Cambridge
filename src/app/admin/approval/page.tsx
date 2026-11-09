@@ -1,5 +1,5 @@
+import { ADMIN_EDIT, ADMIN_VIEW, allowed, requireStaff } from "@/lib/auth/staff";
 import type { Metadata } from "next";
-import { requireAdmin } from "@/lib/auth/guard";
 import { getEnv } from "@/lib/env";
 import { AdminShell, Notice } from "@/components/AdminShell";
 import { ActionForm } from "@/components/ActionForm";
@@ -18,13 +18,14 @@ const CONSENT_MESSAGES = {
 // Parent approval ages (owner, 6 Nov 2026: its own page under "Students and parents"). The routes stay under
 // /admin/settings/consent and come back here.
 export default async function ApprovalPage({ searchParams }: { searchParams: Promise<{ e?: string; ref?: string }> }) {
-  await requireAdmin();
+  const staff = await requireStaff(ADMIN_VIEW);
   const q = await searchParams;
   const env = await getEnv();
   const consent = await getConsentSettings(env.DB);
   const overrides = Object.entries(consent.byCountry).sort((a, b) => countryName(a[0]).localeCompare(countryName(b[0])));
   return (
     <AdminShell
+      readOnly={!allowed(staff, ADMIN_EDIT)}
       current="/admin/approval"
       title="Parent approval"
       intro="The age under which a student needs a parent or guardian to approve their account, with a different age per country where the law asks for one."

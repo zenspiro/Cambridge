@@ -1,11 +1,11 @@
-import { adminPost } from "@/lib/adminPost";
+import { ADMIN_EDIT, staffPost } from "@/lib/auth/staff";
 import { audit } from "@/lib/auth/session";
 import { checkVariants } from "@/lib/settings";
 
 // Essential variants for one syllabus code (all its versions).
 export async function POST(request: Request) {
-  // adminPost checks the admin session before anything else.
-  return adminPost(request, "/admin/library", async ({ db, form, actorId }) => {
+  // staffPost checks the session (owner, or a team member with the whole admin to edit) before anything else.
+  return staffPost(request, "/admin/library", ADMIN_EDIT, async ({ db, form, actorId }) => {
     const code = String(form.get("code") ?? "");
     if (!/^\d{4}$/.test(code)) return "unknown";
     const value = checkVariants(Object.fromEntries((["m", "s", "w"] as const).map((s) => [s, form.getAll(`ev_${s}`).map(Number)])));

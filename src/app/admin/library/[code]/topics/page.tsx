@@ -1,7 +1,7 @@
+import { ADMIN_EDIT, ADMIN_VIEW, allowed, requireStaff } from "@/lib/auth/staff";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { requireAdmin } from "@/lib/auth/guard";
 import { getEnv } from "@/lib/env";
 import { AdminShell, Notice } from "@/components/AdminShell";
 import { ActionForm } from "@/components/ActionForm";
@@ -28,7 +28,7 @@ const MESSAGES = {
 };
 
 export default async function TopicsPage({ params, searchParams }: { params: Promise<{ code: string }>; searchParams: Promise<{ e?: string; ref?: string }> }) {
-  await requireAdmin();
+  const staff = await requireStaff(ADMIN_VIEW);
   const { code } = await params;
   const q = await searchParams;
   if (!/^\d{4}$/.test(code)) redirect("/admin/library");
@@ -41,6 +41,7 @@ export default async function TopicsPage({ params, searchParams }: { params: Pro
 
   return (
     <AdminShell
+      readOnly={!allowed(staff, ADMIN_EDIT)}
       current="/admin/library"
       title={`Topic tree: ${header.subject_name} ${code}`}
       crumbs={[

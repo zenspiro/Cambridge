@@ -41,6 +41,7 @@ A plain list of what the platform does today, for non-developers.
 - Read with: Read this paper and Read it again can use another Claude model, or Gemini alone, for that one reading, each choice with its rough cost; the saved Reading AI stays as it is.
 - Notation, lead-ins and tables read exactly as printed: superscripts, subscripts and stacked fractions found from where each character sits in the PDF (²⁰⁸₈₁Tl, H₂O, 10⁻¹⁰, cm³, 4 over x − 1, 43⅓) and kept in one markup; each question's and part's lead-in as its own text before its parts; tables as real tables with blanks to fill in. Red flags when a reading has notation flat or a fraction run together, joins a lead-in to the first part or leaves it out, or writes a table as "|" lines, each with a one-click fix.
 - Team: invite helpers by email with View or Edit per area (library, source review, AI review) and per subject; they sign in with an email code and see only their part of the admin. Pause, change or remove them any time.
+- Whole admin access for team members: view every section, or also make changes and start paid reading inside the cap; the team and AI setup's models, prices and cap stay the owner's.
 - Students and parents: every account in one searchable list.
 - Read all shows its progress live in its card: which paper, each paper's state, then links to review them.
 - Needs you on Home clears itself when a stopped run is later done right or a paper is read again; Clear, Clear all and Undo for the rest.

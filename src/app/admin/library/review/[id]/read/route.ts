@@ -1,4 +1,4 @@
-import { adminPost } from "@/lib/adminPost";
+import { ADMIN_EDIT, staffPost } from "@/lib/auth/staff";
 import { BRAIN } from "@/lib/config";
 import { reportError } from "@/lib/errors";
 import { allow, limitKey } from "@/lib/ratelimit";
@@ -16,7 +16,7 @@ const FIG_RE = /^[A-Za-z0-9_.-]{1,20}$/;
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const back = /^[A-Za-z0-9_-]{10,64}$/.test(id) ? `/admin/library/review/${id}` : "/admin/library";
-  return adminPost(request, back, async ({ db, env, form, actorId }) => {
+  return staffPost(request, back, ADMIN_EDIT, async ({ db, env, form, actorId }) => {
     const doc = await paperDoc(db, id);
     if (!doc || !PAPER_KINDS.includes(doc.docType as PaperKind)) return "bad";
     const items = form.getAll("item").map(String).filter((x) => ITEM_RE.test(x)).slice(0, 50);

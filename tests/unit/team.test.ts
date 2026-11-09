@@ -7,7 +7,7 @@ import { safeNext } from "../../src/lib/account/roles.ts";
 
 const user = (db: ReturnType<typeof testDb>, id: string, email: string) =>
   db.prepare(`INSERT INTO "auth_user" (id, name, email, "emailVerified", "createdAt", "updatedAt", "firstName", "lastName") VALUES (?1, ?2, ?3, 1, '2026-11-09T00:00:00.000Z', '2026-11-09T00:00:00.000Z', ?2, 'Tester')`).bind(id, id, email).run();
-const ACCESS: Access = { library: "view", sourceReview: "edit", aiReview: "none", subjects: ["0625"] };
+const ACCESS: Access = { library: "view", sourceReview: "edit", aiReview: "none", admin: "none", subjects: ["0625"] };
 
 test("access: levels per area, subjects, made safe", () => {
   assert.ok(can(ACCESS, "library", "view", "0625"));
@@ -18,17 +18,26 @@ test("access: levels per area, subjects, made safe", () => {
   assert.ok(can({ ...ACCESS, subjects: "all" }, "library", "view", "0478"));
   assert.ok(!can({ ...ACCESS, subjects: [] }, "library", "view"), "no subjects, no access");
   assert.ok(hasSubject(ACCESS, "0625") && !hasSubject(ACCESS, "0620"));
-  assert.deepEqual(cleanAccess({ library: "admin", sourceReview: "view", subjects: ["0625", "0625", "x", "9999"] }, new Set(["0625"])), { library: "none", sourceReview: "view", aiReview: "none", subjects: ["0625"] });
-  assert.deepEqual(cleanAccess(null), { library: "none", sourceReview: "none", aiReview: "none", subjects: [] });
+  assert.deepEqual(cleanAccess({ library: "admin", sourceReview: "view", subjects: ["0625", "0625", "x", "9999"] }, new Set(["0625"])), { library: "none", sourceReview: "view", aiReview: "none", admin: "none", subjects: ["0625"] });
+  assert.deepEqual(cleanAccess(null), { library: "none", sourceReview: "none", aiReview: "none", admin: "none", subjects: [] });
   const form = new FormData();
   form.set("library", "edit");
   form.set("sourceReview", "view");
   form.append("subject", "0620");
   form.append("subject", "0625");
-  assert.deepEqual(accessFromForm(form, new Set(["0620", "0625"])), { library: "edit", sourceReview: "view", aiReview: "none", subjects: ["0620", "0625"] });
+  assert.deepEqual(accessFromForm(form, new Set(["0620", "0625"])), { library: "edit", sourceReview: "view", aiReview: "none", admin: "none", subjects: ["0620", "0625"] });
   form.set("allSubjects", "1");
   assert.equal(accessFromForm(form, new Set()).subjects, "all");
   assert.equal(accessWords(ACCESS), "Library: view only; Source review: view and edit; 0625");
+  // The whole admin (owner, 9 Nov 2026): every area and every subject at its level, and the admin itself.
+  const whole: Access = { ...ACCESS, library: "none", sourceReview: "none", admin: "view", subjects: [] };
+  assert.ok(can(whole, "admin", "view") && !can(whole, "admin", "edit"));
+  assert.ok(can(whole, "library", "view", "0478") && can(whole, "sourceReview", "view", "0620") && !can(whole, "library", "edit", "0625"));
+  assert.ok(can({ ...whole, admin: "edit" }, "aiReview", "edit", "0580") && hasSubject(whole, "0450"));
+  assert.ok(!can(ACCESS, "admin", "view"), "area access is not the whole admin");
+  form.set("admin", "edit");
+  assert.equal(accessFromForm(form, new Set()).admin, "edit");
+  assert.equal(accessWords(whole), "Whole admin: view only; every subject");
 });
 
 test("invites: one link per email, accepted once by that email only, then a member; cancel, pause, remove", async () => {

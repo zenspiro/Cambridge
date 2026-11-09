@@ -28,36 +28,35 @@ test("every page and route is public on purpose or checks the admin or account s
 
 // Team access (owner, 9 Nov 2026): only these admin pages and routes may let a team member in; every other admin page
 // stays the owner's (requireAdmin, adminSession, adminPost). A new one here is a decision, not an accident.
-const TEAM_ROUTES = [
-  "admin/page.tsx",
-  "admin/brain/runs/[id]/route.ts",
-  "admin/library/page.tsx",
-  "admin/library/[code]/page.tsx",
-  "admin/library/[code]/[year]/[session]/page.tsx",
-  "admin/library/[code]/version/[from]/page.tsx",
-  "admin/library/[code]/map/route.ts",
-  "admin/library/add/page.tsx",
-  "admin/library/add/link/route.ts",
-  "admin/library/add/upload/route.ts",
-  "admin/library/upload/page.tsx",
-  "admin/library/upload/send/route.ts",
-  "admin/library/folder/page.tsx",
-  "admin/library/folder/file/route.ts",
-  "admin/library/folder/ai/route.ts",
-  "admin/library/file/[id]/route.ts",
-  "admin/library/file/[id]/view/route.ts",
-  "admin/library/review/[id]/page.tsx",
-  "admin/library/review/[id]/fix/route.ts",
-  "admin/library/review/[id]/figure/[fig]/route.ts",
-  "admin/library/review/[id]/figure/[fig]/page/route.ts",
+// Owner, 9 Nov 2026: a team member may reach every admin page and action their access allows (the whole admin
+// included), except these, which stay the owner's whatever the access: the team itself, AI setup's changes, and the
+// owner's own sign-in.
+const OWNER_ONLY = [
+  "admin/ai/cap/route.ts",
+  "admin/ai/check/route.ts",
+  "admin/ai/model/route.ts",
+  "admin/ai/price/route.ts",
+  "admin/login/page.tsx",
+  "admin/session/end/route.ts",
+  "admin/session/route.ts",
+  "admin/users/team/invite/cancel/route.ts",
+  "admin/users/team/invite/resend/route.ts",
+  "admin/users/team/invite/route.ts",
+  "admin/users/team/member/route.ts",
+  "admin/users/team/page.tsx",
 ].sort();
 
-test("only the listed admin pages let team members in; the rest stay the owner's", () => {
+test("team members reach only pages that check their access; the team, AI setup's changes and sign-in stay the owner's", () => {
   const admin = routes(appDir).filter((r) => r.startsWith("admin/"));
-  const team = admin.filter((r) => /\b(requireStaff\(|staffFor\(|staffForDoc\(|staffPost\(|addFilePost\()/.test(readFileSync(join(appDir, r), "utf8").replace(/\/\/.*$/gm, ""))).sort();
-  assert.deepEqual(team, TEAM_ROUTES);
-  for (const r of ["admin/users/team/page.tsx", "admin/users/team/invite/route.ts", "admin/users/team/member/route.ts", "admin/ai/page.tsx", "admin/library/review/[id]/read/route.ts", "admin/library/[code]/read-all/route.ts", "admin/agent/start/route.ts"]) {
-    assert.ok(admin.includes(r) && !team.includes(r), `${r} is the owner's only`);
+  const staffGuard = (r: string) => /\b(requireStaff\(|staffFor\(|staffForDoc\(|staffPost\(|addFilePost\()/.test(readFileSync(join(appDir, r), "utf8").replace(/\/\/.*$/gm, ""));
+  assert.deepEqual(admin.filter((r) => !staffGuard(r)).sort(), OWNER_ONLY);
+  for (const r of OWNER_ONLY.filter((x) => x !== "admin/login/page.tsx" && !x.startsWith("admin/session"))) {
+    assert.match(readFileSync(join(appDir, r), "utf8"), /requireAdmin\(|adminPost\(/, `${r} checks the owner's sign-in`);
+  }
+  // Every page and action for the whole admin names its need; the pages that change things take edit.
+  for (const r of admin.filter((x) => staffGuard(x) && x.endsWith("route.ts"))) {
+    const code = readFileSync(join(appDir, r), "utf8");
+    if (/staffPost\(request, [^,]+, ADMIN_VIEW/.test(code)) assert.fail(`${r}: a change needs edit, not view`);
   }
 });
 

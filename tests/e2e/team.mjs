@@ -82,13 +82,51 @@ try {
   await team.goto(BASE + "/admin/library/0620");
   check(team.url().endsWith("/admin?e=no_access") && (await team.locator(".notice, .alert").first().textContent())?.includes("not part of your access"), "another subject is refused and Home says why");
   await team.goto(BASE + "/admin/ai");
-  check(team.url().includes("/admin/login"), "owner pages stay closed (AI setup)");
+  check(team.url().endsWith("/admin?e=no_access"), "pages outside their access stay closed (AI setup)");
   await team.goto(BASE + "/admin/users/team");
   check(team.url().includes("/admin/login"), "owner pages stay closed (Team)");
   const post = await team.request.post(BASE + "/admin/users/team/invite", { form: { name: "X", email: "x@example.com", library: "edit" }, headers: { origin: BASE }, maxRedirects: 0 });
   check((post.headers()["location"] ?? "").includes("/admin/login"), "a team member cannot invite (the server refuses, not just the button)");
   const upload = await team.request.post(BASE + "/admin/library/folder/file", { data: Buffer.from("%PDF-1.4\n"), headers: { origin: BASE, "x-file-name": "0625_s24_qp_22.pdf", "content-type": "application/pdf" } });
   check(upload.status() === 401, `view-only cannot upload (${upload.status()})`);
+
+  // The whole admin (owner, 9 Nov 2026): view shows every section with nothing to change; edit allows changes; the
+  // team and AI setup's changes stay the owner's.
+  const setWhole = async (level) => {
+    await owner.goto(BASE + "/admin/users/team");
+    const r = owner.locator(`.member-row[data-member="${email}"]`);
+    await r.locator("summary", { hasText: "Change access" }).click();
+    await r.locator("select[name=admin]").selectOption(level);
+    await r.locator("button", { hasText: "Save access" }).click();
+    await r.locator(".action-note").first().waitFor({ timeout: 10_000 }).catch(() => {});
+  };
+  await setWhole("view");
+  await owner.locator(`.member-row[data-member="${email}"]`, { hasText: "Whole admin: view only" }).waitFor({ timeout: 10_000 }).then(() => check(true, "the owner gives the whole admin, view only; the list says so"), () => check(false, "the owner gives the whole admin, view only; the list says so"));
+  await team.goto(BASE + "/admin");
+  const wholeMenu = await team.locator(".admin-side .side-link").allTextContents();
+  check(wholeMenu.includes("Sources") && wholeMenu.includes("AI setup") && wholeMenu.includes("Students and parents") && !wholeMenu.includes("Team"), `their menu now has every section but Team (${wholeMenu.join("|")})`);
+  check((await team.locator(".readonly-note").count()) === 1 && (await team.locator("h1").textContent()) === "Admin", "they get the owner's Home, marked view only");
+  await team.goto(BASE + "/admin/sources");
+  check(team.url().endsWith("/admin/sources") && (await team.locator(".readonly-note").count()) === 1, "a view-only member opens Sources");
+  check(await team.evaluate(() => [...document.querySelectorAll('main form[method="post"] button')].every((b) => b.offsetParent === null)), "no change button shows on a view-only page");
+  const toggle = await team.request.post(BASE + "/admin/sources/toggle", { form: { id: "cambridge", enabled: "0" }, headers: { origin: BASE }, maxRedirects: 0 });
+  check((toggle.headers()["location"] ?? "").includes("e=no_access"), "the server refuses a change from a view-only member");
+  await team.goto(BASE + "/admin/library/0620");
+  check(team.url().endsWith("/admin/library/0620"), "the whole admin covers every subject");
+  await setWhole("edit");
+  await owner.locator(`.member-row[data-member="${email}"]`, { hasText: "Whole admin: view and edit" }).waitFor({ timeout: 10_000 }).catch(() => {});
+  await team.goto(BASE + "/admin/sources");
+  check((await team.locator(".readonly-note").count()) === 0 && await team.evaluate(() => [...document.querySelectorAll('main form[method="post"] button')].some((b) => b.offsetParent !== null)), "with edit the change buttons show");
+  const count = await team.request.post(BASE + "/admin/home/storage", { headers: { origin: BASE }, maxRedirects: 0 });
+  check(!(count.headers()["location"] ?? "").includes("no_access") && !(count.headers()["location"] ?? "").includes("/admin/login"), "an edit member's change goes through");
+  await team.goto(BASE + "/admin/ai");
+  check((await team.locator(".readonly-note").count()) === 1, "AI setup stays view only, even with edit");
+  const cap = await team.request.post(BASE + "/admin/ai/cap", { form: { cap: "999" }, headers: { origin: BASE }, maxRedirects: 0 });
+  check((cap.headers()["location"] ?? "").includes("/admin/login"), "the server keeps the cap the owner's");
+  await team.goto(BASE + "/admin/users/team");
+  check(team.url().includes("/admin/login"), "the team stays the owner's, even with the whole admin");
+  const invite2 = await team.request.post(BASE + "/admin/users/team/invite", { form: { name: "X", email: "y@example.com", admin: "edit" }, headers: { origin: BASE }, maxRedirects: 0 });
+  check((invite2.headers()["location"] ?? "").includes("/admin/login"), "and they cannot invite anyone");
 
   // The owner pauses them: the admin closes; then removes them.
   await owner.goto(BASE + "/admin/users/team");

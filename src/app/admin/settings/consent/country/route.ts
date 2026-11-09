@@ -1,9 +1,9 @@
-import { adminPost } from "@/lib/adminPost";
+import { ADMIN_EDIT, staffPost } from "@/lib/auth/staff";
 import { checkConsentSettings, getConsentSettings, saveConsentSettings } from "@/lib/account/profile";
 
 /** A country whose age limit differs from the default (adding it again changes it). */
 export async function POST(request: Request) {
-  return adminPost(request, "/admin/approval", async ({ db, form, actorId }) => {
+  return staffPost(request, "/admin/approval", ADMIN_EDIT, async ({ db, form, actorId }) => {
     const current = await getConsentSettings(db);
     const country = String(form.get("country") ?? "");
     const v = checkConsentSettings({ ...current, byCountry: { ...current.byCountry, [country]: Number(form.get("age")) } });

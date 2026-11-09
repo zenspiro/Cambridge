@@ -1,6 +1,6 @@
+import { ADMIN_EDIT, ADMIN_VIEW, allowed, requireStaff } from "@/lib/auth/staff";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { requireAdmin } from "@/lib/auth/guard";
 import { getEnv } from "@/lib/env";
 import { AdminShell, Notice } from "@/components/AdminShell";
 import { SESSION_LABELS } from "@/lib/config";
@@ -20,7 +20,7 @@ const MESSAGES = {
 };
 
 export default async function AgentPage({ searchParams }: { searchParams: Promise<{ e?: string; ref?: string; code?: string }> }) {
-  await requireAdmin();
+  const staff = await requireStaff(ADMIN_VIEW);
   const q = await searchParams;
   const env = await getEnv();
   const lib = await getLibrarySettings(env.DB);
@@ -32,6 +32,7 @@ export default async function AgentPage({ searchParams }: { searchParams: Promis
 
   return (
     <AdminShell
+      readOnly={!allowed(staff, ADMIN_EDIT)}
       current="/admin/agent"
       title="Download agent"
       intro="The agent reads the start pages of switched-on sources, follows their PDF links, and stores only files that are missing. Start with a dry run to see what it would fetch."
