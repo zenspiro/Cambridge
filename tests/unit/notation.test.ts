@@ -4,6 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  fractionBars, fractions, fractionsIn, joinFractionLines, linearFraction, notationTree,
   applyNotation, bboxWords, leadInProblems, lostNotation, normaliseNotation, notate, notatedPages, notationOn, notationParts, notationPlain,
   pdfOutline, withoutLead, wordsText, type Word,
 } from "../../src/lib/brain/notation.ts";
@@ -174,4 +175,86 @@ test("after a lead-in is split off, the part's notation flag still offers the re
   const split = splitLeadIn({ ...c, totalMarks: null }, "8(a)(i)", "8", "The isotope thallium-208 (^{208}_{81}Tl) is radioactive.")!;
   const after = recheckItem(split, flags, "8(a)(i)", pages).find((f) => f.kind === "notation");
   assert.equal(after?.pdfText, "Complete the equation for this decay. ^{208}_{81}Tl");
+});
+
+
+// 0580 June 2024 Paper 41, page 6: "(b) Write as a single fraction" 4/(x − 1) − 3/(2x + 5), and "3 (a) C = ¼xy²".
+const P6: W[][] = [
+  [[49.6, 67.7, 55.4, 83.1, "3"]],
+  [[140.3, 61.9, 146.0, 77.0, "1"]],
+  [[117.9, 67.8, 125.6, 83.1, "C"], [128.8, 70.2, 136.6, 81.7, "="], [147.8, 67.8, 158.0, 83.1, "xy"], [158.5, 66.3, 162.6, 76.9, "2"]],
+  [[140.3, 74.2, 146.0, 89.3, "4"]],
+  [[72.3, 67.7, 85.7, 83.1, "(a)"]],
+  [[274.1, 334.9, 279.9, 350.0, "4"], [312.7, 334.9, 318.5, 350.0, "3"]],
+  [[291.1, 343.2, 298.9, 354.7, "-"]],
+  [[266.3, 347.0, 271.4, 362.3, "x"], [273.0, 349.5, 280.8, 361.0, "-"], [282.4, 347.2, 288.1, 362.3, "1"], [301.8, 347.2, 307.6, 362.3, "2"], [307.6, 347.0, 312.7, 362.3, "x"], [314.2, 349.5, 322.0, 361.0, "+"], [323.6, 347.2, 329.3, 362.3, "5"]],
+];
+const P6_SVG = `<svg><defs></defs><g fill="rgb(13.7%, 12.2%, 12.5%)">
+<path fill-rule="nonzero" fill="rgb(13.7%, 12.2%, 12.5%)" d="M 139.56 76.68 L 146.43 76.68 L 146.43 76.18 L 139.56 76.18 Z M 139.56 76.68 "/>
+<path fill-rule="nonzero" fill="rgb(13.7%, 12.2%, 12.5%)" d="M 265.05 349.35 L 288.33 349.35 L 288.33 348.85 L 265.05 348.85 Z M 265.05 349.35 "/>
+<path fill-rule="nonzero" fill="rgb(13.7%, 12.2%, 12.5%)" d="M 300.88 349.35 L 329.5 349.35 L 329.5 348.85 L 300.88 348.85 Z M 300.88 349.35 "/>
+<path fill="none" stroke-width="0.3" stroke="rgb(13.7%, 12.2%, 12.5%)" d="M 0 0 L 82.36 0 " transform="matrix(1, 0, 0, 1, 94.8, 86.1)"/>
+</g></svg>`;
+
+test("fraction bars are the thin filled strips on a page, not stroked table rules", () => {
+  const bars = fractionBars(P6_SVG);
+  assert.equal(bars.length, 3);
+  assert.deepEqual(bars[1]!.map((x) => Math.round(x)), [265, 349, 288, 349]);
+});
+
+test("words stacked over a bar become a fraction, put back on the line it sits on", () => {
+  const raw = bboxWords(xml([P6]))[0]!;
+  const f = fractions(raw, fractionBars(P6_SVG));
+  assert.equal(f.count, 3);
+  const text = wordsText(joinFractionLines(notate(f.words).words));
+  assert.equal(text, "3 (a) C = \\frac{1}{4} xy^{2}\n\\frac{4}{x - 1} - \\frac{3}{2x + 5}");
+  // Through the whole page: Poppler's text with fractions, and the count.
+  const n = notatedPages(["3 (a) C = 1 xy2 4 4 3 - x - 1 2x + 5 and more text on the page"], xml([P6]), [fractionBars(P6_SVG)]);
+  assert.equal(n.fractions, 3);
+  assert.match(n.pages[0]!, /C = \\frac\{1\}\{4\} xy\^\{2\}/);
+  // A part's own superscript sits higher than the rest (y⁸ over 16x¹⁶) and still belongs to it.
+  const y8: W[] = [[151.2, 91.9, 156.3, 107.2, "y"], [156.9, 90.4, 160.9, 101.0, "8"], [143.0, 109.1, 154.5, 124.2, "16"], [154.5, 108.9, 159.6, 124.2, "x"], [160.1, 107.4, 168.2, 118.0, "16"]];
+  const g = fractions(bboxWords(xml([[y8]]))[0]!, [[142.25, 108.21, 168.56, 108.71]]);
+  assert.equal(g.words[0]!.t, "\\frac{y^{8}}{16x^{16}}");
+  // A mixed number: the whole number and the fraction go together.
+  const mixed: W[] = [[100, 300, 112, 315, "43"], [113, 294, 117, 305, "1"], [113, 307, 117, 318, "3"], [120, 300, 128, 315, "%"]];
+  assert.equal(wordsText(fractions(bboxWords(xml([[mixed]]))[0]!, [[112.8, 305.6, 117.4, 306.1]]).words), "43\\frac{1}{3} %");
+});
+
+test("fractions in the markup: Unicode fractions, plain text, the display tree", () => {
+  assert.equal(normaliseNotation("43⅓ % and ¾"), "43\\frac{1}{3} % and \\frac{3}{4}");
+  assert.deepEqual(fractionsIn("a \\frac{\\frac{1}{2}}{x + 1} b").map((f) => [f.num, f.den]), [["\\frac{1}{2}", "x + 1"]]);
+  assert.equal(linearFraction("4", "x − 1"), "4/(x − 1)");
+  assert.equal(notationPlain("\\frac{y^{8}}{16x^{16}} and \\frac{\\frac{1}{2}}{3}"), "y⁸/(16x¹⁶) and (1/2)/3");
+  assert.deepEqual(notationTree("C = \\frac{1}{4}xy^{2}"), [
+    { kind: "text", text: "C = " },
+    { kind: "frac", num: [{ kind: "text", text: "1" }], den: [{ kind: "text", text: "4" }] },
+    { kind: "text", text: "xy" },
+    { kind: "sup", children: [{ kind: "text", text: "2" }] },
+  ]);
+});
+
+test("a fraction read with its parts run together is flagged; the markup and a/b with brackets are not", () => {
+  const pages = ["cover page of the paper with its instructions, ".repeat(14), "(b) Write as a single fraction in its simplest form. \\frac{4}{x - 1} - \\frac{3}{2x + 5}"];
+  const lost = lostNotation("Write as a single fraction in its simplest form. 4/x − 1 − 3/(2x + 5)", pages);
+  assert.equal(lost?.marked, "\\frac{4}{x - 1}");
+  assert.equal(lost?.repaired, "Write as a single fraction in its simplest form. \\frac{4}{x - 1} − 3/(2x + 5)");
+  assert.equal(lostNotation("Write as a single fraction. \\frac{4}{x − 1} − \\frac{3}{2x + 5}", pages), null);
+  assert.equal(lostNotation("Write as a single fraction. 4/(x − 1) − 3/(2x + 5)", pages), null);
+  const c = cleanPaper({ items: [{ number: "3(b)", page: 2, text: "Write as a single fraction in its simplest form. 4 x − 1 − 3/(2x + 5)", marks: 3 }] }, "qp");
+  const f = paperFlags({ content: { ...c, totalMarks: null }, pages, gemini: null }).find((x) => x.kind === "notation");
+  assert.match(f!.reason, /the fraction 4\/\(x - 1\)/);
+});
+
+test("a nuclide set digit by digit (Mar 2025 Paper 42, question 9) is read whole", () => {
+  const sr: W[] = [[287.29, 87.14, 291.88, 97.86, "9"], [292.17, 87.14, 296.76, 97.86, "0"], [297.06, 88.37, 308.06, 102.67, "Sr"], [287.59, 94.83, 292.17, 105.56, "3"], [292.47, 94.83, 297.06, 105.56, "8"]];
+  const n = notate(bboxWords(xml([[sr]]))[0]!);
+  assert.deepEqual(n.words.map((w) => w.t), ["^{90}_{38}Sr"]);
+  assert.deepEqual(n.tokens[0]!.pieces, ["90", "38", "Sr"]);
+  assert.equal(applyNotation("notation for strontium-90 is:\n90 Sr\n38", n.tokens), "notation for strontium-90 is:\n^{90}_{38}Sr");
+});
+
+test("an underlined word in a mark scheme is not a fraction", () => {
+  const ws: W[] = [[281.6, 233.9, 315.8, 244.2, "square"], [319.5, 233.9, 337.7, 244.2, "and"], [341.1, 233.9, 377.7, 244.2, "precise"], [320, 243.5, 336, 253.8, "data"], [339, 243.5, 380, 253.8, "values"]];
+  assert.equal(fractions(bboxWords(xml([[ws]]))[0]!, [[319.4, 242.4, 337.8, 243.2]]).count, 0);
 });

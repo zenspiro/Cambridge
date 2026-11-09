@@ -11,7 +11,7 @@
 
 export type WBox = [number, number, number, number];
 /** One word as Poppler places it: its box (PDF points, y down), its text, whether it starts a line. */
-export type Word = { b: WBox; t: string; first: boolean };
+export type Word = { b: WBox; t: string; first: boolean; /** A fraction's bar height: the line it sits on. */ axis?: number };
 
 const num = (s: string) => {
   const n = Number(s);
@@ -77,10 +77,12 @@ export function notate(words: readonly Word[]): { words: Word[]; tokens: Notatio
   };
   words.forEach((x, i) => {
     // A superscript is short: digits, signs, a letter or two ("max", "™"); a smaller-font label is not one.
-    if (h(x) <= 0 || x.t.length > 8 || (x.t.match(/[A-Za-z]/g) ?? []).length > 3) return;
+    const frac = x.t.startsWith("\\frac{");
+    if (h(x) <= 0 || (!frac && (x.t.length > 8 || (x.t.match(/[A-Za-z]/g) ?? []).length > 3))) return;
     let best: { j: number; gap: number; kind: "sup" | "sub"; side: "pre" | "post" } | null = null;
     words.forEach((base, j) => {
-      if (j === i || /^\.+$/.test(base.t)) return;
+      // A fraction is never the base of a superscript (its box is two lines tall, so its neighbours look lowered).
+      if (j === i || /^\.+$/.test(base.t) || base.t.startsWith("\\frac{")) return;
       const post = x.b[0] - base.b[2];
       const pre = base.b[0] - x.b[2];
       const side = post <= TOUCH && post >= -TOUCH * 2 && /[A-Za-z0-9)\]]$/.test(base.t) ? "post"
@@ -96,6 +98,22 @@ export function notate(words: readonly Word[]): { words: Word[]; tokens: Notatio
     taken.add(i);
     pieces.set(b.j, [...(pieces.get(b.j) ?? []), { at: i, kind: b.kind, side: b.side, w: x }]);
   });
+  // Digits set one by one ("9" "0" over "3" "8" before Sr): a small word touching a piece, on the same level, joins it.
+  for (let added = true; added;) {
+    added = false;
+    words.forEach((x, i) => {
+      if (taken.has(i) || pieces.has(i) || h(x) <= 0 || x.t.length > 8) return;
+      for (const [j, ps] of pieces) {
+        const base = words[j]!;
+        const p = ps.find((q) => (Math.abs(x.b[2] - q.w.b[0]) <= TOUCH || Math.abs(q.w.b[2] - x.b[0]) <= TOUCH) && Math.abs(mid(x) - mid(q.w)) <= h(q.w) / 4);
+        if (!p || kindOf(x, base) !== p.kind) continue;
+        taken.add(i);
+        ps.push({ at: i, kind: p.kind, side: p.side, w: x });
+        added = true;
+        return;
+      }
+    });
+  }
   // A word taken as a superscript cannot carry its own (that would be a chain): its pieces go back to plain words.
   for (const i of taken) {
     const own = pieces.get(i);
@@ -120,15 +138,18 @@ export function notate(words: readonly Word[]): { words: Word[]; tokens: Notatio
     out.push({ b: box, t: preMarks + w.t + postMarks, first: w.first || pre.some((p) => p.w.first) });
     if (pre.length) {
       const baseText = /^[A-Za-z0-9]+/.exec(w.t)?.[0] ?? w.t;
-      tokens.push({ pieces: [...pre.map((p) => p.w.t), baseText], marked: preMarks + baseText, prefix: true });
+      tokens.push({ pieces: [...segments(preMarks), baseText], marked: preMarks + baseText, prefix: true });
     }
     if (post.length) {
       const baseText = /[A-Za-z0-9]+$/.exec(w.t)?.[0] ?? w.t.slice(-1);
-      tokens.push({ pieces: [baseText, ...post.map((p) => p.w.t)], marked: baseText + postMarks });
+      tokens.push({ pieces: [baseText, ...segments(postMarks)], marked: baseText + postMarks });
     }
   });
   return { words: out, tokens };
 }
+
+/** The texts of a markup run in order ("^{90}_{38}" is "90", "38"), as the flat text has them. */
+const segments = (marks: string) => [...marks.matchAll(/[\^_]\{([^{}]*)\}/g)].map((m) => m[1]!);
 
 /** Pieces in order as markup; neighbours of the same kind join ("–" "10" is ^{−10}); minus signs are U+2212. */
 function joinMarks(parts: readonly { kind: "sup" | "sub"; t: string }[]): string {
@@ -197,7 +218,9 @@ export function wordsText(words: readonly Word[], lines = true): string {
       line = w.t;
     } else {
       const gap = w.b[0] - prev.b[2];
-      line += gap < 1 && gap > -2 ? w.t : ` ${w.t}`;
+      // A whole number right before a fraction is a mixed number (43⅓): written together.
+      const mixed = /\d$/.test(prev.t) && w.t.startsWith("\\frac{") && gap < 4;
+      line += (gap < 1 && gap > -2) || mixed ? w.t : ` ${w.t}`;
     }
     prev = w;
   }
@@ -206,24 +229,76 @@ export function wordsText(words: readonly Word[], lines = true): string {
 }
 
 /**
+ * Fractions put back on the line they sit on: Poppler gives a fraction's numerator and denominator their own lines, so
+ * the merged fraction starts a line of its own ("¼" above "C = xy²"). Lines whose words are centred on a fraction's bar
+ * join its line, in order across the page ("C = ¼xy²", "4/(x − 1) − 3/(2x + 5)"). Pure.
+ */
+export function joinFractionLines(words: readonly Word[]): Word[] {
+  if (!words.some((w) => w.axis !== undefined)) return [...words];
+  const lines: Word[][] = [];
+  for (const w of words) {
+    if (w.first || !lines.length) lines.push([w]);
+    else lines.at(-1)!.push(w);
+  }
+  const axisOf = (l: readonly Word[]) => l.find((w) => w.axis !== undefined)?.axis;
+  const midOf = (l: readonly Word[]) => {
+    const ms = l.filter((w) => w.axis === undefined).map(mid).sort((a, b) => a - b);
+    return ms.length ? ms[Math.floor(ms.length / 2)]! : axisOf(l)!;
+  };
+  const near = (a: readonly Word[], b: readonly Word[]) => {
+    const top = Math.max(Math.min(...a.map((w) => w.b[1])), Math.min(...b.map((w) => w.b[1])));
+    const bottom = Math.min(Math.max(...a.map((w) => w.b[3])), Math.max(...b.map((w) => w.b[3])));
+    return bottom > top;
+  };
+  const out: Word[][] = [];
+  const used = new Set<number>();
+  lines.forEach((l, i) => {
+    if (used.has(i)) return;
+    let group = [...l];
+    for (let changed = true; changed;) {
+      changed = false;
+      const ax = axisOf(group);
+      lines.forEach((m, j) => {
+        if (j === i || used.has(j) || !near(group, m)) return;
+        const mx = axisOf(m);
+        const fits = ax !== undefined ? Math.abs(midOf(m) - ax) <= 6 || (mx !== undefined && Math.abs(mx - ax) <= 3)
+          : mx !== undefined && Math.abs(midOf(group) - mx) <= 6;
+        if (!fits) return;
+        group = [...group, ...m];
+        used.add(j);
+        changed = true;
+      });
+    }
+    used.add(i);
+    out.push(group.sort((a, b) => a.b[0] - b.b[0]).map((w, k) => ({ ...w, first: k === 0 })));
+  });
+  return out.flat();
+}
+
+/**
  * Every page's text with its notation. From Poppler's words when it read every page (it also reads the maths fonts
  * our own reader cannot: "y = x^{2} + 7x − 18"), else our reader's pages patched with what Poppler placed. Pure.
  */
-export function notatedPages(pages: readonly string[], xml: string): { pages: string[]; found: number; words: Word[][]; from: "poppler" | "patched" } {
+export function notatedPages(pages: readonly string[], xml: string, bars: readonly (readonly Bar[])[] = []): { pages: string[]; found: number; fractions: number; words: Word[][]; from: "poppler" | "patched" } {
   const boxes = bboxWords(xml);
   let found = 0;
+  let fracs = 0;
   const words: Word[][] = [];
   const tokens: Notation[][] = [];
-  for (const b of boxes) {
-    const n = notate(b);
+  for (const [i, raw] of boxes.entries()) {
+    // Fractions first: a mixed number's small stacked digits (1¾) are a fraction, not a superscript and subscript.
+    const f = fractions(raw, bars[i] ?? []);
+    fracs += f.count;
+    const n = notate(f.words);
+    n.words = joinFractionLines(n.words);
     words.push(n.words);
     tokens.push(n.tokens);
     found += n.tokens.length;
   }
   const chars = (ps: readonly string[]) => ps.join("").replace(/\s/g, "").length;
   const fromWords = words.map((w) => wordsText(w));
-  if (boxes.length === pages.length && chars(fromWords) >= chars(pages) * 0.8) return { pages: fromWords, found, words, from: "poppler" };
-  return { pages: pages.map((p, i) => applyNotation(p, tokens[i] ?? [])), found, words, from: "patched" };
+  if (boxes.length === pages.length && chars(fromWords) >= chars(pages) * 0.8) return { pages: fromWords, found, fractions: fracs, words, from: "poppler" };
+  return { pages: pages.map((p, i) => applyNotation(p, tokens[i] ?? [])), found, fractions: fracs, words, from: "patched" };
 }
 
 const SUP: Record<string, string> = { "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹", "+": "⁺", "−": "⁻", "=": "⁼", "(": "⁽", ")": "⁾", n: "ⁿ", i: "ⁱ" };
@@ -242,12 +317,59 @@ export function normaliseNotation(s: string): string {
   out = out.replace(/[₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎]+/g, (m) => `_{${[...m].map((c) => FROM_SUB[c] ?? c).join("")}}`);
   out = out.replace(/\^([–\-−]?\d+(?:\.\d+)?|[a-z])(?![\w{])/g, "^{$1}");
   out = out.replace(/([\^_])\{([^{}]{0,40})\}/g, (_m, k: string, t: string) => `${k}{${t.replace(MINUS, "−")}}`);
+  // Fractions in one markup too: ¾ is \frac{3}{4}.
+  out = out.replace(/[¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]/g, (c) => VULGAR[c] ?? c);
   return out;
 }
 
+const VULGAR: Record<string, string> = Object.fromEntries(
+  ([["¼", 1, 4], ["½", 1, 2], ["¾", 3, 4], ["⅐", 1, 7], ["⅑", 1, 9], ["⅒", 1, 10], ["⅓", 1, 3], ["⅔", 2, 3], ["⅕", 1, 5], ["⅖", 2, 5], ["⅗", 3, 5], ["⅘", 4, 5], ["⅙", 1, 6], ["⅚", 5, 6], ["⅛", 1, 8], ["⅜", 3, 8], ["⅝", 5, 8], ["⅞", 7, 8]] as const)
+    .map(([c, a, b]) => [c, `\\frac{${a}}{${b}}`]),
+);
+
+/** The group in braces starting at `open` (the "{"), with braces inside it balanced; null when it never closes. */
+function group(s: string, open: number): { text: string; end: number } | null {
+  if (s[open] !== "{") return null;
+  let depth = 0;
+  for (let i = open; i < s.length && i < open + 2_000; i++) {
+    if (s[i] === "{") depth++;
+    else if (s[i] === "}" && --depth === 0) return { text: s.slice(open + 1, i), end: i + 1 };
+  }
+  return null;
+}
+
+/** Every \frac{...}{...} in a text, outermost first, with its numerator and denominator. Pure. */
+export function fractionsIn(s: string): { marked: string; num: string; den: string; at: number }[] {
+  const out: { marked: string; num: string; den: string; at: number }[] = [];
+  let i = s.indexOf("\\frac{");
+  while (i >= 0 && out.length < 200) {
+    const n = group(s, i + 5);
+    const d = n ? group(s, n.end) : null;
+    if (n && d) {
+      out.push({ marked: s.slice(i, d.end), num: n.text, den: d.text, at: i });
+      i = s.indexOf("\\frac{", d.end);
+    } else i = s.indexOf("\\frac{", i + 6);
+  }
+  return out;
+}
+
+/** A fraction written on one line: a/b, with brackets round a part that is more than one term. */
+const atom = (x: string) => /^(?:\d+(?:\.\d+)?|[A-Za-z])(?:[\^_]\{[^{}]*\})*$/.test(x.replace(/\s+/g, ""));
+export const linearFraction = (num: string, den: string) => `${atom(num) ? num : `(${num})`}/${atom(den) ? den : `(${den})`}`;
+
 /** Notation written for plain text (a flag's reason, a toast): Unicode where it has the characters, else as marked. */
 export function notationPlain(s: string): string {
-  return s.replace(/([\^_])\{([^{}]{0,40})\}/g, (m, k: string, t: string) => {
+  let out = s;
+  // Fractions inside out: the innermost has no "\frac" in its parts.
+  for (let k = 0; k < 20 && out.includes("\\frac{"); k++) {
+    const inner = fractionsIn(out).flatMap(function flat(f): { marked: string; num: string; den: string; at: number }[] {
+      const deeper = [...fractionsIn(f.num), ...fractionsIn(f.den)];
+      return deeper.length ? deeper.flatMap(flat) : [f];
+    });
+    if (!inner.length) break;
+    out = out.replace(inner[0]!.marked, linearFraction(inner[0]!.num, inner[0]!.den));
+  }
+  return out.replace(/([\^_])\{([^{}]{0,40})\}/g, (m, k: string, t: string) => {
     const map = k === "^" ? SUP : SUB;
     return [...t].every((c) => map[c]) ? [...t].map((c) => map[c]).join("") : m;
   });
@@ -263,6 +385,46 @@ export function notationParts(s: string): { kind: "text" | "sup" | "sub"; text: 
     last = m.index! + m[0].length;
   }
   if (last < s.length) out.push({ kind: "text", text: s.slice(last) });
+  return out;
+}
+
+export type NotationNode =
+  | { kind: "text"; text: string }
+  | { kind: "sup" | "sub"; children: NotationNode[] }
+  | { kind: "frac"; num: NotationNode[]; den: NotationNode[] };
+
+/** Text with our markup as a tree for the review screen: superscripts, subscripts and fractions, nested. Pure. */
+export function notationTree(s: string, depth = 0): NotationNode[] {
+  const out: NotationNode[] = [];
+  let text = "";
+  const flush = () => {
+    if (text) out.push({ kind: "text", text });
+    text = "";
+  };
+  for (let i = 0; i < s.length;) {
+    if (depth < 6 && s.startsWith("\\frac{", i)) {
+      const n = group(s, i + 5);
+      const d = n ? group(s, n.end) : null;
+      if (n && d) {
+        flush();
+        out.push({ kind: "frac", num: notationTree(n.text, depth + 1), den: notationTree(d.text, depth + 1) });
+        i = d.end;
+        continue;
+      }
+    }
+    if (depth < 6 && (s[i] === "^" || s[i] === "_") && s[i + 1] === "{") {
+      const g = group(s, i + 1);
+      if (g) {
+        flush();
+        out.push({ kind: s[i] === "^" ? "sup" : "sub", children: notationTree(g.text, depth + 1) });
+        i = g.end;
+        continue;
+      }
+    }
+    text += s[i];
+    i++;
+  }
+  flush();
   return out;
 }
 
@@ -301,8 +463,100 @@ export function lostNotation(wording: string, pages: readonly string[]): { marke
       first ??= { marked: t.marked, flat: m[0] };
       repaired = repaired.replace(flatPattern(t.pieces, t.prefix), t.marked);
     }
+    // Fractions: the markup, or a/b with brackets where they are needed, are both exact; the parts run together
+    // without them ("4/x − 1" for 4 over x − 1) change the meaning.
+    for (const f of fractionsIn(p)) {
+      if (have.includes(bare(f.marked)) || bare(repaired).includes(bare(linearFraction(f.num, f.den)))) continue;
+      const chars = (x: string) => [...bare(x)].map((c) => (c === "−" ? "[–\\-−]" : escRe(c))).join("\\s*");
+      if (/\\frac/.test(f.num + f.den) || !bare(f.num) || !bare(f.den)) continue;
+      const re = new RegExp(`(?<![A-Za-z0-9.{])${chars(f.num)}\\s*/?\\s*${chars(f.den)}(?![0-9.])`);
+      const m = re.exec(repaired);
+      if (!m) continue;
+      first ??= { marked: f.marked, flat: m[0] };
+      repaired = repaired.replace(re, f.marked);
+    }
   }
   return first ? { ...first, repaired } : null;
+}
+
+// ---------- Fractions (owner, 9 Nov 2026: "can we do something about fractions") ----------
+
+/** A fraction bar: a short thin filled strip on the page (table rules and underlines are stroked lines). */
+export type Bar = WBox;
+
+/** The fraction bars on a page from Poppler's SVG of it (`pdftocairo -svg`): filled, under 1.2 pt thick, 3 to 220 pt long. */
+export function fractionBars(svg: string): Bar[] {
+  const out: Bar[] = [];
+  const at = svg.indexOf("</defs>");
+  for (const m of (at >= 0 ? svg.slice(at) : svg).matchAll(/<path ([^>]*?)\/>/g)) {
+    const a = Object.fromEntries([...m[1]!.matchAll(/([a-zA-Z:-]+)="([^"]*)"/g)].map((x) => [x[1]!, x[2]!]));
+    if (!a.d || (a.stroke && a.stroke !== "none") || a.fill === "none" || /rgb\(100%, ?100%, ?100%\)|#fff/i.test(a.fill ?? "")) continue;
+    const nums = a.d.match(/-?\d*\.?\d+(?:e-?\d+)?/g)?.map(Number) ?? [];
+    if (nums.length < 6 || nums.length > 12 || /[CQcq]/.test(a.d)) continue;
+    const t = a.transform?.match(/^matrix\(([^)]*)\)$/)?.[1]?.split(/[\s,]+/).map(Number);
+    const mm = t && t.length === 6 ? t : [1, 0, 0, 1, 0, 0];
+    const xs: number[] = [], ys: number[] = [];
+    for (let i = 0; i + 1 < nums.length; i += 2) {
+      xs.push(mm[0]! * nums[i]! + mm[2]! * nums[i + 1]! + mm[4]!);
+      ys.push(mm[1]! * nums[i]! + mm[3]! * nums[i + 1]! + mm[5]!);
+    }
+    const b: Bar = [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+    const w = b[2] - b[0], th = b[3] - b[1];
+    if (th > 0.05 && th <= 1.2 && w >= 3 && w <= 220 && b[1] > 50 && b[3] < 800) out.push(b);
+    if (out.length >= 400) break;
+  }
+  return out;
+}
+
+/**
+ * Words stacked over a fraction bar become one word, \frac{numerator}{denominator}: the words just above the bar and
+ * just below it, inside its length, both there, and together as wide as half the bar (a table rule over a row of
+ * cells is stroked, and its cells are not tight to it). Shortest bars first, so a fraction inside a fraction is read
+ * first. Each part keeps its superscripts and subscripts. Pure.
+ */
+export function fractions(words: readonly Word[], bars: readonly Bar[]): { words: Word[]; count: number } {
+  let list = words.map((w, i) => ({ ...w, at: i }));
+  let count = 0;
+  for (const bar of [...bars].sort((a, b) => a[2] - a[0] - (b[2] - b[0]))) {
+    const y = (bar[1] + bar[3]) / 2;
+    const inside = (w: Word) => (w.b[0] + w.b[2]) / 2 >= bar[0] - 1 && (w.b[0] + w.b[2]) / 2 <= bar[2] + 1 && w.b[0] >= bar[0] - 4 && w.b[2] <= bar[2] + 4;
+    const above = list.filter((w) => inside(w) && mid(w) < y && w.b[3] >= y - 4.5 && w.b[3] <= y + 4);
+    const below = list.filter((w) => inside(w) && mid(w) > y && w.b[1] <= y + 4.5 && w.b[1] >= y - 4);
+    if (!above.length || !below.length) continue;
+    // A part's own superscripts and subscripts sit higher or lower than the rest (y⁸ over 16x¹⁶): words touching it go
+    // with it.
+    const grow = (part: typeof above, side: "above" | "below") => {
+      for (let added = true; added;) {
+        added = false;
+        for (const w of list) {
+          if (part.includes(w) || above.includes(w) || below.includes(w) || !inside(w)) continue;
+          if ((side === "above" ? mid(w) >= y : mid(w) <= y)) continue;
+          if (part.some((p) => w.b[1] < p.b[3] && w.b[3] > p.b[1] && (Math.abs(w.b[0] - p.b[2]) <= TOUCH || Math.abs(p.b[0] - w.b[2]) <= TOUCH))) {
+            part.push(w);
+            added = true;
+          }
+        }
+      }
+    };
+    grow(above, "above");
+    grow(below, "below");
+    // An underlined word ("and" underlined in a mark scheme) has running text either side of it at the same height;
+    // a fraction's top and bottom stand alone.
+    const inLine = (part: typeof above) => list.some((w) => !part.includes(w) && !inside(w) && Math.abs(mid(w) - mid(part[0]!)) < 2
+      && (Math.abs(w.b[0] - Math.max(...part.map((p) => p.b[2]))) < 6 || Math.abs(Math.min(...part.map((p) => p.b[0])) - w.b[2]) < 6));
+    if (inLine(above) || inLine(below)) continue;
+    const all = [...above, ...below];
+    const span = Math.max(...all.map((w) => w.b[2])) - Math.min(...all.map((w) => w.b[0]));
+    if (span < (bar[2] - bar[0]) * 0.5) continue;
+    const part = (ws: typeof above) => wordsText(notate([...ws].sort((a, b) => a.b[0] - b.b[0])).words, false);
+    const used = new Set(all.map((w) => w.at));
+    const first = Math.min(...all.map((w) => w.at));
+    const box: WBox = [Math.min(bar[0], ...all.map((w) => w.b[0])), Math.min(...all.map((w) => w.b[1])), Math.max(bar[2], ...all.map((w) => w.b[2])), Math.max(...all.map((w) => w.b[3]))];
+    const merged = { b: box, t: `\\frac{${part(above)}}{${part(below)}}`, first: list.find((w) => w.at === first)!.first, at: first, axis: y };
+    list = list.flatMap((w) => (w.at === first ? [merged] : used.has(w.at) ? [] : [w]));
+    count++;
+  }
+  return { words: list.map(({ at: _at, ...w }) => w), count };
 }
 
 // ---------- The paper's own outline: questions, parts and their lead-ins ----------
@@ -380,6 +634,8 @@ export function pdfOutline(pages: readonly (readonly Word[])[]): OutlinePart[] {
   return out.map((p) => ({ number: p.number, page: p.page, text: wordsText(p.words, false).replace(/\.{3,}/g, " ").replace(/\s+/g, " ").trim() }));
 }
 
+/** Letters, digits and signs only, markup and spacing gone ("C = \frac{1}{4} xy^{2}" and "C = 1/4 xy2" both "C=14xy2"). */
+const flatText = (s: string) => notationPlain(s).normalize("NFKD").replace(/[^A-Za-z0-9=+×÷]/g, "").replace(/[⁰-⁹]/g, "");
 const realWords = (s: string) => (s.normalize("NFKD").toLowerCase().match(/[a-z]{4,}/g) ?? []);
 
 /**
@@ -395,12 +651,15 @@ export function leadInProblems(items: readonly { number: string; text: string }[
     const hasChildren = outline.some((x) => x.number.startsWith(`${p.number}(`));
     if (!hasChildren || have.has(p.number)) continue;
     const lead = realWords(p.text);
-    if ((p.text.match(/[A-Za-z]{2,}/g) ?? []).length < 3) continue;
+    // A lead-in is three words or more, or a formula ("C = \frac{1}{4}xy^{2}" before (a)(i)).
+    const formula = /=/.test(p.text) && flatText(p.text).length >= 4;
+    if ((p.text.match(/[A-Za-z]{2,}/g) ?? []).length < 3 && !formula) continue;
     const child = items.find((i) => i.number.startsWith(`${p.number}(`));
     if (!child) continue;
     const mine = new Set(realWords(child.text));
     const shared = lead.filter((x) => mine.has(x)).length;
-    out.push({ number: p.number, child: child.number, lead: p.text, merged: lead.length > 0 && shared >= Math.min(4, lead.length) && shared / lead.length >= 0.4 });
+    const merged = (lead.length > 0 && shared >= Math.min(4, lead.length) && shared / lead.length >= 0.4) || (formula && flatText(child.text).includes(flatText(p.text)));
+    out.push({ number: p.number, child: child.number, lead: p.text, merged });
   }
   return out;
 }
