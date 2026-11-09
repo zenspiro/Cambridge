@@ -115,16 +115,18 @@ export type PaperParts = { picturePages: readonly number[]; textPages: readonly 
 
 export function paperPrompt(kind: "qp" | "ms", paper: string, only: readonly string[] = [], parts?: PaperParts): string {
   const what = kind === "qp"
-    ? `items: every question and question part that asks something, in order.
-- number: as printed, joined: "1", "1(a)", "3(b)(ii)". A question with parts has no item of its own unless it asks something itself; put its opening words (the stem) at the start of its first part's text.
+    ? `items: every question and question part, in the paper's order and with the paper's own structure.
+- number: as printed, joined: "1", "1(a)", "3(b)(ii)".
+- Lead-ins: a question or part that has parts under it gets its own item holding exactly the words printed before its first part (its lead-in), with marks null and answerLines 0. For example question 9 prints a sentence, then (a) prints a sentence, then (a)(i) and (a)(ii): that is four items, "9", "9(a)", "9(a)(i)", "9(a)(ii)", each with its own words. Leave the item out only when nothing is printed before its first part. Never join a lead-in to its first part or repeat it there.
 - page: the page it starts on (the PDF's page number, 1 for the cover).
-- text: the wording exactly as printed, including any table as plain lines ("Time / s: 0, 2, 4"). Equations in plain text ("v = s / t").
+- text: the wording exactly as printed, without its tables (they go in tables) and without answer lines.
 - marks: the [marks] printed for it, or null when none are printed.
 - options: for multiple choice, each option as { letter, text } exactly as printed; else [].
 - answerLines: how many answer lines are printed for it (0 when none).
+- tables: every table printed in it as { label, rows }: label as printed ("Table 9.1"), else ""; rows: each row of the table as its cells exactly as printed, the heading row (or rows) first; a cell left empty for the candidate to fill in is "". A table is never a figure and never written into text.
 - figures: the ids of the figures (diagrams, graphs, photographs) it shows, from the figures list.
 - guidance: "".
-figures: every figure in the paper (diagram, graph, chart, flowchart, circuit, table printed as a picture) as { id, page, caption, description }: id "F1", "F2" in order of appearance; caption the paper's own label when printed ("Fig. 2.1") and what it shows in a few words; description every label, value and unit printed in it, and what it shows, in one or two plain sentences (the picture itself is taken from the PDF, so never draw it).
+figures: every figure in the paper (diagram, graph, chart, flowchart, circuit; not tables) as { id, page, caption, description }: id "F1", "F2" in order of appearance; caption the paper's own label when printed ("Fig. 2.1") and what it shows in a few words; description every label, value and unit printed in it, and what it shows, in one or two plain sentences (the picture itself is taken from the PDF, so never draw it).
 totalMarks: the total printed on the cover ("The total mark for this paper is 80"), or null.`
     : `items: every mark scheme row, in order.
 - number: the question part as printed, joined: "1", "1(a)", "3(b)(ii)".
@@ -135,12 +137,13 @@ totalMarks: the total printed on the cover ("The total mark for this paper is 80
 - answerLines: 0.
 - figures: [] unless the mark scheme prints a figure.
 - guidance: the guidance printed for that row (accept, allow, ignore), word for word, else "".
+- tables: a table printed in that row, as { label, rows } (cells exactly as printed), else [].
 figures: any figure the mark scheme prints, as { id, page, caption, description }, else [].
 totalMarks: the maximum mark printed, or null.`;
   const scope = only.length ? `\n\nOnly copy these items: ${only.join(", ")}. Leave every other item out.` : "";
   const how = parts && parts.textPages.length
     ? `The paper reaches you in two parts. The attached PDF holds only the pages with figures: the paper's pages ${parts.picturePages.join(", ")}, in that order${parts.picturePages.length ? "" : " (none)"}. Every other page is given below as the text taken from the PDF, under markers such as "=== Page 4 ===". Together they are the whole paper, in page order. For page, give the paper's own page number (from the marker, or from the list above for a PDF page).
-The extracted text loses superscripts and subscripts: restore them where the physics makes it clear (write "5.8 × 10–2 kg" as "5.8 × 10⁻² kg", "cm3" as "cm³", "m / s2" as "m/s²"). Dotted lines are answer lines (shown as [line] in the text): count them for answerLines and leave them out of text. Words split after a capital letter are one word ("W rite" is "Write").
+Superscripts and subscripts in this text were worked out from where each character sits in the PDF and are already written as ^{...} and _{...}: keep them exactly. Where the text still has a power or index flat ("cm3", "10–2"), write it in the same markup. Dotted lines are answer lines (shown as [line] in the text): count them for answerLines and leave them out of text. Words split after a capital letter are one word ("W rite" is "Write").
 
 `
     : "";
@@ -148,15 +151,22 @@ The extracted text loses superscripts and subscripts: restore them where the phy
 
 ${what}
 
-Write maths in plain text, the same way every time: fractions as a/b with brackets where needed ((x + 1)/3), powers and indices as superscripts (x², 10⁻³, m³), subscripts as _ (v_1), and the signs ×, ÷, −, √, π, ≤, ≥, ≠ and °. Keep program code exactly: one line per line, with its line numbers, its indentation (spaces) and its symbols such as ←. Tables go as one line per row, cells separated by " | ".
+Copy notation exactly as printed, in one markup, the same way every time: every superscript as ^{...} and every subscript as _{...}, for example 10^{−3}, cm^{3}, m/s^{2}, x^{2}, H_{2}O, SO_{4}^{2−}, Fe^{3+}, v_{1}, and a nuclide with its mass number above and atomic number below its symbol as ^{90}_{38}Sr. Never write a power, index or nuclide flat (not "cm3", "10-3" or "90 38 Sr"). Fractions as a/b with brackets where needed ((x + 1)/3), and the signs ×, ÷, −, √, π, ≤, ≥, ≠, →, ⇌ and ° as printed. Greek letters as printed (α, β, γ, λ, Ω, μ). Keep program code exactly: one line per line, with its line numbers, its indentation (spaces) and its symbols such as ←.
 
 Keep the paper's order. Do not summarise, merge, split, reword, correct or answer anything.${scope}`;
 }
 
+const PAPER_TABLE_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["label", "rows"],
+  properties: { label: { type: "string" }, rows: { type: "array", items: { type: "array", items: { type: "string" } } } },
+} as const;
+
 const PAPER_ITEM_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["number", "page", "text", "marks", "options", "answerLines", "figures", "guidance"],
+  required: ["number", "page", "text", "marks", "options", "answerLines", "tables", "figures", "guidance"],
   properties: {
     number: { type: "string" },
     page: { type: "integer" },
@@ -167,6 +177,7 @@ const PAPER_ITEM_SCHEMA = {
       items: { type: "object", additionalProperties: false, required: ["letter", "text"], properties: { letter: { type: "string" }, text: { type: "string" } } },
     },
     answerLines: { type: "integer" },
+    tables: { type: "array", items: PAPER_TABLE_SCHEMA },
     figures: { type: "array", items: { type: "string" } },
     guidance: { type: "string" },
   },
@@ -201,7 +212,7 @@ export const PAPER_SCHEMA_GEMINI = {
       type: "ARRAY",
       items: {
         type: "OBJECT",
-        required: ["number", "page", "text", "marks", "options", "answerLines", "figures", "guidance"],
+        required: ["number", "page", "text", "marks", "options", "answerLines", "tables", "figures", "guidance"],
         properties: {
           number: { type: "STRING" },
           page: { type: "INTEGER" },
@@ -209,6 +220,7 @@ export const PAPER_SCHEMA_GEMINI = {
           marks: { type: "INTEGER", nullable: true },
           options: { type: "ARRAY", items: { type: "OBJECT", required: ["letter", "text"], properties: { letter: { type: "STRING" }, text: { type: "STRING" } } } },
           answerLines: { type: "INTEGER" },
+          tables: { type: "ARRAY", items: { type: "OBJECT", required: ["label", "rows"], properties: { label: { type: "STRING" }, rows: { type: "ARRAY", items: { type: "ARRAY", items: { type: "STRING" } } } } } },
           figures: { type: "ARRAY", items: { type: "STRING" } },
           guidance: { type: "STRING" },
         },

@@ -16,6 +16,7 @@ import { join } from "node:path";
 import { assignBoxes, findBoxes, pageArt, textLines, type Box, type FigureCut } from "../../src/lib/brain/figures.ts";
 import { signRequest } from "../../src/lib/agent/sign.ts";
 import { allPagesInfo, allPagesText } from "../../src/lib/pdf/firstPage.ts";
+import { notatedPages, pdfOutline, type OutlinePart } from "../../src/lib/brain/notation.ts";
 import {
   PAPER_SCHEMA, PAPER_SCHEMA_GEMINI, PAPER_SYSTEM, paperPrompt,
   retryPrompt, TOPIC_SCHEMA, TOPIC_SCHEMA_GEMINI, TOPIC_SYSTEM, topicPrompt,
@@ -526,10 +527,30 @@ async function runPaper(job: PaperJob) {
   const inflate = async (d: Uint8Array) => new Uint8Array(inflateSync(d, { finishFlush: zlibConstants.Z_SYNC_FLUSH }));
   // Each page's text, and the drawings and images on it (which pages Claude must see as pictures).
   const info = await allPagesInfo(doc.bytes, inflate);
-  const pages = info.map((p) => p.text);
+  const rawPages = info.map((p) => p.text);
+  // Notation and structure from where each word sits (owner, 9 Nov 2026): Poppler's word boxes give superscripts and
+  // subscripts (^{208}_{81}Tl, H_{2}O, 10^{−10}) and the paper's questions, parts and lead-ins. Without Poppler the
+  // pages stay as our own reader gives them.
+  let pages = rawPages;
+  let outline: OutlinePart[] = [];
+  try {
+    const dir = await mkdtemp(join(tmpdir(), "words-"));
+    try {
+      const pdf = join(dir, "paper.pdf");
+      await writeFile(pdf, doc.bytes);
+      const n = notatedPages(rawPages, await run("pdftotext", ["-bbox-layout", pdf, "-"]));
+      pages = n.pages;
+      outline = pdfOutline(n.words);
+      log(`notation: ${n.found} superscripts and subscripts, text from ${n.from}; outline: ${outline.length} questions and parts`);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  } catch (e) {
+    log(`notation: not read (${e instanceof Error ? e.message : String(e)})`);
+  }
   await note(`The paper has ${pages.length} pages`, { stage: "pdf", state: "done" });
   // Readers get the paper without its blank pages; their page numbers are put back on the paper's own (remapPages).
-  const slim = await withoutBlankPages(doc.bytes, pages);
+  const slim = await withoutBlankPages(doc.bytes, rawPages);
   const pdf64 = slim.pdf64;
   const sentPages = slim.kept.length || pages.length;
 
@@ -542,10 +563,10 @@ async function runPaper(job: PaperJob) {
   // the models that read it (owner, 8 Nov 2026: compare a cheaper Claude with the one in use).
   let fresh: PaperContent | null = null;
   const save = async (content: PaperContent, gemini: PaperContent | null, final: boolean) => {
-    const flags = paperFlags({ content, pages, gemini });
+    const flags = paperFlags({ content, pages, gemini, outline });
     if (final) await step(`Checks done: ${flags.length} flag${flags.length === 1 ? "" : "s"} for the review screen`, { stage: "checks", state: "done" });
     const own = final && fresh ? {
-      fresh: { items: fresh.items.map((i) => ({ number: i.number, marks: i.marks })), flags: paperFlags({ content: fresh, pages, gemini }) },
+      fresh: { items: fresh.items.map((i) => ({ number: i.number, marks: i.marks })), flags: paperFlags({ content: fresh, pages, gemini, outline }) },
       models: { claude: reader, gemini: job.models.gemini },
     } : {};
     // `read`: a full reading (not a figures-only run), so the first one sets the paper's read accuracy.
@@ -567,8 +588,9 @@ async function runPaper(job: PaperJob) {
     // Claude sees only the figure pages as pictures; every other page goes as its text (far fewer tokens). A paper
     // whose text cannot be read goes whole, as before.
     const readable = pages.join("").replace(/\s/g, "").length >= BRAIN.minPaperTextChars;
-    const blank = blankPages(pages);
-    const pics = picturePages(pages, blank, info);
+    const blank = blankPages(rawPages);
+    // Pictures are chosen on our reader's text (its scattered formula pieces are what makes a page a picture).
+    const pics = picturePages(rawPages, blank, info);
     const textOnly = keptPages(pages.length, [...blank, ...pics]);
     const mixed = readable && textOnly.length > 0;
     const claudePdf = mixed ? (pics.length ? (await slimPdf(doc.bytes, pics, pages.length)).pdf64 : "") : pdf64;

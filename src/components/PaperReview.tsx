@@ -7,7 +7,8 @@
 // hand on its page. The page and flag you were on are remembered in this browser. Fixes post in the background.
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { ActionForm } from "@/components/ActionForm";
-import type { Flag, FlagColour, PaperItem } from "@/lib/brain/paper";
+import { Notation, PaperTables } from "@/components/Notation";
+import { isLeadIn, type Flag, type FlagColour, type PaperItem } from "@/lib/brain/paper";
 
 export type ReviewFigure = { id: string; page: number; caption: string; description: string; shown: boolean; cut: string };
 
@@ -238,19 +239,20 @@ export function PaperReview({ docId, pdfUrl, kind, items, figures, flags, pageCo
               const fl = show ? (byItem.get(it.number) ?? []).filter((f) => f.kind !== "missing") : [];
               const colour = fl.find((f) => f.colour === "red")?.colour ?? fl[0]?.colour;
               return (
-                <article key={it.number} className={`pq${colour ? ` pq-flag pq-${colour}` : ""}`} id={`item-${it.number}`}>
+                <article key={it.number} className={`pq${isLeadIn(items, it.number) ? " pq-lead" : ""}${colour ? ` pq-flag pq-${colour}` : ""}`} id={`item-${it.number}`}>
                   <div className="pq-row">
                     <span className="pq-num">{it.number}</span>
                     <div className="pq-main">
-                      {it.text ? <p className="pq-text">{it.text}</p> : null}
+                      {it.text ? <p className="pq-text"><Notation text={it.text} /></p> : null}
+                      <PaperTables tables={it.tables ?? []} />
                       {it.options.length ? (
                         <ol className="pq-options">
-                          {it.options.map((o) => <li key={o.letter}><span className="pq-letter">{o.letter}</span> {o.text}</li>)}
+                          {it.options.map((o) => <li key={o.letter}><span className="pq-letter">{o.letter}</span> <Notation text={o.text} /></li>)}
                         </ol>
                       ) : null}
                       {it.figures.map(figureCard)}
                       {it.answerLines > 0 ? <div className="pq-lines" aria-label={`${it.answerLines} answer lines`}>{Array.from({ length: Math.min(it.answerLines, 12) }, (_, i) => <span key={i} />)}</div> : null}
-                      {kind === "ms" && it.guidance ? <p className="pq-guidance"><strong>Guidance:</strong> {it.guidance}</p> : null}
+                      {kind === "ms" && it.guidance ? <p className="pq-guidance"><strong>Guidance:</strong> <Notation text={it.guidance} /></p> : null}
                     </div>
                     <span className="pq-marks">{it.marks !== null ? `[${it.marks}]` : ""}</span>
                   </div>
@@ -388,7 +390,7 @@ function FlagBox({ flag, base, busy, item, current, onAdjust, canFix, canRead }:
   return (
     <div className={`flag-box flag-${flag.colour}${current ? " flag-current" : ""}`} data-flag={flag.key}>
       <p className="flag-reason"><span className="flag-tag">{COLOUR_WORDS[flag.colour]}</span> {flag.reason}</p>
-      {flag.pdfText && isItem ? <p className="flag-pdf"><span className="muted">The PDF says:</span> {flag.pdfText}</p> : null}
+      {flag.pdfText && isItem ? <p className="flag-pdf"><span className="muted">{flag.kind === "structure" ? "The paper's lead-in:" : "The PDF says:"}</span> <Notation text={flag.pdfText} /></p> : null}
       {canFix ? <div className="row-actions">
         {flag.kind === "figure" ? (
           <>
@@ -405,7 +407,7 @@ function FlagBox({ flag, base, busy, item, current, onAdjust, canFix, canRead }:
               <ActionForm action={fix} messages={MESSAGES}>
                 <input type="hidden" name="action" value="pdf" />
                 <input type="hidden" name="key" value={flag.key} />
-                <button className="btn btn-small" type="submit">Use the PDF&apos;s version</button>
+                <button className="btn btn-small" type="submit">{flag.kind === "structure" ? "Give it its own part" : "Use the PDF's version"}</button>
               </ActionForm>
             ) : null}
             {flag.item !== "paper" && canRead ? (

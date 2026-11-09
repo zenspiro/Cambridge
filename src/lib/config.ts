@@ -147,6 +147,10 @@ export const BRAIN = {
   maxItemText: 4_000,
   maxOptions: 8,
   maxFigures: 60,
+  /** Tables per part, rows per table, cells per row (owner, 9 Nov 2026: tables as data). */
+  maxTables: 6,
+  maxTableRows: 40,
+  maxTableCols: 14,
   maxSvgBytes: 60_000,
   /** One figure page's drawing (figures.ts PageArt as JSON), from the script. */
   maxArtBytes: 3_000_000,

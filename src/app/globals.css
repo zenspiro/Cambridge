@@ -350,6 +350,16 @@
   .pq-lines { @apply flex flex-col gap-5 py-2; }
   .pq-lines span { @apply block border-b border-dotted border-slate-400; }
   .pq-guidance { @apply m-0 text-muted; }
+  /* Lead-ins (owner, 9 Nov 2026): a question's own text before its parts, no marks; tables as data. */
+  .pq-lead .pq-marks { @apply invisible; }
+  .pq-table { @apply m-0 flex flex-col items-start gap-1; }
+  .pq-table figcaption { @apply font-bold; }
+  .pq-table .table { @apply w-auto; }
+  .pq-table td, .pq-table th { @apply border border-line px-2 py-1 text-center align-middle; }
+  .pq-cell-blank { @apply min-w-16 bg-slate-50; }
+  /* Superscripts and subscripts stay readable (nothing below 14 px). */
+  .admin sup, .admin sub { font-size: 0.875rem; }
+  .nota-stack { @apply inline-flex flex-col items-end align-middle text-sm leading-none; }
   .flag-box { @apply mt-2 flex flex-col gap-2 rounded-lg border-l-4 bg-paper p-3; }
   .flag-red { @apply border-red-500; }
   .flag-amber { @apply border-amber-500; }
