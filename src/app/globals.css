@@ -391,6 +391,7 @@
   .flag-amber { @apply border-amber-500; }
   .flag-blue { @apply border-blue-500; }
   .flag-reason, .flag-pdf { @apply m-0 break-words; }
+  .flag-stale-note { @apply m-0 text-sm text-amber-900; }
   .flag-tag { @apply mr-1 rounded bg-wash px-1.5 py-0.5 text-sm font-semibold; }
   .flag-edit textarea { @apply font-sans; }
   /* Read accuracy badge (owner, 7 Nov 2026). */

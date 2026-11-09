@@ -8,6 +8,7 @@ import { applyFix, cleanScores, loadContent, loadPaperRow, paperDoc, paperView, 
 import { modelName } from "../../src/lib/brain/labels.ts";
 import { brainStep, claimBrainRun, cleanEvent, runState, startPaperRun } from "../../src/lib/brain/runs.ts";
 import { BRAIN } from "../../src/lib/config.ts";
+import { CHECKS_VERSION, isStale } from "../../src/lib/brain/paper.ts";
 import { testBucket, testDb } from "./helpers/d1.ts";
 
 const NOW = Date.UTC(2026, 10, 7);
@@ -169,6 +170,14 @@ test("paper runs: started with a scope, progress events kept in order, a reading
 
   const words = view.open.find((f) => f.key === "words:1(a)")!;
   assert.ok(words.pdfText, "the PDF's words were found for this item");
+  assert.equal(words.v, CHECKS_VERSION, "a flag keeps the version of the checks that raised it");
+  // A flag from older checks (saved before versions, or put back by Undo) is not fixed with its old text.
+  const old = flags.map((f) => { const { v: _v, ...rest } = f; return rest; });
+  db.raw.prepare(`UPDATE paper_read SET flags = ? WHERE doc_id = 'doc-qp-1'`).run(JSON.stringify(old));
+  const oldWords = (await paperView(db, bucket, doc)).open.find((f) => f.key === "words:1(a)")!;
+  assert.equal(isStale(oldWords), true);
+  assert.equal(await applyFix(db, bucket, doc, "pdf", { key: oldWords.key }, "platform-admin", NOW + 250), "stale", "run the checks again first");
+  db.raw.prepare(`UPDATE paper_read SET flags = ? WHERE doc_id = 'doc-qp-1'`).run(JSON.stringify(flags));
   assert.equal(await applyFix(db, bucket, doc, "pdf", { key: words.key }, "platform-admin", NOW + 300), "ok_fixed");
   view = await paperView(db, bucket, doc);
   assert.ok(!view.open.some((f) => f.key === "words:1(a)"), "the PDF's version clears the wording flag");
