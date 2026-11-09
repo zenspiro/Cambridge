@@ -64,7 +64,18 @@ export type Flag = {
   pdfText: string;
   /** What was flagged, independent of the item number: an "It's fine" becomes a rule on this for the subject. */
   fingerprint: string;
+  /** The version of the checks that raised it (`CHECKS_VERSION`); none means before versions were kept. */
+  v?: number;
 };
+
+/**
+ * Bump when a check changes what it finds or the text a fix copies (owner, 9 Nov 2026: a flag kept from older checks,
+ * for example one Undo put back, must not be fixed with its old text). 2: the outline read as printed.
+ */
+export const CHECKS_VERSION = 2;
+
+/** Raised by older checks: shown with a note, and its "Use the PDF's version" / "Give it its own part" is off. */
+export const isStale = (f: Pick<Flag, "v">) => (f.v ?? 1) < CHECKS_VERSION;
 
 const COLOUR: Record<FlagKind, FlagColour> = {
   words: "red", agree: "red", missing: "red", notation: "red", structure: "red", numbers: "amber", marks: "amber", numbering: "amber", text: "amber", figure: "blue",
@@ -290,7 +301,7 @@ export function paperFlags({ content, pages, gemini, outline }: CheckInput): Fla
   const nums = pdfNumbers(pages);
   const raw = pages.join(" ");
   const add = (kind: FlagKind, item: string, reason: string, what: string, pdfText = "", keyExtra = "") =>
-    flags.push({ key: `${kind}:${item}${keyExtra}`, item, kind, colour: COLOUR[kind], reason, pdfText, fingerprint: fingerprint(kind, squash(what), reason) });
+    flags.push({ key: `${kind}:${item}${keyExtra}`, item, kind, colour: COLOUR[kind], reason, pdfText, fingerprint: fingerprint(kind, squash(what), reason), v: CHECKS_VERSION });
   // Formulas reach the PDF's text layer scrambled ("(x + 7)(2x − 3)" can come out as "()() xx72 3"), so a wording
   // that fails the run check passes when its real words (four letters or more) are all printed; a part that is almost
   // all formula, with too few words to judge, is left to Gemini's reading of the page picture.
@@ -377,7 +388,7 @@ export function marksAgainstPaper(ms: Pick<PaperContent, "items"> | { items: rea
     const want = b.get(q);
     if (want !== undefined && want !== marks) {
       const reason = `Question ${q} carries ${marks} marks in the mark scheme, ${want} in the question paper.`;
-      flags.push({ key: `marks:${q}:qp`, item: q, kind: "marks", colour: "amber", reason, pdfText: "", fingerprint: fingerprint("marks", `${q}:${marks}:${want}`, reason) });
+      flags.push({ key: `marks:${q}:qp`, item: q, kind: "marks", colour: "amber", reason, pdfText: "", fingerprint: fingerprint("marks", `${q}:${marks}:${want}`, reason), v: CHECKS_VERSION });
     }
   }
   return flags;
@@ -393,7 +404,7 @@ export function structureFlags(items: readonly PaperItem[], outline: readonly Ou
     const reason = p.merged
       ? `Question ${p.number}'s opening text is joined to ${p.child}. In the paper it comes before ${sub}, as its own text.`
       : `Question ${p.number} has opening text in the paper (before ${sub}) that the reading leaves out.`;
-    return { key: `structure:${p.child}:${p.number}`, item: p.child, kind: "structure" as const, colour: "red" as const, reason, pdfText: p.lead, fingerprint: fingerprint("structure", squash(p.lead), p.merged ? "merged" : "lost") };
+    return { key: `structure:${p.child}:${p.number}`, item: p.child, kind: "structure" as const, colour: "red" as const, reason, pdfText: p.lead, fingerprint: fingerprint("structure", squash(p.lead), p.merged ? "merged" : "lost"), v: CHECKS_VERSION };
   });
 }
 
@@ -523,7 +534,7 @@ export function recheckItem(c: PaperContent, flags: readonly Flag[], number: str
   const settled = (f: Flag) => f.kind === "structure" && c.items.some((x) => x.number === f.key.split(":").at(-1));
   const kept = flags.filter((f) => !settled(f) && (f.item !== number || !(f.kind === "words" || f.kind === "numbers" || f.kind === "notation" || (f.kind === "marks" && !f.key.endsWith(":gemini")) || (f.kind === "agree" && found))));
   const add = (kind: FlagKind, reason: string, what: string, keyExtra = "", pdfText = "") =>
-    kept.push({ key: `${kind}:${number}${keyExtra}`, item: number, kind, colour: COLOUR[kind], reason, pdfText, fingerprint: fingerprint(kind, squash(what), reason) });
+    kept.push({ key: `${kind}:${number}${keyExtra}`, item: number, kind, colour: COLOUR[kind], reason, pdfText, fingerprint: fingerprint(kind, squash(what), reason), v: CHECKS_VERSION });
   if (readable) {
     if (!found) add("words", "Your wording is not found in the PDF either.", wording);
     const nf = notationFlag(it, pages);

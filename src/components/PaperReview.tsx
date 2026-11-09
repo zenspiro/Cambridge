@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { ActionForm } from "@/components/ActionForm";
 import { Notation, PaperTables } from "@/components/Notation";
-import { isLeadIn, type Flag, type FlagColour, type PaperItem } from "@/lib/brain/paper";
+import { isLeadIn, isStale, type Flag, type FlagColour, type PaperItem } from "@/lib/brain/paper";
 import type { FixView } from "@/lib/brain/paperRead";
 
 export type ReviewFigure = { id: string; page: number; caption: string; description: string; shown: boolean; cut: string };
@@ -33,6 +33,7 @@ type Props = {
 const MESSAGES = {
   ok_fixed: "Fixed.",
   still_flagged: "Saved, but it is still not found in the PDF. Check it, or press It's fine.",
+  stale: "This flag is from older checks. Press Run the checks again first.",
   ok_undone: "Undone.",
   ok_started: "Started. Progress shows at the top.",
   running: "A brain run is already going. Wait for it to finish.",
@@ -203,6 +204,7 @@ export function PaperReview({ docId, pdfUrl, kind, items, figures, flags, pageCo
   // Figures no question part points to still show on their page.
   const shownByItems = new Set(items.flatMap((i) => i.figures));
   const loose = figures.filter((f) => f.page === page && !shownByItems.has(f.id));
+  const staleCount = flags.filter((f) => isStale(f) && f.pdfText).length;
 
   return (
     <>
@@ -227,6 +229,7 @@ export function PaperReview({ docId, pdfUrl, kind, items, figures, flags, pageCo
         </div>
         {tab === "flags" ? (flags.length ? (
           <>
+            {staleCount ? <p className="flag-stale-note">{staleCount === 1 ? "1 flag was" : `${staleCount} flags were`} made before the latest update to the checks. Press Run the checks again to bring them up to date; until then their PDF fix is off.</p> : null}
   <div className="flag-panel-head">
               <div className="flag-filters" role="group" aria-label="Show flags of one kind">
                 {FILTERS.map((k) => (
@@ -474,10 +477,12 @@ function BoxEditor({ base, figure, revision, onClose }: { base: string; figure: 
 function FlagBox({ flag, base, busy, item, current, onAdjust, canFix, canRead }: { flag: Flag; base: string; busy: boolean; item: PaperItem | undefined; current: boolean; onAdjust: (id: string) => void; canFix: boolean; canRead: boolean }) {
   const fix = `${base}/fix`;
   const isItem = flag.item !== "paper" && flag.kind !== "figure" && flag.kind !== "missing";
+  const stale = isStale(flag) && !!flag.pdfText && isItem;
   return (
     <div className={`flag-box flag-${flag.colour}${current ? " flag-current" : ""}`} data-flag={flag.key}>
       <p className="flag-reason"><span className="flag-tag">{COLOUR_WORDS[flag.colour]}</span> {flag.reason}</p>
       {flag.pdfText && isItem ? <p className="flag-pdf"><span className="muted">{flag.kind === "structure" ? "The paper's lead-in:" : "The PDF says:"}</span> <Notation text={flag.pdfText} /></p> : null}
+      {stale ? <p className="flag-stale-note">Checked before the latest update. Run the checks again to use this fix.</p> : null}
       {canFix ? <div className="row-actions">
         {flag.kind === "figure" ? (
           <>
@@ -494,7 +499,7 @@ function FlagBox({ flag, base, busy, item, current, onAdjust, canFix, canRead }:
               <ActionForm action={fix} messages={MESSAGES}>
                 <input type="hidden" name="action" value="pdf" />
                 <input type="hidden" name="key" value={flag.key} />
-                <button className="btn btn-small" type="submit">{flag.kind === "structure" ? "Give it its own part" : "Use the PDF's version"}</button>
+                <button className="btn btn-small" type="submit" disabled={stale}>{flag.kind === "structure" ? "Give it its own part" : "Use the PDF's version"}</button>
               </ActionForm>
             ) : null}
             {flag.item !== "paper" && canRead ? (

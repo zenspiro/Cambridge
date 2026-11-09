@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-09: Flags from older checks marked, their PDF fix off
+
+**What:** every flag now carries the version of the checks that raised it (`Flag.v`, `CHECKS_VERSION` in `paper.ts`, now 2: the outline read as printed). A flag from older checks (saved before today, or put back by Undo) shows "Checked before the latest update. Run the checks again to use this fix.", its "Use the PDF's version" or "Give it its own part" is off, and the server refuses it (`stale`). The Flags tab says how many flags are from older checks. Bump `CHECKS_VERSION` whenever a check changes what it finds.
+
+**Why:** owner, 9 Nov 2026 (option B): after the outline fix went live, Undo on question 2's split brought back the old flag with 2(b)'s words, and "Give it its own part" copied them again. The checks had not been run since the update.
+
+**Tested:** `npm run check` exits 0 (246 unit tests; the paper run test now checks a flag keeps its version and an older flag's PDF fix is refused). Browser suite from a fresh database, all 588 checks passing.
+
 ## 2026-11-09: The paper's outline read as printed
 
 **What:** The outline (question numbers, part labels, lead-ins) now reads each page as printed, top to bottom and left to right (`visualLines`), after leaving out the margin warnings, header and footer, instead of the text layer's own order.
