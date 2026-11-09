@@ -544,6 +544,8 @@ try {
   check(ai.claudeEffort === "low", `Claude reads papers at low effort (${ai.claudeEffort})`);
   check(rp.out.includes("Cut 2 of 2 figures"), `both figures are cut from the PDF${rp.out.includes("Cut ") ? "" : ": " + rp.out.slice(-600)}`);
   check(rp.out.includes("Leaving out 1 blank page (3)"), "the run says which blank pages it left out");
+  const nl = rp.out.match(/notation: .*/)?.[0] ?? rp.out.slice(-400);
+  check(/text from poppler/.test(nl), `the page text comes from Poppler's word boxes, with notation (${nl})`);
   await page.locator("#run-progress", { hasText: "Finished" }).waitFor({ timeout: 15_000 }).then(() => check(true, "the panel shows the run finished, in place"), () => check(false, "the panel shows the run finished, in place"));
   const st = await (await page.request.get(`${BASE}/admin/brain/runs/${queued}`)).json();
   const notDone = ["gemini", "claude", "figures", "checks"].filter((s) => !st.events.some((e) => e.stage === s && e.state === "done"));

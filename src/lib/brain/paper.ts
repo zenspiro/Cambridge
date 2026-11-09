@@ -8,9 +8,13 @@
 import { BRAIN } from "../config.ts";
 import { coverage, similarity, squash, textIndex, type TextIndex } from "./topics.ts";
 import type { Box, FigureCut } from "./figures.ts";
+import { leadInProblems, lostNotation, normaliseNotation, notationPlain, withoutLead, type OutlinePart } from "./notation.ts";
 
 export type PaperKind = "qp" | "ms";
 export type PaperOption = { letter: string; text: string };
+/** A table printed in a question (owner, 9 Nov 2026: tables as data, not pictures or " | " lines): its label and its
+ * rows, the first row (or rows) its headings; an empty cell is one the candidate fills in. */
+export type PaperTable = { label: string; rows: string[][] };
 export type PaperItem = {
   /** As printed: "1", "1(a)", "3(b)(ii)". */
   number: string;
@@ -27,6 +31,8 @@ export type PaperItem = {
   figures: string[];
   /** Mark scheme guidance (accept, ignore, allow), word for word. */
   guidance: string;
+  /** Tables printed in it, as data. */
+  tables: PaperTable[];
 };
 export type PaperFigure = {
   id: string;
@@ -43,7 +49,7 @@ export type PaperFigure = {
 };
 export type PaperContent = { kind: PaperKind; totalMarks: number | null; items: PaperItem[]; figures: PaperFigure[] };
 
-export type FlagKind = "words" | "numbers" | "marks" | "numbering" | "figure" | "agree" | "missing" | "text";
+export type FlagKind = "words" | "numbers" | "marks" | "numbering" | "figure" | "agree" | "missing" | "text" | "notation" | "structure";
 export type FlagColour = "red" | "amber" | "blue";
 export type Flag = {
   /** Stable within a reading: "words:1(a)", "figure:F2". */
@@ -61,7 +67,7 @@ export type Flag = {
 };
 
 const COLOUR: Record<FlagKind, FlagColour> = {
-  words: "red", agree: "red", missing: "red", numbers: "amber", marks: "amber", numbering: "amber", text: "amber", figure: "blue",
+  words: "red", agree: "red", missing: "red", notation: "red", structure: "red", numbers: "amber", marks: "amber", numbering: "amber", text: "amber", figure: "blue",
 };
 
 const NUMBER_RE = /^[0-9]{1,3}(\s?\([a-z]{1,4}\)){0,3}$/;
@@ -96,18 +102,25 @@ export function cleanPaper(raw: unknown, kind: PaperKind): PaperContent {
     const options = (Array.isArray(r.options) ? r.options : []).slice(0, BRAIN.maxOptions).flatMap((y): PaperOption[] => {
       const q = obj(y);
       const letter = str(q.letter, 2).toUpperCase();
-      return /^[A-H]$/.test(letter) ? [{ letter, text: str(q.text, 600) }] : [];
+      return /^[A-H]$/.test(letter) ? [{ letter, text: normaliseNotation(str(q.text, 600)) }] : [];
+    });
+    const tables = (Array.isArray(r.tables) ? r.tables : []).slice(0, BRAIN.maxTables).flatMap((y): PaperTable[] => {
+      const t = obj(y);
+      const rows = (Array.isArray(t.rows) ? t.rows : []).slice(0, BRAIN.maxTableRows).flatMap((row): string[][] =>
+        Array.isArray(row) ? [row.slice(0, BRAIN.maxTableCols).map((c) => normaliseNotation(str(c, 300)))] : []);
+      return rows.length ? [{ label: str(t.label, 80), rows }] : [];
     });
     const figs = (Array.isArray(r.figures) ? r.figures : []).map((f) => str(f, 20)).filter((f) => FIGURE_ID_RE.test(f)).slice(0, 10);
     return [{
       number,
       page: int(r.page, 1, 500) ?? 1,
-      text: str(r.text, BRAIN.maxItemText),
+      text: normaliseNotation(str(r.text, BRAIN.maxItemText)),
       marks: int(r.marks, 0, 200),
       options,
       answerLines: int(r.answerLines, 0, 40) ?? 0,
       figures: figs,
-      guidance: str(r.guidance, 2_000),
+      guidance: normaliseNotation(str(r.guidance, 2_000)),
+      tables,
     }];
   });
   // Figures named by an item but not drawn still get an entry (flagged "not drawn yet").
@@ -186,7 +199,27 @@ export function fingerprint(...parts: string[]): string {
 }
 
 /** Everything of an item that must be in the PDF: its wording and its options. */
-export const itemWording = (it: PaperItem) => [it.text, ...it.options.map((o) => o.text)].join(" ");
+export const itemWording = (it: Pick<PaperItem, "text" | "options"> & { tables?: PaperTable[] }) =>
+  [it.text, ...it.options.map((o) => o.text), ...(it.tables ?? []).flatMap((t) => [t.label, ...t.rows.flat()])].filter(Boolean).join(" ");
+
+/** A question or part that has parts of its own in the reading: its item holds only its lead-in (no marks). */
+export const isLeadIn = (items: readonly Pick<PaperItem, "number">[], number: string) => items.some((x) => x.number.startsWith(`${number}(`));
+
+/** The pages an item is printed on: its own and the next (a part can run over). */
+const itemPages = (pages: readonly string[], page: number) => pages.slice(Math.max(0, page - 1), page + 1);
+
+/** The notation flag for an item, or null: notation printed on its pages that the reading has flat. */
+function notationFlag(it: PaperItem, pages: readonly string[]): { reason: string; what: string; pdfText: string } | null {
+  const near = itemPages(pages, it.page);
+  const lost = lostNotation(itemWording(it), near);
+  if (!lost) return null;
+  const inText = lostNotation(it.text, near);
+  return {
+    reason: `The paper prints ${notationPlain(lost.marked)} here; the reading has it flat ("${lost.flat}").`,
+    what: `${lost.marked}|${lost.flat}`,
+    pdfText: inText ? inText.repaired : "",
+  };
+}
 
 /**
  * A power of ten or a unit written flat, as the PDF's text layer gives it ("× 10–2", "10 5", "cm3", "m / s2"), which
@@ -238,6 +271,8 @@ export type CheckInput = {
   pages: readonly string[];
   /** Gemini's reading of the same paper, when it read it. */
   gemini: PaperContent | null;
+  /** The paper's own questions and parts from where its words sit (`pdfOutline`), when Poppler read it. */
+  outline?: readonly OutlinePart[];
 };
 
 /**
@@ -246,7 +281,7 @@ export type CheckInput = {
  * must add up to the paper's total. Numbering: no item twice. Figures: each one we drew is checked by eye (blue).
  * Agreement: where Gemini read an item differently, missed one or found one we lack, unless the PDF text settles it.
  */
-export function paperFlags({ content, pages, gemini }: CheckInput): Flag[] {
+export function paperFlags({ content, pages, gemini, outline }: CheckInput): Flag[] {
   const flags: Flag[] = [];
   const idx: TextIndex = textIndex(pages);
   const textOk = idx.chars >= BRAIN.minPaperTextChars;
@@ -279,11 +314,20 @@ export function paperFlags({ content, pages, gemini }: CheckInput): Flag[] {
           break;
         }
       }
-      const lost = lostSuperscript(wording);
+      const nf = notationFlag(it, pages);
+      if (nf) add("notation", it.number, nf.reason, nf.what, nf.pdfText);
+      const lost = nf ? "" : lostSuperscript(wording);
       if (lost) add("numbers", it.number, `"${lost}" looks like a power or unit that lost its superscript (10⁻², cm³).`, `${lost}|${wording}`, "", ":sup");
       if (content.kind === "qp" && it.marks !== null && it.marks > 0 && !raw.includes(`[${it.marks}]`) && !raw.includes(`[Total: ${it.marks}]`)) {
         add("marks", it.number, `[${it.marks}] is not printed in the PDF.`, `${it.marks}|${wording}`);
       }
+    }
+  }
+  if (content.kind === "qp" && outline?.length) for (const f of structureFlags(content.items, outline)) flags.push(f);
+  // A table written as text lines with " | " (older readings): it belongs in the part's tables.
+  for (const it of content.items) {
+    if (it.text.split("\n").filter((l) => (l.match(/\|/g) ?? []).length >= 1).length >= 2) {
+      add("structure", it.number, "A table is written as text lines with \"|\". Read it again to keep it as a table.", `table|${it.text}`, "", ":table");
     }
   }
   if (content.totalMarks !== null) {
@@ -335,6 +379,31 @@ export function marksAgainstPaper(ms: Pick<PaperContent, "items"> | { items: rea
     }
   }
   return flags;
+}
+
+/**
+ * Lead-ins (owner, 9 Nov 2026): a question or part whose printed opening text (before its first part) the reading has
+ * joined to that first part, or left out. Keyed by the first part, with the lead-in's own words for the fix.
+ */
+export function structureFlags(items: readonly PaperItem[], outline: readonly OutlinePart[]): Flag[] {
+  return leadInProblems(items, outline).map((p) => {
+    const sub = p.child.slice(p.number.length).match(/^\([a-z]+\)/)?.[0] ?? "";
+    const reason = p.merged
+      ? `Question ${p.number}'s opening text is joined to ${p.child}. In the paper it comes before ${sub}, as its own text.`
+      : `Question ${p.number} has opening text in the paper (before ${sub}) that the reading leaves out.`;
+    return { key: `structure:${p.child}:${p.number}`, item: p.child, kind: "structure" as const, colour: "red" as const, reason, pdfText: p.lead, fingerprint: fingerprint("structure", squash(p.lead), p.merged ? "merged" : "lost") };
+  });
+}
+
+/** A lead-in put where the paper has it: its own item before the first part, and taken out of that part's text. */
+export function splitLeadIn(c: PaperContent, child: string, number: string, lead: string): PaperContent | null {
+  const at = c.items.findIndex((x) => x.number === child);
+  if (at < 0 || c.items.some((x) => x.number === number) || !child.startsWith(`${number}(`)) return null;
+  const first = c.items[at]!;
+  const own: PaperItem = { number, page: first.page, text: normaliseNotation(str(lead, BRAIN.maxItemText)), marks: null, options: [], answerLines: 0, figures: [], guidance: "", tables: [] };
+  const items = [...c.items];
+  items.splice(at, 1, own, { ...first, text: withoutLead(first.text, lead) || first.text });
+  return { ...c, items };
 }
 
 /** Flags still open: not settled by the admin ("It's fine", "Looks right") and not ruled out for the subject. */
@@ -392,6 +461,12 @@ export function openFlags(flags: readonly Flag[], dismissed: ReadonlySet<string>
 export function mergeReading(old: PaperContent | null, fresh: PaperContent, open: ReadonlySet<string>, only?: { items: readonly string[]; figures: readonly string[] }): PaperContent {
   if (!old) return fresh;
   const oldItems = new Map(old.items.map((i) => [i.number, i]));
+  // Reading a part again brings its lead-ins in too when the old reading had none (they were joined to the part).
+  if (only) {
+    const asked = only.items;
+    const extra = fresh.items.filter((x) => !oldItems.has(x.number) && asked.some((n) => n.startsWith(`${x.number}(`))).map((x) => x.number);
+    if (extra.length) only = { ...only, items: [...asked, ...extra] };
+  }
   const keepOld = (n: string) => (only ? !only.items.includes(n) : !open.has(n));
   const items: PaperItem[] = [];
   const done = new Set<string>();
@@ -401,7 +476,14 @@ export function mergeReading(old: PaperContent | null, fresh: PaperContent, open
     items.push(o && keepOld(it.number) ? o : f ?? it);
     done.add(it.number);
   }
-  for (const it of only ? fresh.items.filter((x) => only.items.includes(x.number)) : old.items) if (!done.has(it.number)) items.push(it);
+  for (const it of only ? fresh.items.filter((x) => only!.items.includes(x.number)) : old.items) {
+    if (done.has(it.number)) continue;
+    // A new lead-in goes before its first part, not at the end.
+    const before = items.findIndex((x) => x.number.startsWith(`${it.number}(`));
+    if (before >= 0) items.splice(before, 0, it);
+    else items.push(it);
+    done.add(it.number);
+  }
   const figIds = new Set([...old.figures.map((f) => f.id), ...fresh.figures.map((f) => f.id)]);
   const figures: PaperFigure[] = [];
   for (const id of figIds) {
@@ -435,11 +517,15 @@ export function recheckItem(c: PaperContent, flags: readonly Flag[], number: str
   const w = wording.normalize("NFKD").toLowerCase().match(/[a-z]{4,}/g) ?? [];
   const found = !readable || coverage(pageIdx, wording) >= BRAIN.minWordCover
     || (w.length >= 3 ? w.filter((x) => pageIdx.text.includes(x)).length / w.length >= BRAIN.minWordCover : isFormula(wording) && w.every((x) => pageIdx.text.includes(x)));
-  const kept = flags.filter((f) => f.item !== number || !(f.kind === "words" || f.kind === "numbers" || (f.kind === "marks" && !f.key.endsWith(":gemini")) || (f.kind === "agree" && found)));
-  const add = (kind: FlagKind, reason: string, what: string, keyExtra = "") =>
-    kept.push({ key: `${kind}:${number}${keyExtra}`, item: number, kind, colour: COLOUR[kind], reason, pdfText: "", fingerprint: fingerprint(kind, squash(what), reason) });
+  // A lead-in flag is settled once the question has its own item (its key ends with that question's number).
+  const settled = (f: Flag) => f.kind === "structure" && c.items.some((x) => x.number === f.key.split(":").at(-1));
+  const kept = flags.filter((f) => !settled(f) && (f.item !== number || !(f.kind === "words" || f.kind === "numbers" || f.kind === "notation" || (f.kind === "marks" && !f.key.endsWith(":gemini")) || (f.kind === "agree" && found))));
+  const add = (kind: FlagKind, reason: string, what: string, keyExtra = "", pdfText = "") =>
+    kept.push({ key: `${kind}:${number}${keyExtra}`, item: number, kind, colour: COLOUR[kind], reason, pdfText, fingerprint: fingerprint(kind, squash(what), reason) });
   if (readable) {
     if (!found) add("words", "Your wording is not found in the PDF either.", wording);
+    const nf = notationFlag(it, pages);
+    if (nf) add("notation", nf.reason, nf.what, "", nf.pdfText);
     const missing = numbersIn(wording).find((x) => !nums.has(x));
     if (missing) add("numbers", `The number ${missing} is not printed in the PDF.`, `${missing}|${wording}`, `:${missing}`);
     if (c.kind === "qp" && it.marks !== null && it.marks > 0 && !allText.includes(`[${it.marks}]`) && !allText.includes(`[Total: ${it.marks}]`)) {

@@ -9,10 +9,10 @@ import { audit } from "../auth/session.ts";
 import { BRAIN } from "../config.ts";
 import { CLAUDE_MODEL_RE, GEMINI_MODEL_RE } from "./aiSetup.ts";
 import { cleanArt, cleanBox, cropSvg, pageSvg, wholePage, type PageArt } from "./figures.ts";
-import { cleanPaper, editItem, paperScore, storedScore, type PaperScore, marksAgainstPaper, openFlags, recheckItem, type Flag, type FlagKind, type PaperContent, type PaperKind } from "./paper.ts";
+import { cleanPaper, editItem, splitLeadIn, paperScore, storedScore, type PaperScore, marksAgainstPaper, openFlags, recheckItem, type Flag, type FlagKind, type PaperContent, type PaperKind } from "./paper.ts";
 
 export const PAPER_KINDS: readonly PaperKind[] = ["qp", "ms"];
-const KINDS: readonly FlagKind[] = ["words", "numbers", "marks", "numbering", "figure", "agree", "missing", "text"];
+const KINDS: readonly FlagKind[] = ["words", "numbers", "marks", "numbering", "figure", "agree", "missing", "text", "notation", "structure"];
 const enc = new TextEncoder();
 
 const key = (docId: string, part: "content" | "pages" | "gemini" | `art-${number}`) => `papers/${encodeURIComponent(docId)}/${part}.json`;
@@ -294,6 +294,19 @@ export async function applyFix(db: Db, bucket: Bucket, doc: DocInfo, action: Fix
   switch (action) {
     case "pdf":
     case "edit": {
+      // A lead-in joined to its first part (or left out): it becomes its own item before that part, in the paper's words.
+      if (action === "pdf" && flag?.kind === "structure") {
+        const parent = flag.key.split(":").at(-1) ?? "";
+        const content = splitLeadIn(view.content, flag.item, parent, flag.pdfText);
+        if (!content || !flag.pdfText) return "bad";
+        const pages = await loadPages(bucket, doc.id);
+        const flags = recheckItem(content, row.flags, flag.item, pages);
+        await putJson(bucket, key(doc.id, "content"), content);
+        await writeRow(db, doc.id, flags, row.dismissed, now);
+        const child = view.content.items.find((x) => x.number === flag.item);
+        await recordFix(db, doc.id, "pdf", flag.item, flag.key, { item: child, lead: parent, flags: row.flags }, { lead: parent }, actorId, now);
+        return "ok_fixed";
+      }
       const number = action === "pdf" ? flag?.item : args.item;
       const it = view.content.items.find((x) => x.number === number);
       if (!it || !number) return "bad";
@@ -357,6 +370,13 @@ export async function applyFix(db: Db, bucket: Bucket, doc: DocInfo, action: Fix
         const old = cleanPaper({ items: [], figures: [before.figure] }, kind).figures[0];
         if (!old) return "bad";
         const content = { ...view.content, figures: view.content.figures.map((x) => (x.id === old.id ? old : x)) };
+        await putJson(bucket, key(doc.id, "content"), content);
+        await writeRow(db, doc.id, cleanFlags(before.flags), row.dismissed, now);
+      } else if (fix.action === "pdf" && typeof before.lead === "string") {
+        // A lead-in split: its item goes and the first part gets its old text back.
+        const old = cleanPaper({ items: [before.item] }, kind).items[0];
+        if (!old) return "bad";
+        const content = { ...view.content, items: view.content.items.filter((x) => x.number !== before.lead).map((x) => (x.number === old.number ? old : x)) };
         await putJson(bucket, key(doc.id, "content"), content);
         await writeRow(db, doc.id, cleanFlags(before.flags), row.dismissed, now);
       } else if (fix.action === "pdf" || fix.action === "edit") {
