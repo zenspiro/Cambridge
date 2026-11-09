@@ -261,6 +261,25 @@ export function findBoxes(art: PageArt, lines: readonly TextLine[]): Found {
   return { captions, groups };
 }
 
+/**
+ * A figure's labels found by text alone, for a drawing with no box found: the short lines (not question text, no
+ * sentence ending) between the last line of question text above a printed label ("Fig. 7.1") and that label. Pure.
+ */
+export function labelBoxes(lines: readonly TextLine[]): Box[] {
+  const sorted = [...lines].sort((a, b) => a.b[1] - b.b[1]);
+  const out: Box[] = [];
+  sorted.forEach((cap, k) => {
+    if (!/^Fig(ure)?\.?\s*\d+\.\d+\b/i.test(cap.text) || cap.text.split(/\s+/).length > 8 || cap.body) return;
+    const above = sorted.slice(0, k).filter((l) => l.b[3] <= cap.b[1] + 1);
+    const lastBody = Math.max(TOP, ...above.filter((l) => l.body).map((l) => l.b[3]));
+    for (const l of above) {
+      if (l.body || l.b[1] < lastBody - 1 || /[.?!:]$/.test(l.text.trim()) || /^\(?[a-z]{1,4}\)\s/.test(l.text)) continue;
+      out.push(l.b);
+    }
+  });
+  return out;
+}
+
 /** The whole printed area of a page (inside the margins), for "Use whole page". */
 export const wholePage = (art: Pick<PageArt, "w" | "h">): Box => [30, TOP, r2(art.w - 30), r2(art.h - BOTTOM)];
 

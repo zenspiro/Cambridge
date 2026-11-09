@@ -592,7 +592,11 @@ export function visualLines(words: readonly Word[]): Word[] {
  * it lines up with the letters), and the words after each label up to the next one. Answer lines, [marks], the header
  * and footer are left out. Questions numbers that do not follow on (page numbers, values) are text. Pure.
  */
-export function pdfOutline(pages: readonly (readonly Word[])[]): OutlinePart[] {
+/** A figure's printed label on its own line ("Fig. 2.1", "Fig. 2.1 (not drawn to scale)"), not a sentence about it. */
+export const isCaptionLine = (text: string) => /^Fig(ure)?\.?\s*\d+\.\d+\b/i.test(text) && text.split(/\s+/).length <= 8
+  && !/\b(in|of|on|shows?|is)\b/i.test(text.replace(/\((not )?(drawn )?to scale\)/i, ""));
+
+export function pdfOutline(pages: readonly (readonly Word[])[], figures: readonly (readonly WBox[])[] = []): OutlinePart[] {
   const out: Building[] = [];
   let q = 0;
   let letter = "";
@@ -607,7 +611,26 @@ export function pdfOutline(pages: readonly (readonly Word[])[]): OutlinePart[] {
     const page = pi + 1;
     // As printed, top to bottom (owner, 9 Nov 2026: Nov 2025 P42 stores the "2" of question 2 after its page's text).
     // The margin warnings, header and footer are left out first, so they never start a line.
-    const words = visualLines(raw.filter((w) => !(w.b[1] < TOP_BAND || w.b[3] > FOOT_BAND || w.b[0] < 30 || w.b[2] > 565)));
+    // A figure's drawing with its labels, and its printed label line, are not question text (owner, 9 Nov 2026: Mar
+    // 2025 P42 question 2's lead-in carried "direction of motion A B bench Fig. 2.1 (not drawn to scale)").
+    const boxes = figures[pi] ?? [];
+    const inFigure = (w: Word) => boxes.some((b) => {
+      const x = (w.b[0] + w.b[2]) / 2;
+      const y = (w.b[1] + w.b[3]) / 2;
+      return x >= b[0] - 2 && x <= b[2] + 2 && y >= b[1] - 2 && y <= b[3] + 2;
+    });
+    const lines: Word[][] = [];
+    for (const w of visualLines(raw.filter((w) => !(w.b[1] < TOP_BAND || w.b[3] > FOOT_BAND || w.b[0] < 30 || w.b[2] > 565)))) {
+      if (w.first || !lines.length) lines.push([w]);
+      else lines.at(-1)!.push(w);
+    }
+    // A full sentence is question text even inside a figure's box (Mar 2025 P52: "Use the separate ray-trace sheet
+    // provided." sits just above Fig. 3.1's drawing).
+    const sentence = (l: Word[]) => l.length >= 4 && /[.?!:]$/.test(l.at(-1)!.t);
+    const words = lines.filter((l) => !isCaptionLine(l.map((w) => w.t).join(" "))).flatMap((l) => {
+      const kept = sentence(l) ? l : l.filter((w) => !inFigure(w));
+      return kept.map((w, k) => ({ ...w, first: k === 0 }));
+    });
     let prevLabelLine = -1;
     words.forEach((w, wi) => {
       if (w.b[1] < TOP_BAND || w.b[3] > FOOT_BAND || w.b[0] < 30 || w.b[2] > 565) return;
@@ -681,6 +704,22 @@ export function leadInProblems(items: readonly { number: string; text: string }[
     out.push({ number: p.number, child: child.number, lead: p.text, merged });
   }
   return out;
+}
+
+/**
+ * Words in a lead-in item that the paper does not print as its lead-in (a figure's labels and caption read as text):
+ * the item holds every word of the printed lead-in and at least two more. Empty when it reads as printed. Pure.
+ */
+export function leadExtra(itemText: string, lead: string): string[] {
+  const want = realWords(lead);
+  if (want.length < 3) return [];
+  const haveSet = new Set(realWords(itemText));
+  if (want.some((w) => !haveSet.has(w))) return [];
+  // Words and numbers (a graph's axis values are extra too), each counted once.
+  const tokens = (t: string) => notationPlain(t).normalize("NFKD").toLowerCase().match(/[a-z]+|\d+(?:\.\d+)?/g) ?? [];
+  const wantSet = new Set(tokens(lead));
+  const extra = [...new Set(tokens(itemText).filter((w) => !wantSet.has(w)))];
+  return extra.length >= 2 ? extra : [];
 }
 
 /**

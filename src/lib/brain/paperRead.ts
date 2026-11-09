@@ -9,7 +9,7 @@ import { audit } from "../auth/session.ts";
 import { BRAIN } from "../config.ts";
 import { CLAUDE_MODEL_RE, GEMINI_MODEL_RE } from "./aiSetup.ts";
 import { cleanArt, cleanBox, cropSvg, pageSvg, wholePage, type PageArt } from "./figures.ts";
-import { cleanPaper, editItem, isStale, splitLeadIn, paperScore, storedScore, type PaperScore, marksAgainstPaper, openFlags, recheckItem, type Flag, type FlagKind, type PaperContent, type PaperKind } from "./paper.ts";
+import { cleanPaper, editItem, isSplitFlag, isStale, splitLeadIn, paperScore, storedScore, type PaperScore, marksAgainstPaper, openFlags, recheckItem, type Flag, type FlagKind, type PaperContent, type PaperKind } from "./paper.ts";
 
 export const PAPER_KINDS: readonly PaperKind[] = ["qp", "ms"];
 const KINDS: readonly FlagKind[] = ["words", "numbers", "marks", "numbering", "figure", "agree", "missing", "text", "notation", "structure"];
@@ -341,7 +341,7 @@ export async function applyFix(db: Db, bucket: Bucket, doc: DocInfo, action: Fix
       // A flag from older checks keeps the text those checks found: run the checks again first (owner, 9 Nov 2026).
       if (action === "pdf" && flag && isStale(flag)) return "stale";
       // A lead-in joined to its first part (or left out): it becomes its own item before that part, in the paper's words.
-      if (action === "pdf" && flag?.kind === "structure") {
+      if (action === "pdf" && flag && isSplitFlag(flag)) {
         const parent = flag.key.split(":").at(-1) ?? "";
         const content = splitLeadIn(view.content, flag.item, parent, flag.pdfText);
         if (!content || !flag.pdfText) return "bad";
