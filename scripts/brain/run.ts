@@ -42,6 +42,8 @@ type PaperJob = {
   scope: { items: string[]; figures: string[] }; prior: { content: unknown; gemini?: unknown; open: string[] };
   /** reading: the Claude model that reads papers (AI setup's Reading AI, else the main AI's; older sites send none). */
   models: { claude: string; gemini: string; drawing: string; reading?: string }; limits: Limits;
+  /** Read all (owner, 8 Nov 2026): this paper's place in the batch. */
+  batch?: { at: number; of: number; label: string };
 };
 type Stage = "pdf" | "gemini" | "claude" | "retry" | "figures" | "checks" | "save";
 type StepEvent = { stage: Stage; state: "start" | "wait" | "done" | "fail" | "skip"; model?: string; tokens?: number };
@@ -518,7 +520,7 @@ async function runPaper(job: PaperJob) {
   if (!reader || !job.models.gemini) throw new Stop("models", "no Claude or Gemini model is set (AI setup page or wrangler.jsonc)");
   if (job.pdfBytes > job.limits.maxPdfBytes) throw new Stop("pdf_too_big");
 
-  await step("Fetching the paper", { stage: "pdf", state: "start" });
+  await step(job.batch ? `Paper ${job.batch.at} of ${job.batch.of}: ${job.paper}` : "Fetching the paper", { stage: "pdf", state: "start" });
   const doc = await api("/api/brain/doc", {});
   if (!doc.bytes?.length) throw new Stop("no_paper");
   const inflate = async (d: Uint8Array) => new Uint8Array(inflateSync(d, { finishFlush: zlibConstants.Z_SYNC_FLUSH }));
@@ -604,7 +606,22 @@ async function main() {
   if (jr.status !== 200 || !jr.data) throw new Stop(jr.data?.error === "no_syllabus" ? "no_syllabus" : "no_run");
   const job = jr.data as unknown as Job;
   if (job.task === "check") return runCheck(job);
-  if ((job as unknown as { task: string }).task === "paper") return runPaper(job as unknown as PaperJob);
+  if ((job as unknown as { task: string }).task === "paper") {
+    // Read all: the papers one after another in this run. Each is saved before the next is asked for, and the site
+    // checks the monthly cap before handing it out, so a stop never loses a paper already read.
+    let paper = job as unknown as PaperJob;
+    for (;;) {
+      await runPaper(paper);
+      if (!paper.batch) return;
+      const n = await api("/api/brain/next", {});
+      if (n.status !== 200 || !n.data) throw new Stop(n.status === 409 ? "closed" : `next_${n.status}`);
+      if (n.data.done) {
+        log(n.data.stopped ? `batch stopped: ${String(n.data.stopped)}` : "batch done");
+        return;
+      }
+      paper = n.data as unknown as PaperJob;
+    }
+  }
   if (!CLAUDE_KEY) throw new Stop("claude_key", "the GitHub secret CLAUDE_API_KEY is not set");
   if (!GEMINI_KEY) throw new Stop("gemini_key", "the GitHub secret GEMINI_API_KEY is not set");
   if (!job.models.claude || !job.models.gemini) throw new Stop("models", "no Claude or Gemini model is set (AI setup page or wrangler.jsonc)");

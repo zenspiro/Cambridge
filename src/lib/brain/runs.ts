@@ -11,7 +11,9 @@ export type PaperScope = { items: string[]; figures: string[] };
 export type BrainParams =
   | { task: "topics"; syllabusId: string }
   | { task: "check"; which: "claude" | "gemini" | null }
-  | { task: "paper"; docId: string; scope: PaperScope };
+  | { task: "paper"; docId: string; scope: PaperScope; batch?: Batch };
+/** Read all (owner, 8 Nov 2026): one run reads these papers in turn; `docId` is the one being read now. */
+export type Batch = { docs: string[]; label: string };
 export type TreeStatus = "none" | "ready" | "not_ready";
 export type RunState = { id: string; status: "queued" | "running" | "succeeded" | "failed" | "cancelled"; step: string | null; errorRef: string | null; createdAt: number; finishedAt: number | null };
 
@@ -88,6 +90,59 @@ export async function startPaperRun(db: Db, docId: string, scope: PaperScope, ac
   return id;
 }
 
+const DOC_ID_RE = /^[A-Za-z0-9_-]{10,64}$/;
+
+/** Read all: one run for many papers, the first one claimed now (each later one when the script asks for it). */
+export async function startBatchRun(db: Db, docs: readonly string[], label: string, actorId: string, now = Date.now()): Promise<string | null> {
+  const list = docs.filter((d) => DOC_ID_RE.test(d)).slice(0, BRAIN.maxBatchPapers);
+  if (!list.length) return null;
+  const id = await startBrainRun(db, { task: "paper", docId: list[0]!, scope: { items: [], figures: [] }, batch: { docs: list, label: label.slice(0, 120) } }, actorId, now);
+  if (!id) return null;
+  await claimPaper(db, list[0]!, id, now);
+  await audit(db, { actorId, action: "brain.batch_start", entity: "job", entityId: id, detail: { papers: list.length, label: label.slice(0, 120) } }, now);
+  return id;
+}
+
+const claimPaper = (db: Db, docId: string, jobId: string, now: number) => db
+  .prepare(`INSERT INTO paper_read (doc_id, job_id, updated_at) VALUES (?1, ?2, ?3) ON CONFLICT (doc_id) DO UPDATE SET job_id = ?2, updated_at = ?3`)
+  .bind(docId, jobId, now)
+  .run();
+
+/** Where a batch stands: the paper being read (1-based) of how many. */
+export const batchPlace = (p: BrainParams | null) => (p?.task === "paper" && p.batch ? { at: p.batch.docs.indexOf(p.docId) + 1, of: p.batch.docs.length } : null);
+
+/**
+ * The next paper of a running batch that is still not read (a paper read meanwhile is skipped), made the run's
+ * current paper. Null when none is left: the run is closed as done.
+ */
+export async function nextBatchPaper(db: Db, jobId: string, now = Date.now()): Promise<string | null> {
+  const p = await activeBrainRun(db, jobId);
+  if (p?.task !== "paper" || !p.batch) return null;
+  const rest = p.batch.docs.slice(p.batch.docs.indexOf(p.docId) + 1);
+  for (const docId of rest) {
+    const done = await db.prepare(`SELECT read_at FROM paper_read WHERE doc_id = ?1`).bind(docId).first<{ read_at: number | null }>();
+    if (done?.read_at) continue;
+    const row = await db
+      .prepare(`UPDATE job SET params = ?2, heartbeat_at = ?3 WHERE id = ?1 AND type = 'brain' AND status = 'running' RETURNING id`)
+      .bind(jobId, JSON.stringify({ ...p, docId }), now)
+      .first();
+    if (!row) return null;
+    await claimPaper(db, docId, jobId, now);
+    return docId;
+  }
+  await finishBatchRun(db, jobId, now);
+  return null;
+}
+
+/** A batch with nothing left to read is done. */
+export async function finishBatchRun(db: Db, jobId: string, now = Date.now()): Promise<void> {
+  const row = await db
+    .prepare(`UPDATE job SET status = 'succeeded', progress = 100, finished_at = ?2, step = NULL WHERE id = ?1 AND type = 'brain' AND status = 'running' RETURNING id`)
+    .bind(jobId, now)
+    .first();
+  if (row) await audit(db, { actorId: "brain", action: "brain.batch_done", entity: "job", entityId: jobId }, now);
+}
+
 /** A brain run's state for its page (and the live progress panel). */
 export async function runState(db: Db, id: string, now = Date.now()): Promise<(RunState & { events: RunEvent[]; task: string }) | null> {
   await closeStaleBrainRuns(db, now);
@@ -154,7 +209,10 @@ const readParams = (s: string): BrainParams | null => {
     if (p?.task === "paper" && typeof p.docId === "string") {
       const list = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string").slice(0, 100) : []);
       const sc = (p.scope ?? {}) as { items?: unknown; figures?: unknown };
-      return { task: "paper", docId: p.docId, scope: { items: list(sc.items), figures: list(sc.figures) } };
+      const b = (p as { batch?: { docs?: unknown; label?: unknown } }).batch;
+      const docs = b && Array.isArray(b.docs) ? b.docs.filter((x): x is string => typeof x === "string" && DOC_ID_RE.test(x)).slice(0, BRAIN.maxBatchPapers) : [];
+      const batch = docs.includes(p.docId) ? { docs, label: typeof b?.label === "string" ? b.label.slice(0, 120) : "" } : undefined;
+      return { task: "paper", docId: p.docId, scope: { items: list(sc.items), figures: list(sc.figures) }, ...(batch ? { batch } : {}) };
     }
     return p?.task === "topics" && typeof p.syllabusId === "string" ? { task: "topics", syllabusId: p.syllabusId } : null;
   } catch {

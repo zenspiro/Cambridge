@@ -12,7 +12,7 @@ test("a Cambridge page's scan is read as Cambridge names, against the library", 
   ]);
   const s = scanSummary(links, "0625", new Set(["0625_s24_qp_11.pdf"]));
   assert.deepEqual([s.total, s.have, s.missing, s.unnamed], [3, 1, ["0625_s24_ms_11.pdf"], 1]);
-  assert.equal(s.missingText, "June 2024: 1 mark scheme");
+  assert.equal(s.missingText, "Jun 2024: 1 mark scheme");
   assert.equal(scanSummary("not json", "0625", new Set()).total, 0);
 });
 

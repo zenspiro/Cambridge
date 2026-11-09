@@ -31,7 +31,7 @@ const MESSAGES = {
   busy: "Too many tries for now. Please wait a little.",
 };
 
-const day = (ms: number) => new Date(ms).toLocaleDateString("en-GB", { day: "numeric", month: "long", timeZone: "UTC" });
+const day = (ms: number) => new Date(ms).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
 const STATUS = { ok: "Active", pending: "Waiting for approval", details: "Still setting up" } as const;
 
 /** Parent home, always in the calm look: their children, approvals waiting for them, adding a child. */

@@ -22,6 +22,8 @@ export type MapRow = {
   series?: string;
   /** Whole-session files (examiner report, grade thresholds, teachers' notes), on the first row only. */
   docs?: Partial<Record<string, Cell>>;
+  /** Reading status of the row's stored papers (owner, 8 Nov 2026), set by the page; null when none is stored. */
+  rag?: "red" | "amber" | "green" | null;
 };
 export type MapVersion = {
   id: string; label: string; from: number; to: number; status: Status;

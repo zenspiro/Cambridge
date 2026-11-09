@@ -23,6 +23,11 @@ export function describeRun(r: { id: string; type: string; status: string; param
     return { id: r.id, label: `${AGENT_MODES[String(p.mode)] ?? "Agent run"}${code}`, href: `/admin/agent/runs/${encodeURIComponent(r.id)}`, step: r.step, queued };
   }
   if (r.type === "brain") {
+    const b = p.batch && typeof p.batch === "object" ? (p.batch as { docs?: unknown; label?: unknown }) : null;
+    if (p.task === "paper" && typeof p.docId === "string" && b && Array.isArray(b.docs)) {
+      const at = b.docs.indexOf(p.docId) + 1;
+      return { id: r.id, label: `Read all: paper ${at} of ${b.docs.length}`, href: `/admin/library/review/${encodeURIComponent(p.docId)}`, step: r.step, queued };
+    }
     if (p.task === "paper" && typeof p.docId === "string") return { id: r.id, label: "Reading a paper", href: `/admin/library/review/${encodeURIComponent(p.docId)}`, step: r.step, queued };
     if (p.task === "check") return { id: r.id, label: "AI setup check", href: "/admin/ai", step: r.step, queued };
     return { id: r.id, label: "Drafting a topic tree", href: "/admin/topics", step: r.step, queued };
@@ -56,7 +61,7 @@ const ACTIVITY: Record<string, string> = {
   "agent.finish": "Agent run finished", "agent.fail": "Agent run failed", "agent.cancel": "Cancelled an agent run",
   "review.accept": "Accepted a file the agent could not place", "review.reject": "Rejected a file the agent could not place", "review.undo": "Undid a file decision",
   "brain.topics_start": "Started a topic tree draft", "brain.topics_saved": "A topic tree was saved", "brain.paper_start": "Started reading a paper",
-  "brain.paper_saved": "A paper reading was saved", "brain.fail": "A subject brain run stopped", "brain.check_start": "Started an AI setup check",
+  "brain.paper_saved": "A paper reading was saved", "brain.batch_start": "Started Read all", "brain.batch_done": "Read all finished", "brain.fail": "A subject brain run stopped", "brain.check_start": "Started an AI setup check",
   "brain.ai_check": "AI setup check finished", "brain.claude_model": "Changed the main AI's model", "brain.gemini_model": "Changed the checking AI's model",
   "brain.drawing_model": "Changed the drawing AI's model", "brain.reading_model": "Changed the reading AI's model", "brain.price": "Changed an AI price",
   "brain.cap": "Changed the monthly AI cap",

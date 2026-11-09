@@ -42,8 +42,8 @@ test("any other Cambridge code is stored as it is, and never read as another typ
   assert.equal(parseCambridgeName("0478_y20_zz_2.pdf")?.docType, "zz");
   assert.equal(parseCambridgeName("0625_s23_qp.pdf"), null, "a known type in the wrong shape is still not a name");
   assert.equal(parseCambridgeName("Scan 4.pdf"), null);
-  assert.equal(describeFile("0417_w24_sf_02.pdf", null, () => null), "November 2024, Paper 2, source files");
-  assert.equal(describeFile("0478_w20_zz_21.pdf", null, () => null), "November 2020, Paper 2, variant 1, cambridge file (zz)");
+  assert.equal(describeFile("0417_w24_sf_02.pdf", null, () => null), "Nov 2024, Paper 2, source files");
+  assert.equal(describeFile("0478_w20_zz_21.pdf", null, () => null), "Nov 2020, Paper 2, variant 1, cambridge file (zz)");
 
   const it = planFromNames(0, "ICT 0417/2024/0417_w24_sf_02.pdf", 1000, SUBJECTS, 1e8, YEARS);
   assert.deepEqual([it.name, it.evidence], ["0417_w24_sf_02.pdf", 0]);
@@ -109,30 +109,30 @@ const papersOf = (code: string) => testDb().raw.prepare("SELECT p.* FROM syllabu
 test("checklist: 0478 Paper 2 asks for its pre-release material to 2022; French has transcripts and teachers' notes", () => {
   const lib = { ...LIBRARY_DEFAULTS, fromYear: 2020 };
   const cs = buildChecklist("0478", versions("0478"), [], lib);
-  const w20 = cs.sessions.find((g) => g.label === "November 2020")!;
+  const w20 = cs.sessions.find((g) => g.label === "Nov 2020")!;
   const row = w20.rows.find((r) => r.paper === 2 && r.variant === 2)!;
   assert.equal(row.cells.pm?.fileName, "0478_w20_pm_22.pdf");
   assert.equal(row.cells.pm?.essential, true);
   assert.ok(!w20.rows.find((r) => r.paper === 1)!.cells.pm, "Paper 1 has none");
-  const w23 = cs.sessions.find((g) => g.label === "November 2023")!;
+  const w23 = cs.sessions.find((g) => g.label === "Nov 2023")!;
   assert.ok(w23.rows.every((r) => !r.cells.pm), "the 2023 syllabus has no pre-release material");
 
   const fr = buildChecklist("0520", versions("0520"), [], lib);
-  const s24 = fr.sessions.find((g) => g.label === "June 2024")!;
+  const s24 = fr.sessions.find((g) => g.label === "Jun 2024")!;
   const p1 = s24.rows.find((r) => r.paper === 1 && r.variant === 2)!;
   assert.deepEqual([p1.cells.qr?.fileName, p1.cells.qr?.essential], ["0520_s24_qr_12.pdf", false]);
   const tn = s24.docs.find((c) => c.docType === "tn")!;
   assert.deepEqual([tn.fileName, tn.essential], ["0520_s24_tn_03.pdf", false]);
   const map = buildSubjectMap(fr, papersOf("0520"));
-  const first = map.find((v) => v.id === "0520-2021")!.rows.find((r) => r.label.startsWith("June 2024"))!;
+  const first = map.find((v) => v.id === "0520-2021")!.rows.find((r) => r.label.startsWith("Jun 2024"))!;
   assert.equal(first.docs?.tn?.fileName, "0520_s24_tn_03.pdf", "teachers' notes sit with the whole-session files");
 });
 
 test("0478 2020 paper names come from the covers, and covers that disagree with the library are listed", () => {
   const papers = papersOf("0478");
   const look = paperLookup(papers);
-  assert.equal(describeFile("0478_w20_pm_21.pdf", "0478-2020", look), "November 2020, Paper 2 Problem-solving and Programming, variant 1, pre-release material");
-  assert.equal(describeFile("0478_w20_qp_11.pdf", "0478-2020", look), "November 2020, Paper 1 Theory, variant 1, question paper");
+  assert.equal(describeFile("0478_w20_pm_21.pdf", "0478-2020", look), "Nov 2020, Paper 2 Problem-solving and Programming, variant 1, pre-release material");
+  assert.equal(describeFile("0478_w20_qp_11.pdf", "0478-2020", look), "Nov 2020, Paper 1 Theory, variant 1, question paper");
 
   const qp = planFromNames(0, "cs/0478_w20_qp_21.pdf", 900_000, SUBJECTS, 1e8, YEARS);
   applyCover(qp, readCover(QP_COVER, CODES), QP_COVER, YEARS);

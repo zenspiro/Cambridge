@@ -25,6 +25,8 @@ export const BRAIN_REASONS: Record<string, string> = {
   models: "CLAUDE_MODEL or GEMINI_MODEL is not set.",
   no_paper: "The paper's PDF is not in the library.",
   no_reading: "There is no reading yet to draw the figures for. Read the paper first.",
+  batch_cap: "Read all stopped before the next paper: it would go over your monthly cap. The papers read so far are saved. Raise the cap on AI setup or wait for next month, then press Read all again for the rest.",
+  batch_price: "Read all stopped before the next paper: a model in use has no price, so the cap cannot be checked. Set its price on AI setup, then press Read all again for the rest.",
   script_error: "The run stopped on an unexpected error. The GitHub log has the details.",
 };
 

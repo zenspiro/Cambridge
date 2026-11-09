@@ -43,14 +43,14 @@ test("the owner's five files: all uploaded under their own names, none to Needs 
   ]);
 });
 
-test("stored 1524 files sit in Physics June 2021 as their own series, variant 2 essential", async () => {
+test("stored 1524 files sit in Physics Jun 2021 as their own series, variant 2 essential", async () => {
   const db = testDb();
   setYears(db);
   const bucket = testBucket();
   const out = await storeDocument(db, bucket, { fileName: "1524_s21_qp_12.pdf", bytes: pdf("pk"), origin: "upload", actorId: "t" });
   assert.equal(out.ok, true);
   const list = (await loadSyllabus(db, "0625"))!;
-  const june = list.sessions.find((g) => g.label === "June 2021")!;
+  const june = list.sessions.find((g) => g.label === "Jun 2021")!;
   assert.deepEqual(june.series, [{ code: "1524", label: "Pakistan series (1524)" }]);
   const pk = june.rows.filter((r) => r.series === "1524");
   const p1 = pk.find((r) => r.paper === 1 && r.variant === 2)!;
@@ -59,14 +59,14 @@ test("stored 1524 files sit in Physics June 2021 as their own series, variant 2 
   assert.ok(p1.cells.qp?.doc, "the stored file is ticked");
   assert.ok(june.docs.some((c) => c.fileName === "1524_s21_gt.pdf"));
   assert.ok(!list.others.some((c) => c.fileName.startsWith("1524")), "not under other stored files");
-  assert.ok(!list.sessions.find((g) => g.label === "November 2021")!.series.length, "only the June series");
+  assert.ok(!list.sessions.find((g) => g.label === "Nov 2021")!.series.length, "only the June series");
 
   const papers = db.raw.prepare("SELECT p.* FROM syllabus_paper p JOIN syllabus s ON s.id = p.syllabus_id WHERE s.code = '0625'").all() as Paper[];
   const map = buildSubjectMap(list, papers).find((v) => v.id === "0625-2020")!;
   const row = map.rows.find((r) => r.series === "1524")!;
-  assert.equal(row.label, "June 2021, Pakistan series (1524)");
+  assert.equal(row.label, "Jun 2021, Pakistan series (1524)");
   assert.equal(row.docs?.gt?.fileName, "1524_s21_gt.pdf");
-  assert.ok(map.rows.find((r) => r.label === "June 2021")?.docs?.gt?.fileName.startsWith("0625_"), "the main row keeps its own files");
+  assert.ok(map.rows.find((r) => r.label === "Jun 2021")?.docs?.gt?.fileName.startsWith("0625_"), "the main row keeps its own files");
 
   // Outside the series (another year) a 1524 file has no syllabus.
   assert.equal((await storeDocument(db, bucket, { fileName: "1524_s22_qp_12.pdf", bytes: pdf("x"), origin: "upload", actorId: "t" })).ok, false);

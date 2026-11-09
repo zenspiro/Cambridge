@@ -24,7 +24,7 @@ const MESSAGES = {
   bad_details: "Please pick your country and birth year.",
 };
 
-const day = (ms: number) => new Date(ms).toLocaleDateString("en-GB", { day: "numeric", month: "long", timeZone: "UTC" });
+const day = (ms: number) => new Date(ms).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
 
 /** A student who is not let in yet: details first (accounts from before step 3), then the parent's approval. */
 export default async function ApprovalPage({ searchParams }: { searchParams: Promise<{ e?: string; ref?: string }> }) {

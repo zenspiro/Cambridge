@@ -13,6 +13,7 @@ import { sessionFromSlug, sessionHref } from "@/lib/library/slugs";
 import type { Cell } from "@/lib/library/checklist";
 import { ScoreBadge } from "@/components/ScoreBadge";
 import { rowScore } from "@/lib/brain/paperRead";
+import { hasTiers } from "@/lib/brain/readAll";
 
 export const metadata: Metadata = { title: "Exam session" };
 
@@ -68,6 +69,13 @@ export default async function SessionPage({
         <nav className="page-actions" aria-label="Other sessions">
           {older ? <Link className="btn" href={sessionHref(code, older.year, older.session)}>‹ {older.label}</Link> : null}
           {newer ? <Link className="btn" href={sessionHref(code, newer.year, newer.session)}>{newer.label} ›</Link> : null}
+          {/* Read all for this session (owner, 8 Nov 2026): the subject overview shows what it reads and the cost first. */}
+          {hasTiers(papers) ? (
+            <>
+              <Link className="btn" href={`/admin/library/${code}?ra=core&ras=${g.session}&ray=${g.year}#read-all`}>Read all Core</Link>
+              <Link className="btn" href={`/admin/library/${code}?ra=extended&ras=${g.session}&ray=${g.year}#read-all`}>Read all Extended</Link>
+            </>
+          ) : <Link className="btn" href={`/admin/library/${code}?ra=any&ras=${g.session}&ray=${g.year}#read-all`}>Read all</Link>}
           <Link className="btn btn-primary" href={`/admin/library/folder?code=${code}`}>Upload a folder</Link>
         </nav>
       }

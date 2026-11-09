@@ -135,7 +135,7 @@ export async function recordSpend(db: Db, jobId: string | null, task: string, e:
 // ---------- Months ----------
 
 export const MONTH_RE = /^(\d{4})-(0[1-9]|1[0-2])$/;
-const monthName = new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric", timeZone: "UTC" });
+const monthName = new Intl.DateTimeFormat("en-GB", { month: "short", year: "numeric", timeZone: "UTC" });
 
 /** A month as UTC bounds: "2026-11", or the month of `now` when not given or not valid. */
 export function monthBounds(month: string | undefined, now = Date.now()): { key: string; from: number; to: number; label: string; prev: string; next: string | null } {
@@ -346,5 +346,20 @@ export async function paperCostCheck(db: Db, env: { CLAUDE_MODEL?: string; GEMIN
   const month = monthBounds(undefined, now);
   const [paper, summary] = await Promise.all([taskHistory(db, "paper", [models.reading, models.gemini]), spendBetween(db, month.from, month.to, prices)]);
   const estimate = estimatePaper(models, pdfBytes, { paper }, prices);
+  return { estimate, cap, spent: summary.total, verdict: capCheck(cap, summary.total, estimate) };
+}
+
+/** Read all's check before it starts: every paper's rough cost added up, against this month's spend and the cap. */
+export async function batchCostCheck(db: Db, env: { CLAUDE_MODEL?: string; GEMINI_MODEL?: string }, sizes: readonly number[], now = Date.now()): Promise<CostCheck> {
+  const [models, prices, cap] = await Promise.all([aiModels(db, env), readPrices(db), readCap(db)]);
+  const month = monthBounds(undefined, now);
+  const [paper, summary] = await Promise.all([taskHistory(db, "paper", [models.reading, models.gemini]), spendBetween(db, month.from, month.to, prices)]);
+  const each = sizes.map((b) => estimatePaper(models, b, { paper }, prices));
+  const missing = [...new Set(each.flatMap((e) => e.missing))];
+  const estimate: Estimate = {
+    usd: missing.length ? null : each.reduce((n, e) => n + (e.usd ?? 0), 0),
+    basis: each.length && each.every((e) => e.basis === "history") ? "history" : "rough",
+    missing,
+  };
   return { estimate, cap, spent: summary.total, verdict: capCheck(cap, summary.total, estimate) };
 }

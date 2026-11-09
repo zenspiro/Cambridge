@@ -89,9 +89,9 @@ for (const width of [DESKTOP]) {
   await page.goto(BASE + "/admin/library/0625");
 
   // A session page: papers with names, tier tags, essential variant 2 first.
-  await page.locator("table.map-table th a", { hasText: /^June 2024$/ }).first().click();
+  await page.locator("table.map-table th a", { hasText: /^Jun 2024$/ }).first().click();
   await page.waitForURL(/\/admin\/library\/0625\/2024\/june$/);
-  check((await page.locator("nav.crumbs", { hasText: "June 2024" }).count()) === 1, `${width}px session page has its breadcrumb`);
+  check((await page.locator("nav.crumbs", { hasText: "Jun 2024" }).count()) === 1, `${width}px session page has its breadcrumb`);
   check((await page.locator("h2", { hasText: "Essential: variant 2" }).count()) === 1, `${width}px variant 2 is essential`);
   check((await page.locator("table.grid-table tbody tr").first().textContent())?.includes("Multiple Choice (Core)"), `${width}px rows carry paper names`);
   check((await page.locator(".tag-extended").count()) > 0, `${width}px Extended papers are tagged`);

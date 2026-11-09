@@ -201,7 +201,7 @@ export type SaveResult = "ok" | "no_run" | "bad" | "too_big";
  * Saves a reading from the brain script (already merged with what was there, flags worked out). `final` closes the
  * run; a first save after Claude's reading keeps the run open for the drawings, so a failed drawing never loses it.
  */
-export async function savePaperReading(db: Db, bucket: Bucket, jobId: string, docId: string, raw: Record<string, unknown>, final: boolean, now = Date.now()): Promise<SaveResult> {
+export async function savePaperReading(db: Db, bucket: Bucket, jobId: string, docId: string, raw: Record<string, unknown>, final: boolean, now = Date.now(), closeRun = true): Promise<SaveResult> {
   const doc = await paperDoc(db, docId);
   if (!doc || !PAPER_KINDS.includes(doc.docType as PaperKind)) return "bad";
   const content = cleanPaper(raw.content, doc.docType as PaperKind);
@@ -246,7 +246,8 @@ export async function savePaperReading(db: Db, bucket: Bucket, jobId: string, do
     }
   }
   if (final) {
-    await db.prepare(`UPDATE job SET status = 'succeeded', progress = 100, finished_at = ?2, step = NULL WHERE id = ?1 AND type = 'brain' AND status = 'running'`).bind(jobId, now).run();
+    // A batch (Read all) stays open for its next paper; the script asks for it and the last one closes the run.
+    if (closeRun) await db.prepare(`UPDATE job SET status = 'succeeded', progress = 100, finished_at = ?2, step = NULL WHERE id = ?1 AND type = 'brain' AND status = 'running'`).bind(jobId, now).run();
     await audit(db, { actorId: "brain", action: "brain.paper_saved", entity: "source_document", entityId: docId, detail: { items: content.items.length, figures: content.figures.length, flags: flags.length } }, now);
   }
   return "ok";

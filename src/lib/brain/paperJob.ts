@@ -1,0 +1,47 @@
+// What the brain script gets for one paper (the job endpoint, and each next paper of a Read all batch). No Next imports.
+import type { Db, Bucket } from "../db.ts";
+import { BRAIN } from "../config.ts";
+import { listSubjects, subjectLabel } from "../library/catalog.ts";
+import { describeFile, loadPapers, paperLookup } from "../library/papers.ts";
+import { PAPER_KINDS, paperDoc, readingForRun } from "./paperRead.ts";
+import type { PaperKind } from "./paper.ts";
+import type { AiModels } from "./aiSetup.ts";
+import type { PaperScope, Batch } from "./runs.ts";
+
+export async function paperJobPayload(db: Db, files: Bucket, docId: string, scope: PaperScope, batch: Batch | undefined, models: AiModels, limits: Record<string, unknown>): Promise<Record<string, unknown> | null> {
+  const doc = await paperDoc(db, docId);
+  if (!doc || !PAPER_KINDS.includes(doc.docType as PaperKind)) return null;
+  const [{ papers }, subjects, size, prior] = await Promise.all([
+    loadPapers(db, doc.code), listSubjects(db),
+    db.prepare(`SELECT size_bytes FROM source_document WHERE id = ?1`).bind(doc.id).first<{ size_bytes: number }>(),
+    readingForRun(db, files, doc),
+  ]);
+  return {
+    task: "paper",
+    kind: doc.docType,
+    subject: subjectLabel(subjects, doc.code),
+    paper: describeFile(doc.fileName, doc.syllabusId, paperLookup(papers)),
+    pdfBytes: size?.size_bytes ?? 0,
+    scope,
+    prior,
+    ...(batch ? { batch: { at: batch.docs.indexOf(docId) + 1, of: batch.docs.length, label: batch.label } } : {}),
+    models: { claude: models.claude, gemini: models.gemini, drawing: models.drawing, reading: models.reading },
+    limits,
+  };
+}
+
+/** The limits every brain run gets. */
+export const brainLimits = () => ({
+  attempts: BRAIN.attempts,
+  claudeMaxTokens: BRAIN.claudeMaxTokens,
+  claudeEffort: BRAIN.claudeEffort,
+  geminiMaxTokens: BRAIN.geminiMaxTokens,
+  maxPdfBytes: BRAIN.maxPdfBytes,
+  geminiTries: BRAIN.geminiTries,
+  geminiMaxWaitMs: BRAIN.geminiMaxWaitMs,
+  checkModels: BRAIN.checkModels,
+  checkDelayMs: BRAIN.checkDelayMs,
+  geminiRetryWaitsMs: BRAIN.geminiRetryWaitsMs,
+  paperEffort: BRAIN.paperEffort,
+  drawEffort: BRAIN.drawEffort,
+});
