@@ -11,7 +11,8 @@ import { StudentFrame } from "@/components/student/StudentFrame";
 import { SignOut } from "@/components/student/SignOut";
 import { StudentNotice } from "@/components/student/Notice";
 import { DetailsFields } from "@/components/student/DetailsFields";
-import { PARENT_NAV } from "@/components/student/nav";
+import { PARENT_NAV, withIcons } from "@/components/student/nav";
+import { readIcons } from "@/lib/icons";
 import { ActionForm } from "@/components/ActionForm";
 import { ConfirmSubmit } from "@/components/ConfirmSubmit";
 
@@ -44,7 +45,7 @@ export default async function ParentHome({ searchParams }: { searchParams: Promi
   const [children, waiting, code, brand] = await Promise.all([listChildren(db, s.userId), waitingForParent(db, s.email), liveCode(db, s.userId), currentBrand()]);
   const subjects = children.some((c) => c.exams.length) ? await listSubjects(db) : [];
   return (
-    <StudentFrame brand={frameBrand(brand)} theme={PARENT_THEME} nav={PARENT_NAV} current="/parent" actions={<SignOut />}>
+    <StudentFrame brand={frameBrand(brand)} theme={PARENT_THEME} nav={withIcons(PARENT_NAV, await readIcons(db))} current="/parent" actions={<SignOut />}>
       <h1 className="s-h1">Hi, {s.firstName}</h1>
       <StudentNotice code={q.e} messages={MESSAGES} errorRef={q.ref} />
 

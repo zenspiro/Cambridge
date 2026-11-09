@@ -4,13 +4,15 @@
 import { useState } from "react";
 import { THEMES, type ThemeId } from "@/lib/config";
 import { StudentFrame, type FrameBrand, type NavItem } from "./StudentFrame";
-import { Icon, Mascot } from "./Icons";
+import { Mascot } from "./Icons";
+import { AppIcon } from "@/components/icons/AppIcon";
 
-const NAV: readonly NavItem[] = [
-  { href: "#home", label: "Home", icon: "home" },
-  { href: "#practice", label: "Practice", icon: "practice" },
-  { href: "#progress", label: "Progress", icon: "progress" },
-  { href: "#me", label: "Me", icon: "me" },
+/** The sample menu, with the icons chosen in Settings > Icons (`icons` from readIcons). */
+const nav = (icons: Readonly<Record<string, string>>): NavItem[] => [
+  { href: "#home", label: "Home", icon: icons["student.home"] ?? "house" },
+  { href: "#practice", label: "Practice", icon: icons["student.practice"] ?? "pencil-line" },
+  { href: "#progress", label: "Progress", icon: icons["student.progress"] ?? "chart-column" },
+  { href: "#me", label: "Me", icon: icons["student.me"] ?? "user-round" },
 ];
 
 const GRADES = [
@@ -64,7 +66,7 @@ function Circuit() {
 }
 
 /** The sample screens: home pieces, then a practice question that answers like the real one will. */
-function Sample({ theme, setTheme }: { theme: ThemeId; setTheme: (t: ThemeId) => void }) {
+function Sample({ theme, setTheme, icons }: { theme: ThemeId; setTheme: (t: ThemeId) => void; icons: Readonly<Record<string, string>> }) {
   const [picked, setPicked] = useState<string | null>(null);
   const [hint, setHint] = useState(false);
   const state = (key: string) => (!picked ? undefined : key === RIGHT ? "right" : key === picked ? "wrong" : undefined);
@@ -76,7 +78,7 @@ function Sample({ theme, setTheme }: { theme: ThemeId; setTheme: (t: ThemeId) =>
       </div>
       <div className="s-row">
         <Mascot />
-        <span className="s-streak"><Icon name="flame" /> 12 day streak</span>
+        <span className="s-streak"><AppIcon name={icons["student.streak"] ?? "flame"} className="s-icon" /> 12 day streak</span>
       </div>
 
       <section className="s-card s-feature" aria-label="Exam countdown">
@@ -156,11 +158,11 @@ function Sample({ theme, setTheme }: { theme: ThemeId; setTheme: (t: ThemeId) =>
 }
 
 /** `boxed`: inside a phone-sized box on the admin page; otherwise the whole page, as a student would see it. */
-export function ThemeGallery({ brand, initial, boxed }: { brand: FrameBrand; initial: ThemeId; boxed: boolean }) {
+export function ThemeGallery({ brand, initial, boxed, icons }: { brand: FrameBrand; initial: ThemeId; boxed: boolean; icons: Readonly<Record<string, string>> }) {
   const [theme, setTheme] = useState<ThemeId>(initial);
   const frame = (
-    <StudentFrame brand={brand} theme={theme} nav={NAV} current="#home">
-      <Sample theme={theme} setTheme={setTheme} />
+    <StudentFrame brand={brand} theme={theme} nav={nav(icons)} current="#home">
+      <Sample theme={theme} setTheme={setTheme} icons={icons} />
     </StudentFrame>
   );
   return boxed ? <div className="gallery-phone" data-testid="gallery-phone">{frame}</div> : frame;

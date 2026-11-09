@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/guard";
-import { currentBrand } from "@/lib/env";
+import { currentBrand, getEnv } from "@/lib/env";
+import { readIcons } from "@/lib/icons";
 import { frameBrand } from "@/lib/brand";
 import { AdminShell } from "@/components/AdminShell";
 import { ThemeGallery } from "@/components/student/ThemeGallery";
@@ -20,7 +21,7 @@ export default async function ThemesPage() {
       actions={<Link className="btn" href="/admin/themes/phone">Open as a full page</Link>}
     >
       <div className="gallery-row">
-        <ThemeGallery brand={frameBrand(brand)} initial={brand.defaultTheme} boxed />
+        <ThemeGallery brand={frameBrand(brand)} initial={brand.defaultTheme} boxed icons={await readIcons((await getEnv()).DB)} />
         <div className="gallery-side">
           <p className="muted">
             Every building block of the student pages, with sample words, in a phone-sized box. Switch the theme at the top of

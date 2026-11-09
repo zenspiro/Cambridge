@@ -65,6 +65,8 @@ const ACTIVITY: Record<string, string> = {
   "brain.ai_check": "AI setup check finished", "brain.claude_model": "Changed the main AI's model", "brain.gemini_model": "Changed the checking AI's model",
   "brain.drawing_model": "Changed the drawing AI's model", "brain.reading_model": "Changed the reading AI's model", "brain.price": "Changed an AI price",
   "brain.cap": "Changed the monthly AI cap",
+  "home.clear": "Cleared an item from Needs you", "home.clear_all": "Cleared Needs you", "home.undo": "Brought back an item to Needs you",
+  "icons.choose": "Changed an icon", "icons.reset": "Put an icon back to its default",
   "paper.pdf": "Used the PDF's version on a paper", "paper.edit": "Edited a paper part", "paper.fine": "Marked a paper flag as fine",
   "paper.looks_right": "Confirmed a figure", "paper.override": "Marked a paper ready anyway", "paper.unoverride": "Took back a paper's ready mark",
   "paper.undo": "Undid a paper fix", "paper.box": "Drew a figure box by hand",
@@ -79,7 +81,7 @@ const ACTIVITY: Record<string, string> = {
 const AREAS: Record<string, string> = {
   account: "Account", admin: "Admin", agent: "Agent", brain: "Subject brain", brand: "Brand", consent: "Parent approval", family: "Families",
   paper: "Paper review", review: "Agent review", setting: "Settings", source: "Source library", source_site: "Sources", source_page: "Sources",
-  drive_folder: "Sources", syllabus: "Library", library: "Library",
+  drive_folder: "Sources", syllabus: "Library", library: "Library", home: "Home", icons: "Icons",
 };
 
 /** One audit action in words; an action without words names its area ("Paper review: other change"). Pure. */
@@ -91,19 +93,105 @@ export function activityWords(action: string): string {
 
 export type FailedRun = { id: string; label: string; href: string; at: number; why: string };
 
-/** Agent and subject brain runs that stopped in the last `days` days, newest first, with where to look. */
-export async function failedRuns(db: Db, now = Date.now(), days = 7): Promise<FailedRun[]> {
+/**
+ * What a run was about, so a later run that succeeded at the same thing settles an earlier stop: an agent run's
+ * subject and mode, a paper (a batch counts for each of its papers), a topic tree, an AI setup check. Pure.
+ */
+export function runKeys(params: string, type: string): string[] {
+  let p: Record<string, unknown> = {};
+  try {
+    const v: unknown = JSON.parse(params);
+    if (v && typeof v === "object") p = v as Record<string, unknown>;
+  } catch {
+    return [];
+  }
+  if (type === "agent") return typeof p.code === "string" ? [`agent:${p.code}:${String(p.mode ?? "")}`] : [];
+  if (p.task === "paper") {
+    const b = p.batch && typeof p.batch === "object" ? (p.batch as { docs?: unknown }) : null;
+    const docs = b && Array.isArray(b.docs) ? b.docs.filter((x): x is string => typeof x === "string") : [];
+    return docs.length ? [`batch:${docs.join(",")}`, ...docs.map((d) => `paper:${d}`)] : typeof p.docId === "string" ? [`paper:${p.docId}`] : [];
+  }
+  if (p.task === "topics" && typeof p.syllabusId === "string") return [`topics:${p.syllabusId}`];
+  if (p.task === "check") return [`check:${String(p.which ?? "")}`];
+  return [];
+}
+
+type JobRow = { id: string; type: string; status: string; params: string; step: string | null; error_ref: string | null; at: number; created_at: number };
+
+/**
+ * Agent and subject brain runs that stopped in the last `days` days and still need a look, newest first: not cleared
+ * by hand, and not settled by a later run of the same thing that succeeded (owner, 9 Nov 2026).
+ */
+export async function failedRuns(db: Db, now = Date.now(), days = 7, limit = 5): Promise<{ list: FailedRun[]; total: number }> {
+  const since = now - days * 86_400_000;
   const { results } = await db
-    .prepare(`SELECT id, type, status, params, step, error_ref, COALESCE(finished_at, created_at) AS at FROM job
-              WHERE status = 'failed' AND type IN ('agent', 'brain') AND created_at >= ?1 ORDER BY created_at DESC LIMIT 5`)
-    .bind(now - days * 86_400_000)
-    .all<{ id: string; type: string; status: string; params: string; step: string | null; error_ref: string | null; at: number }>();
-  return results.flatMap((r) => {
+    .prepare(`SELECT id, type, status, params, step, error_ref, COALESCE(finished_at, created_at) AS at, created_at FROM job
+              WHERE type IN ('agent', 'brain') AND created_at >= ?1 AND (status = 'succeeded' OR (status = 'failed' AND cleared_at IS NULL))
+              ORDER BY created_at DESC LIMIT 300`)
+    .bind(since)
+    .all<JobRow>();
+  // A batch, or a paper read since by any run, settles a stop for that paper too.
+  const read = await db.prepare(`SELECT doc_id, read_at FROM paper_read WHERE read_at >= ?1`).bind(since).all<{ doc_id: string; read_at: number }>();
+  const readAt = new Map(read.results.map((r) => [`paper:${r.doc_id}`, r.read_at]));
+  const settled = (r: JobRow) => {
+    const keys = runKeys(r.params, r.type);
+    if (!keys.length) return false;
+    const later = results.filter((x) => x.status === "succeeded" && x.created_at > r.created_at);
+    const paperKeys = keys.filter((k) => k.startsWith("paper:"));
+    // A single paper: settled once it is read after the stop. A batch: once every one of its papers is.
+    if (paperKeys.length && paperKeys.every((k) => (readAt.get(k) ?? 0) > r.created_at)) return true;
+    return later.some((x) => {
+      const done = runKeys(x.params, x.type);
+      return keys[0] !== undefined && done.includes(keys[0]);
+    });
+  };
+  const list = results.filter((r) => r.status === "failed" && !settled(r)).flatMap((r) => {
     const d = describeRun({ ...r, status: "running" });
     const words = r.type === "agent" ? AGENT_ERRORS : BRAIN_REASONS;
     const why = r.error_ref && Object.hasOwn(words, r.error_ref) ? words[r.error_ref]! : "It stopped with an error; its page has the details.";
     return d ? [{ id: r.id, label: d.label, href: d.href, at: r.at, why }] : [];
   });
+  return { list: list.slice(0, limit), total: list.length };
+}
+
+/** Clears one item from Home, or every one shown (`all`); `undo` brings one back. Returns how many changed. */
+export async function clearNeed(db: Db, kind: "run" | "paper", id: string | "all", undo: boolean, now = Date.now()): Promise<number> {
+  if (kind === "run") {
+    if (id === "all") {
+      const { list } = await failedRuns(db, now, 7, 300);
+      if (!list.length) return 0;
+      await db.prepare(`UPDATE job SET cleared_at = ?2 WHERE id IN (SELECT value FROM json_each(?1)) AND status = 'failed'`).bind(JSON.stringify(list.map((r) => r.id)), now).run();
+      return list.length;
+    }
+    const r = await db.prepare(`UPDATE job SET cleared_at = ?2 WHERE id = ?1 AND status = 'failed' AND type IN ('agent', 'brain') RETURNING id`).bind(id, undo ? null : now).first();
+    return r ? 1 : 0;
+  }
+  if (id === "all") {
+    const { list } = await papersToReview(db, 1000);
+    if (!list.length) return 0;
+    await db.prepare(`UPDATE paper_read SET cleared_at = ?2 WHERE doc_id IN (SELECT value FROM json_each(?1))`).bind(JSON.stringify(list.map((r) => r.docId)), now).run();
+    return list.length;
+  }
+  const r = await db.prepare(`UPDATE paper_read SET cleared_at = ?2 WHERE doc_id = ?1 AND read_at IS NOT NULL RETURNING doc_id`).bind(id, undo ? null : now).first();
+  return r ? 1 : 0;
+}
+
+export type ClearedItem = { kind: "run" | "paper"; id: string; at: number; fileName?: string; syllabusId?: string; code?: string; label?: string };
+
+/** Items cleared by hand in the last day, newest first, so a mis-click can be undone. */
+export async function recentlyCleared(db: Db, now = Date.now()): Promise<ClearedItem[]> {
+  const since = now - 86_400_000;
+  const [runs, papers] = await Promise.all([
+    db.prepare(`SELECT id, type, status, params, step, cleared_at FROM job WHERE cleared_at >= ?1 ORDER BY cleared_at DESC LIMIT 20`).bind(since)
+      .all<{ id: string; type: string; status: string; params: string; step: string | null; cleared_at: number }>(),
+    db.prepare(`SELECT p.doc_id, p.cleared_at, d.file_name, d.syllabus_id, y.code FROM paper_read p JOIN source_document d ON d.id = p.doc_id JOIN syllabus y ON y.id = d.syllabus_id
+                WHERE p.cleared_at >= ?1 AND p.cleared_at >= COALESCE(p.read_at, 0) ORDER BY p.cleared_at DESC LIMIT 20`).bind(since)
+      .all<{ doc_id: string; cleared_at: number; file_name: string; syllabus_id: string; code: string }>(),
+  ]);
+  return [
+    ...runs.results.map((r): ClearedItem => ({ kind: "run", id: r.id, at: r.cleared_at, label: describeRun({ ...r, status: "running" })?.label ?? "A run" })),
+    ...papers.results.map((r): ClearedItem => ({ kind: "paper", id: r.doc_id, at: r.cleared_at, fileName: r.file_name, syllabusId: r.syllabus_id, code: r.code })),
+  ].sort((a, b) => b.at - a.at);
 }
 
 export type PaperToReview = { docId: string; fileName: string; code: string; syllabusId: string; open: number; readAt: number; score: { items: number; flags: string; first_items: number | null; first_clean: number | null; first_red: number | null } };
@@ -116,7 +204,7 @@ export async function papersToReview(db: Db, limit = 8): Promise<{ list: PaperTo
   const { results } = await db
     .prepare(`SELECT p.doc_id, p.items, p.flags, p.dismissed, p.read_at, p.first_items, p.first_clean, p.first_red, d.file_name, d.syllabus_id, y.code
               FROM paper_read p JOIN source_document d ON d.id = p.doc_id JOIN syllabus y ON y.id = d.syllabus_id
-              WHERE p.read_at IS NOT NULL AND p.override_at IS NULL`)
+              WHERE p.read_at IS NOT NULL AND p.override_at IS NULL AND (p.cleared_at IS NULL OR p.cleared_at < p.read_at)`)
     .bind()
     .all<{ doc_id: string; items: number; flags: string; dismissed: string; read_at: number; first_items: number | null; first_clean: number | null; first_red: number | null; file_name: string; syllabus_id: string; code: string }>();
   const all = await db.prepare(`SELECT COUNT(*) AS n FROM paper_read WHERE read_at IS NOT NULL`).bind().first<{ n: number }>();

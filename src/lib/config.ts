@@ -70,6 +70,15 @@ export const docTypeLabel = (t: string): string => DOC_TYPE_LABELS[t] ?? OTHER_T
  * learning goals; code checks every word against the PDF's own text and the numbering; a second AI (Gemini) reads
  * the same PDF on its own and the two are compared. Models are Worker vars (CLAUDE_MODEL, GEMINI_MODEL), never here.
  */
+/** Storage on Home (owner, 9 Nov 2026): Cloudflare's free allowances, how long a count is kept, how far a bucket is listed. */
+export const STORAGE = {
+  dbFreeBytes: 5 * 1000 ** 3,
+  filesFreeBytes: 10 * 1000 ** 3,
+  cacheMs: 3_600_000,
+  /** Bucket list calls per count (1,000 objects each); past it the count says "at least". */
+  maxListCalls: 20,
+} as const;
+
 export const BRAIN = {
   /** A run with no sign of life for this long is closed (one Claude answer can take several minutes). */
   staleAfterMs: 30 * 60_000,

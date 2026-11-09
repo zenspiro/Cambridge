@@ -13,7 +13,8 @@ import { StudentFrame } from "@/components/student/StudentFrame";
 import { SignOut } from "@/components/student/SignOut";
 import { StudentNotice } from "@/components/student/Notice";
 import { DetailsFields } from "@/components/student/DetailsFields";
-import { PARENT_NAV, STUDENT_NAV } from "@/components/student/nav";
+import { PARENT_NAV, STUDENT_NAV, withIcons } from "@/components/student/nav";
+import { readIcons } from "@/lib/icons";
 import { ActionForm } from "@/components/ActionForm";
 import { ConfirmSubmit } from "@/components/ConfirmSubmit";
 import { ThemePicker } from "@/components/student/ThemePicker";
@@ -56,7 +57,7 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
   ]);
   const theme = student ? (s.theme ?? brand.defaultTheme) : PARENT_THEME;
   return (
-    <StudentFrame brand={frameBrand(brand)} theme={theme} nav={student ? STUDENT_NAV : PARENT_NAV} current="/me" actions={<SignOut />}>
+    <StudentFrame brand={frameBrand(brand)} theme={theme} nav={withIcons(student ? STUDENT_NAV : PARENT_NAV, await readIcons(db))} current="/me" actions={<SignOut />}>
       <h1 className="s-h1">Me</h1>
       <StudentNotice code={q.e} messages={MESSAGES} errorRef={q.ref} />
 
