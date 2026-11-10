@@ -82,7 +82,9 @@ check(noOrigin.status() === 403, "sign-in POST without Origin is refused");
 const forged = await api.get("/admin", { headers: { cookie: "__Host-admin=forgedtoken123" } });
 check(forged.status() === 307 || forged.status() === 303 || (forged.headers()["location"] ?? "").includes("/admin/login"), "forged cookie gets no admin page");
 
-const ip = net();
+// Its own address, outside every range the other tests pick from (they choose at random): a locked address
+// shared by chance made another test's sign-in fail now and then (CI, 10 Nov 2026).
+const ip = "100.64.0.1";
 let last;
 for (let i = 0; i < 6; i++) {
   last = await api.post("/admin/session", { form: { password: i < 5 ? "wrong" : PASS }, headers: { origin: BASE, "cf-connecting-ip": ip } });

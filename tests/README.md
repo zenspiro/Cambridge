@@ -2,6 +2,8 @@
 
 Admin pages are desktop only (owner decision, 2 Nov 2026): the admin suites run at 1400 px. Public and student pages are tested at 375 px and 1400 px.
 
+Each browser test file must pass on its own fresh database: CI runs them in three groups side by side (`.github/workflows/ci.yml`, job `e2e`). A test that locks an address (admin.mjs: five wrong passwords) uses an address no other test can pick (`100.64.0.1`).
+
 Rule for browser checks: after an in-place update (`ActionForm`, `router.refresh()`), wait for the new content (`locator.waitFor`), never check it the moment the message appears; CI machines are slower.
 
 ## Unit tests (`tests/unit/`, `npm run test:unit`)

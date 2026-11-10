@@ -9,6 +9,7 @@ import { AdminShell, Empty } from "@/components/AdminShell";
 import { ScoreBadge } from "@/components/ScoreBadge";
 import { COUNT_ALL_DOCUMENTS } from "@/lib/library/queries";
 import { dateFmt } from "@/lib/library/labels";
+import { buildInfo } from "@/lib/buildInfo";
 import { describeFile, loadPapers, paperLookup } from "@/lib/library/papers";
 import { activeRuns, activityWords, failedRuns, papersToReview, recentlyCleared } from "@/lib/adminStatus";
 import { ActionForm } from "@/components/ActionForm";
@@ -95,6 +96,17 @@ export default async function AdminHome({ searchParams }: { searchParams: Promis
       </>}
     >
       <Notice code={q.e} messages={MESSAGES} />
+      {/* Which version is live (review, 10 Nov 2026), so "is my fix live" never needs guessing. */}
+      {(() => {
+        const build = buildInfo(env);
+        return (
+          <p className="muted m-0" id="live-build">
+            {build
+              ? <>Live version <a className="link mono" href={`https://github.com/${env.GITHUB_REPO ?? "zenspiro/Cambridge"}/commit/${build.commit}`}>{build.short}</a>{build.at ? `, deployed ${dateFmt.format(build.at)}` : ""}.</>
+              : "Live version: a local build (no commit recorded)."}
+          </p>
+        );
+      })()}
       <div className="tiles" id="home-tiles">
         <Link className="tile-stat card-link" href="/admin/library">
           <span className="tile-stat-label">Source library</span>

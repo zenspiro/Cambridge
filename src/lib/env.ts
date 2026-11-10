@@ -25,6 +25,9 @@ export type AppEnv = CloudflareEnv & {
   OAUTH_CLIENT_SECRET?: string;
   /** "local" (only in .dev.vars) puts emails in the local test mailbox instead of sending them. */
   EMAIL_TRANSPORT?: string;
+  /** The live commit and when it was deployed (ISO time), set by CI; empty locally. */
+  BUILD_COMMIT?: string;
+  BUILD_AT?: string;
 };
 
 /** Cloudflare bindings and vars (D1, R2, settings). Server only. */

@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-10: CI you can trust: no skipped tests, side by side groups, readable failures, live version shown
+
+**What:** following the review of 10 Nov 2026. The browser test that locks an address with five wrong passwords now uses its own address (`100.64.0.1`); before, other tests picked addresses at random from the same 250, and about one run in a hundred landed on the locked one and could not sign in (main's run for the mark scheme fix failed this way, so it was never deployed). The "skip the browser suite after a merge" step is gone: every pull request and every merge runs everything. The browser suite runs in three groups side by side (`e2e` matrix: library and agent, subject brain, accounts and team), each on a fresh database. A failed run ends its log with "Failing checks" (the Worker log is folded above it) and marks each failing check as an error. One job, "All checks passed", is green only when every job is; the deploy waits for it, and it is the check for branch protection. Manual runs get their own concurrency group, so a commit can be run many times to find tests that fail by chance. The deploy writes the commit and time into the Worker's vars (`scripts/set-build-info.ts`, `BUILD_COMMIT`, `BUILD_AT`); admin Home shows "Live version abc1234, deployed ..." with a link to the commit, and `/health` gives `build`.
+
+**Why:** owner, 10 Nov 2026, with the review: merges kept failing or going in on red; the skip opened a second hole; failures were buried under the Worker log; nobody could tell what was live.
+
+**Tested:** `npm run check` exits 0 (new: the live build from the vars). Every browser test file passed on its own fresh database before the groups were made. The full browser suite locally; then the workflow on GitHub.
+
 ## 2026-11-10: Mark scheme checks read a part as all its rows
 
 **What:** for mark schemes (`paperFlags`, kind `ms`): a part's number may repeat (one row per marking point), so only the same row twice is a repeat; Claude's and Gemini's readings are compared per part with all its rows joined and mark codes ("A2", "C1", "B1", "M1") left out, one flag per part, no "PDF's version" copy for a whole part; Gemini's marks are compared per part (the largest row or the sum); the "parts add up to the total" check is skipped (rows hold method marks inside a part's total; `marksAgainstPaper` checks marks against the question paper). `CHECKS_VERSION` 5. Question papers are unchanged.
