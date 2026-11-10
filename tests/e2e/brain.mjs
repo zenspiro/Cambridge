@@ -678,12 +678,32 @@ try {
   const halves2 = await page.evaluate(() => [...document.querySelectorAll(".review-pane")].map((e) => Math.round(e.getBoundingClientRect().width)));
   check(halves2.length === 2 && Math.abs(halves2[0] - halves2[1]) < 4, "the PDF and the rebuilt paper each take half");
 
+  // Documents (owner, 10 Nov 2026): the overview keeps a summary; the list, with a filter on every column, is its own page.
   await page.goto(`${BASE}/admin/library/0625`);
-  check((await page.locator(`#papers-read a[href="/admin/library/review/${paperId}"]`).count()) === 1 && (await page.locator("#papers-read .score-red").count()) === 1, "the subject overview lists papers read with their read accuracy");
-  await page.locator("#papers-read button", { hasText: "Run the checks again on all" }).click();
-  check((await page.locator("#papers-read .confirm").textContent())?.includes("No AI is asked"), "Run the checks again on all asks first, saying no AI is asked");
-  await page.locator("#papers-read button", { hasText: "Yes, check them" }).click();
-  await page.locator("#papers-read .action-note", { hasText: "GITHUB_TOKEN" }).waitFor({ timeout: 10_000 }).then(() => check(true, "it starts with no cost check (only the missing GitHub token stops it here)"), () => check(false, "it starts with no cost check (only the missing GitHub token stops it here)"));
+  check(/1 read/.test((await page.locator("#papers-read").textContent()) ?? "") && (await page.locator('#papers-read a[href="/admin/library/0625/documents"]').count()) >= 1, "the subject overview sums up the papers read and links to Documents");
+  await page.goto(`${BASE}/admin/library/0625/documents`);
+  const docRow = page.locator("#documents tbody tr", { has: page.locator(`a[href="/admin/library/review/${paperId}"]`) });
+  check((await docRow.count()) === 1 && (await docRow.locator(".score-red").count()) === 1 && /\d+%/.test((await docRow.locator(".score").textContent()) ?? "") && !((await docRow.textContent()) ?? "").includes("(est.)"), "Documents lists the read paper with its AI score, no \"(est.)\"");
+  check(/Reviewed|Needs review|Marked ready anyway/.test((await docRow.textContent()) ?? "") && ((await docRow.textContent()) ?? "").includes("Owner"), "its review status and who last reviewed it are their own columns");
+  const docsAll = await page.locator("#documents tbody tr").count();
+  check(docsAll > 1 && (await page.locator("#documents tbody tr", { hasText: "Not readable yet" }).count()) + (await page.locator("#documents tbody tr", { hasText: "Not read yet" }).count()) >= 1, `every stored file is listed, read or not (${docsAll})`);
+  await page.locator('summary[aria-label="Filter Type"]').click();
+  await page.locator('.col-filter-box input[name="type"][value="qp"]').check();
+  await page.locator('.col-filter[open] button', { hasText: "Apply" }).click();
+  await page.waitForURL(/type=qp/);
+  check((await page.locator("#documents tbody tr").count()) >= 1 && (await page.locator("#documents tbody tr").allTextContents()).every((t) => t.includes("Question paper")) && /type=qp/.test(page.url()), "a column's filter keeps only what is ticked, in the address");
+  await page.locator("#documents a.docs-sort", { hasText: "Year" }).click();
+  check(/sort=year/.test(page.url()) && /type=qp/.test(page.url()), "a heading sorts, keeping the filters");
+  await page.locator("#documents a.btn", { hasText: "Clear filters" }).click();
+  check((await page.locator("#documents tbody tr").count()) === docsAll, "Clear filters shows them all again");
+  await page.goto(`${BASE}/admin/library/documents`);
+  check((await page.locator("#documents thead th", { hasText: "Subject" }).count()) === 1 && (await page.locator(`#documents a[href="/admin/library/review/${paperId}"]`).count()) === 1, "the Library's Documents lists every subject with a Subject column");
+  check((await page.locator('.admin-side a[href="/admin/library/documents"]').count()) === 1, "Documents is in the Library menu");
+  await page.goto(`${BASE}/admin/library/0625/documents`);
+  await page.locator("button", { hasText: "Run the checks again on all" }).click();
+  check((await page.locator(".confirm").first().textContent())?.includes("No AI is asked"), "Run the checks again on all asks first, saying no AI is asked");
+  await page.locator("button", { hasText: "Yes, check them" }).click();
+  await page.locator(".action-note", { hasText: "GITHUB_TOKEN" }).waitFor({ timeout: 10_000 }).then(() => check(true, "it starts with no cost check (only the missing GitHub token stops it here)"), () => check(false, "it starts with no cost check (only the missing GitHub token stops it here)"));
   await page.goto(`${BASE}/admin/library/0625/2024/june`);
   check((await page.locator("#to-review .score-red").count()) === 1, "the session page shows the read accuracy beside Review");
   check(rows(`SELECT first_items, first_clean FROM paper_read WHERE doc_id = '${paperId}'`)[0].first_items === 3, "the first reading's numbers are kept, unchanged by the free figure cut");

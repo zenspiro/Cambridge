@@ -14,8 +14,7 @@ import { describeFile, duration, loadPapers, paperLookup, routeText, TIER_LABELS
 import { type ExamSession } from "@/lib/library/slugs";
 import { buildSubjectMap } from "@/lib/library/map";
 import { SubjectMapVersion } from "@/components/SubjectMap";
-import { ScoreBadge } from "@/components/ScoreBadge";
-import { rowScore } from "@/lib/brain/paperRead";
+import { loadDocRows, reviewSummary } from "@/lib/library/documents";
 import { ActionForm } from "@/components/ActionForm";
 import { RunProgress } from "@/components/RunProgress";
 import { latestBatch } from "@/lib/brain/runs";
@@ -31,8 +30,6 @@ const MESSAGES = {
   bad_variants: "Tick at least one variant for each session.",
   busy: "Too many changes this hour. Please wait a little.",
   ok_batch: "Read all started. It reads the papers one after another; the Read all card shows where it is.",
-  ok_check: "The checks are running again on every paper read. No AI is asked; the Read all card shows where it is, and new flags show on each paper's review screen.",
-  check_none: "No paper of this subject has been read yet, so there is nothing to check.",
   batch_none: "Nothing to read: every stored paper in this choice is read already.",
   over_cap: "This would go past your monthly AI cap, so it did not start. Raise the cap on AI setup, or read fewer papers.",
   no_price: "A model in use has no price, so the cap cannot be checked. Set its price on AI setup.",
@@ -112,14 +109,9 @@ export default async function SyllabusOverview({
   // The Read all running for this subject, or the last one (finished in the last 30 minutes): shown live in the card.
   const batchRun = await latestBatch(env.DB, code);
   const batchCost = plan?.toRead.length ? await batchCostCheck(env.DB, env, plan.toRead.map((d) => d.bytes)) : null;
-  // Papers read so far, with their read accuracy (owner, 7 Nov 2026), weakest first so they stand out.
-  const { results: readRows } = await env.DB
-    .prepare(`SELECT p.doc_id, p.items, p.flags, p.read_at, p.first_items, p.first_clean, p.first_red, d.file_name, d.syllabus_id
-              FROM paper_read p JOIN source_document d ON d.id = p.doc_id
-              WHERE p.read_at IS NOT NULL AND d.syllabus_id LIKE ?1 ORDER BY p.read_at DESC LIMIT 200`)
-    .bind(`${code}-%`)
-    .all<{ doc_id: string; items: number; flags: string; read_at: number; first_items: number | null; first_clean: number | null; first_red: number | null; file_name: string; syllabus_id: string }>();
-  const read = readRows.map((r) => ({ ...r, score: rowScore(r) })).sort((a, b) => (a.score?.pct ?? 101) - (b.score?.pct ?? 101));
+  // Reading and review in one line; the list itself is the Documents page (owner, 10 Nov 2026: it will grow).
+  const sum = reviewSummary(await loadDocRows(env.DB, [code]));
+  const docs = `/admin/library/${code}/documents`;
 
   return (
     <AdminShell
@@ -128,6 +120,7 @@ export default async function SyllabusOverview({
       crumbs={[{ label: "Library", href: "/admin/library" }, { label: header.qualification_name }, { label: `${header.subject_name} ${code}` }]}
       actions={<>
         {canEdit ? <Link className="btn btn-primary" href={`/admin/library/folder?code=${code}`}>Upload a folder</Link> : null}
+        <Link className="btn" href={docs}>Documents</Link>
         {adminView ? <Link className="btn" href={`/admin/agent?code=${code}`}>Run the agent</Link> : null}
         {adminView ? <Link className="btn" href={`/admin/library/${code}/topics`}>Topic tree</Link> : null}
       </>}
@@ -136,7 +129,7 @@ export default async function SyllabusOverview({
       <nav className="jump" aria-label="On this page">
         <span className="muted">On this page:</span>
         {owner ? <a className="link" href="#read-all">Read all</a> : null}
-        {read.length ? <a className="link" href="#papers-read">Papers read</a> : null}
+        <a className="link" href="#papers-read">Papers read</a>
         {!view.filtered ? <a className="link" href="#map">Subject map</a> : null}
         <a className="link" href="#find">Search the files</a>
         <a className="link" href="#papers">Papers and routes</a>
@@ -222,32 +215,24 @@ export default async function SyllabusOverview({
         ) : null}
       </section> : null}
 
-      {read.length ? (
-        <section className="card stack" id="papers-read">
-          <div className="card-head">
-            <h2 className="subtitle">Papers read ({read.length})</h2>
-            {/* Run the checks again on all of them (owner, 9 Nov 2026): no AI, so nothing is spent. */}
-            {owner ? (
-              <ActionForm action={`/admin/library/${code}/check-all`} messages={MESSAGES} yes="Yes, check them" no="No"
-                confirm={`Check all ${Math.min(read.length, BRAIN.maxBatchPapers)} readings again with the latest checks? No AI is asked, so nothing is spent. Fixes stay; new flags show on each paper.`}>
-                <button className="btn" type="submit">Run the checks again on all</button>
-              </ActionForm>
-            ) : null}
-          </div>
-          <p className="muted m-0">Read accuracy: how well the AIs read each paper by themselves on its first reading. Weakest first.</p>
-          <ul className="review-list">
-            {read.map((r) => (
-              <li key={r.doc_id} className="review-list-row">
-                <span>{describeFile(r.file_name, r.syllabus_id, look)}</span>
-                <ScoreBadge score={r.score} />
-                <span />
-                {/* A full page load: the review page's own security policy frames the PDF. */}
-                <a className="btn btn-small" href={`/admin/library/review/${encodeURIComponent(r.doc_id)}`}>Review</a>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+      <section className="card stack" id="papers-read">
+        <div className="card-head">
+          <h2 className="subtitle">Papers read</h2>
+          <Link className="btn btn-small" href={docs}>Open Documents</Link>
+        </div>
+        {sum.read ? (
+          <p className="m-0">
+            {sum.read} read:{" "}
+            {[
+              sum.needs ? <Link key="n" className="link" href={`${docs}?status=needs`}>{sum.needs} need review</Link> : null,
+              sum.override ? <Link key="o" className="link" href={`${docs}?status=override`}>{sum.override} marked ready anyway</Link> : null,
+              sum.ready ? <Link key="r" className="link" href={`${docs}?status=ready`}>{sum.ready} ready, not checked by a person</Link> : null,
+              sum.reviewed ? <Link key="v" className="link" href={`${docs}?status=reviewed`}>{sum.reviewed} reviewed</Link> : null,
+            ].filter(Boolean).flatMap((x, i) => (i ? [", ", x] : [x]))}
+            {sum.unread ? <span className="muted">. {sum.unread} question papers and mark schemes not read yet.</span> : "."}
+          </p>
+        ) : <p className="muted m-0">No paper of this subject has been read yet. Read all above reads them; every stored file is listed on the Documents page.</p>}
+      </section>
 
       {!view.filtered ? (
         <>

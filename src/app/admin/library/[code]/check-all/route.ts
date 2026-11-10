@@ -13,7 +13,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
   const base = /^[0-9]{4}$/.test(code) ? `/admin/library/${code}` : "/admin/library";
   return staffPost(request, base, ADMIN_EDIT, async ({ db, env, actorId }) => {
     if (base === "/admin/library") return "bad";
-    const back = (e: string) => `${base}?e=${e}#papers-read`;
+    const back = (e: string) => `${base}/documents?e=${e}`;
     const { results } = await db
       .prepare(`SELECT p.doc_id FROM paper_read p JOIN source_document d ON d.id = p.doc_id
                 WHERE p.read_at IS NOT NULL AND d.status = 'stored' AND d.syllabus_id LIKE ?1 ORDER BY d.file_name LIMIT ?2`)

@@ -7,11 +7,11 @@ const WORDS = { green: "Green", amber: "Amber", red: "Red" } as const;
 
 export function ScoreBadge({ score, long = false }: { score: PaperScore | null; long?: boolean }) {
   if (!score) return null;
-  const title = `${score.clean} of ${score.items} parts read with no flag${score.red ? `, ${score.red} wording flag${score.red === 1 ? "" : "s"}` : ""}${score.estimated ? " (estimated from the saved flags: read before the score was kept)" : ""}`;
+  const title = `${score.clean} of ${score.items} parts read with no flag${score.red ? `, ${score.red} wording flag${score.red === 1 ? "" : "s"}` : ""}`;
   return (
     <span className={`score score-${score.colour}`} title={`${WORDS[score.colour]}: ${title}`}>
       <span className="score-dot" aria-hidden="true" />
-      <span className="sr-only">{WORDS[score.colour]}: </span>{score.pct}%{score.estimated ? " (est.)" : ""}
+      <span className="sr-only">{WORDS[score.colour]}: </span>{score.pct}%
       {long ? <span className="score-detail"> read accuracy: {title}</span> : <span className="sr-only"> read accuracy: {title}</span>}
     </span>
   );

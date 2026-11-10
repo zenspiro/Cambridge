@@ -121,6 +121,21 @@
   .table td { @apply border-b border-line px-3 py-2 align-top; }
   .table tbody tr:hover { @apply bg-wash; }
   .table .num { @apply text-right tabular-nums; }
+  /* Documents (owner, 10 Nov 2026): one table, a filter under every heading. */
+  .pill-muted { @apply border-line bg-wash text-muted; }
+  .docs-bar { @apply flex flex-wrap items-end gap-3; }
+  .docs-bar .field-search { @apply min-w-72 flex-1; }
+  .docs-count { @apply ml-auto; }
+  .docs-table th, .docs-table td { @apply px-2 text-sm; }
+  .docs-table .score, .docs-table .pill, .docs-none { @apply whitespace-nowrap; }
+  .docs-sort { @apply text-sm font-semibold; }
+  .docs-filters td { @apply bg-wash py-1; }
+  .col-filter { @apply relative; }
+  .col-filter > summary { @apply cursor-pointer text-sm text-blue-700; }
+  .col-filter[open] > .col-filter-box { @apply absolute left-0 top-full z-20 mt-1 flex max-h-80 min-w-56 flex-col gap-1 overflow-y-auto rounded border border-line bg-paper p-3 shadow-lg; }
+  .col-filter-box .check-inline { @apply text-sm; }
+  .input-compact { @apply py-1 text-sm; }
+  .docs-pages { @apply flex items-center justify-center gap-3; }
   /* Empty states: what is missing and what to do. */
   .empty { @apply flex flex-col items-start gap-2 rounded-lg border border-dashed border-line bg-wash px-4 py-5; }
   .empty-title { @apply font-semibold; }
