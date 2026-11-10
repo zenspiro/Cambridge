@@ -723,6 +723,34 @@ export function leadExtra(itemText: string, lead: string): string[] {
 }
 
 /**
+ * A part's text without its lead-in, only when the text starts with exactly the lead-in's letters and digits (spacing,
+ * punctuation, case and markup aside) and the rest begins at a word: the rest, trimmed. Null otherwise, so nothing
+ * is cut from the middle of a sentence ("On Fig. 6.1, label ..."). Pure.
+ */
+export function stripLead(text: string, lead: string, own: readonly string[] = []): string | null {
+  const want = flatText(lead).toLowerCase();
+  if (want.length < 8) return null;
+  const label = (t: string) => /^(\d{1,2}|\([a-z]{1,4}\))$/.test(t);
+  const words = text.split(/\s+/).filter(Boolean);
+  // A printed question number or part label before the lead-in ("1 In this experiment ...") is not its text.
+  let k = 0;
+  while (k < words.length && label(words[k]!) && !want.startsWith(flatText(words[k]!).toLowerCase() + flatText(words[k + 1] ?? "").toLowerCase().slice(0, 1))) k++;
+  let got = "";
+  for (; k < words.length; k++) {
+    got += flatText(words[k]!).toLowerCase();
+    if (got === want) {
+      let rest = words.slice(k + 1);
+      // Signs that close the lead-in ("800 Ω.") belong to it; then the part's own labels ("(a) (i)") are not its text.
+      while (rest.length && !flatText(rest[0]!)) rest = rest.slice(1);
+      while (rest.length && own.includes(rest[0]!)) rest = rest.slice(1);
+      return rest.join(" ").trim();
+    }
+    if (!want.startsWith(got)) return null;
+  }
+  return null;
+}
+
+/**
  * A first sub-part's text without the lead-in merged into it: its leading sentences (or lines) whose words are the
  * lead-in's are dropped. Pure.
  */

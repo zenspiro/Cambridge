@@ -8,7 +8,7 @@
 import { BRAIN } from "../config.ts";
 import { coverage, similarity, squash, textIndex, type TextIndex } from "./topics.ts";
 import type { Box, FigureCut } from "./figures.ts";
-import { leadExtra, leadInProblems, lostNotation, normaliseNotation, notationPlain, withoutLead, type OutlinePart } from "./notation.ts";
+import { leadExtra, leadInProblems, stripLead, lostNotation, normaliseNotation, notationPlain, withoutLead, type OutlinePart } from "./notation.ts";
 
 export type PaperKind = "qp" | "ms";
 export type PaperOption = { letter: string; text: string };
@@ -413,6 +413,86 @@ export function structureFlags(items: readonly PaperItem[], outline: readonly Ou
       : `Question ${p.number} has opening text in the paper (before ${sub}) that the reading leaves out.`;
     return { key: `structure:${p.child}:${p.number}`, item: p.child, kind: "structure" as const, colour: "red" as const, reason, pdfText: p.lead, fingerprint: fingerprint("structure", squash(p.lead), p.merged ? "merged" : "lost"), v: CHECKS_VERSION };
   })];
+}
+
+const realWordSet = (s: string) => new Set(s.normalize("NFKD").toLowerCase().match(/[a-z]{4,}/g) ?? []);
+
+/** What an automatic fix must leave alone (owner, 10 Nov 2026: "not mess up something else"). */
+export type AutoHold = {
+  /** Flags settled by a person: "It's fine" on this paper or as a rule for the subject. */
+  fingerprints: readonly string[];
+  /** Automatic fixes a person undid: never made again. */
+  keys: readonly string[];
+  /** Parts a person fixed or edited by hand: never touched. */
+  items: readonly string[];
+};
+export type AutoFix = {
+  /** flags: the one flag this fix settled (Undo brings it back beside the flags open then). */
+  key: string; item: string; before: PaperItem; lead?: string; text?: string; flags: Flag[];
+  /** Gemini's part as it was, when the same fix was made in Gemini's reading (so they are compared like for like). */
+  gemini?: PaperItem;
+};
+
+/**
+ * Opening text put right without a click (owner, 10 Nov 2026): a lead-in joined to its first part is split off, and a
+ * lead-in carrying a figure's words gets the paper's own words, both from the outline the PDF prints. One at a time,
+ * and kept only when every check run again on the whole paper agrees: that flag is gone and no flag appears anywhere
+ * that was not there before (the words are all printed, nothing else moved). Question papers with an outline only;
+ * what a person settled, undid or edited by hand is left alone. Pure.
+ */
+export function autoFixLeads(input: CheckInput, hold: AutoHold): { content: PaperContent; gemini: PaperContent | null; fixes: AutoFix[] } {
+  let content = input.content;
+  let gemini = input.gemini;
+  const fixes: AutoFix[] = [];
+  if (content.kind !== "qp" || !input.outline?.length) return { content, gemini, fixes };
+  const settled = new Set(hold.fingerprints);
+  const undone = new Set(hold.keys);
+  const hands = new Set(hold.items);
+  const tried = new Set<string>();
+  const sig = (f: Flag) => `${f.key}|${f.fingerprint}`;
+  for (let n = 0; n < BRAIN.maxPaperItems; n++) {
+    const flags = paperFlags({ ...input, content, gemini });
+    const f = flags.find((x) => x.kind === "structure" && !x.key.endsWith(":table") && x.pdfText && !tried.has(x.key)
+      && !settled.has(x.fingerprint) && !undone.has(x.key) && !hands.has(x.item));
+    if (!f) break;
+    tried.add(f.key);
+    const before = content.items.find((i) => i.number === f.item);
+    if (!before) continue;
+    const split = isSplitFlag(f);
+    const lead = split ? f.key.split(":").at(-1) ?? "" : undefined;
+    if (lead !== undefined && hands.has(lead)) continue;
+    // Exact cuts only: the part keeps everything after the lead-in's own words (none of them when it was left out);
+    // a lead-in's figure words are dropped only when they follow its words and hold no sentence.
+    const ownLabel = f.item.match(/\([a-z]+\)/g) ?? [];
+    const rest = stripLead(before.text, f.pdfText, ownLabel);
+    if (split) {
+      const shared = realWordSet(f.pdfText);
+      const joined = realWordSet(before.text);
+      if (rest === null && [...shared].some((w) => joined.has(w))) continue;
+    } else if (rest === null || /[a-z]{3,}[.?!](\s|$)/i.test(rest.replace(/Fig(ure)?\.?\s*\d+\.\d+/gi, ""))) continue;
+    const exact = (c: PaperContent) => {
+      if (!split) return figuresToLeads({ ...c, items: c.items.map((i) => (i.number === f.item ? { ...i, text: normaliseNotation(str(f.pdfText, BRAIN.maxItemText)) } : i)) });
+      const own = c.items.find((i) => i.number === f.item);
+      const r = own ? stripLead(own.text, f.pdfText, ownLabel) : null;
+      const out = splitLeadIn(c, f.item, lead!, f.pdfText);
+      return out && own ? { ...out, items: out.items.map((i) => (i.number === f.item ? { ...i, text: r ?? own.text } : i)) } : null;
+    };
+    const fix = exact;
+    const next = fix(content);
+    if (!next) continue;
+    // The same fix in Gemini's reading when it has the part the same way, so the two are compared like for like.
+    const gBefore = gemini?.items.find((i) => i.number === f.item);
+    const gNext = gemini && gBefore && !gemini.items.some((i) => i.number === (split ? lead : "\u0000")) ? fix(gemini) : null;
+    const child = next.items.find((i) => i.number === f.item);
+    if (!child || !child.text.trim()) continue;
+    const had = new Set(flags.map(sig));
+    const after = paperFlags({ ...input, content: next, gemini: gNext ?? gemini });
+    if (after.some((x) => x.key === f.key) || after.some((x) => !had.has(sig(x)))) continue;
+    fixes.push({ key: f.key, item: f.item, before, ...(split ? { lead } : { text: child.text }), flags: [f], ...(gNext && gBefore ? { gemini: gBefore } : {}) });
+    content = next;
+    if (gNext) gemini = gNext;
+  }
+  return { content, gemini, fixes };
 }
 
 /** A structure flag whose fix splits a lead-in off its first part (not a lead-in's own words, not a table). */

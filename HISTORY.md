@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-10: Opening text put right without a click
+
+**What:** every final save of a question paper (a reading, Read all, Run the checks again) runs `autoFixLeads` (paper.ts) after the checks: a lead-in joined to its first part is split off, and a lead-in holding a figure's words gets the paper's own words, both from the outline. Safety rules: one fix at a time, kept only when every check run again on the whole paper agrees (that flag gone, no flag anywhere that was not there before); cuts are exact (`stripLead`: the part must start with exactly the lead-in's letters and digits, else nothing is cut and the flag stays for a person); the same fix is made in Gemini's copy so the comparison stays like for like; never a part a person edited or gave the PDF's words by hand, a flag settled with It's fine (paper or subject rule), or a fix a person undid (`autoHold`, sent in the job's `prior.hold`). Each fix is recorded in `paper_fix` with actor `auto` ("Automatic fix" in Changes) and Undo puts the part back in both readings and brings back the one flag it settled (`merge`, `undoFlags`, `restoreGemini`). Question papers with an outline only.
+
+**Why:** owner, 10 Nov 2026: fixing opening text by hand on papers already read is "a very time consuming task"; "I just need to be ensured that the auto fixes do it right and not mess up something else".
+
+**Tested:** `npm run check` exits 0 (252 unit tests; new: exact cuts (never at "Fig."), the fixer's results and hold rules, recorded as Automatic fix, Undo in both readings, not made again after an Undo, hand-edited parts left alone). Dry run on the five live question papers read so far (read-only, nothing written): Mar 2025 Paper 42 8 fixes, Nov 2025 Paper 42 10, Paper 52 3, Paper 62 6, Paper 22 none needed; every part not fixed is unchanged word for word; Nov 2025 9(b) (with a table) is left for a person. An earlier rule that cut at the full stop of "On Fig. 6.1" was caught by this dry run and replaced. Browser suite from a fresh database, all 592 checks passing.
+
 ## 2026-11-09: Figures belong to the lead-in that prints them
 
 **What:** the outline leaves out each labelled figure's drawing with its labels (`findBoxes` captions, plus `labelBoxes`: short label lines between the last question line and a "Fig. N.N" line) and the "Fig. 2.1 (not drawn to scale)" line itself (`isCaptionLine`); a full sentence is always kept. `figuresToLeads` moves a figure from a part to the lead-in that says "Fig. N.N" (on every save and on "Give it its own part"). A lead-in item holding a figure's words (`leadExtra`: every printed lead-in word plus two or more others, numbers counted) gets a red flag `structure:<n>:lead` whose "Use the PDF's version" gives the paper's own words (`isSplitFlag` tells it from a split). The prompt says a figure printed before the first part goes on the lead-in. `CHECKS_VERSION` 3.
