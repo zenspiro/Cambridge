@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { ActionForm } from "@/components/ActionForm";
 import { Notation, PaperTables } from "@/components/Notation";
-import { isLeadIn, isSplitFlag, isStale, type Flag, type FlagColour, type PaperItem } from "@/lib/brain/paper";
+import { holdsTable, isLeadIn, isSplitFlag, isStale, type Flag, type FlagColour, type PaperItem } from "@/lib/brain/paper";
 import type { FixView } from "@/lib/brain/paperRead";
 
 export type ReviewFigure = { id: string; page: number; caption: string; description: string; shown: boolean; cut: string };
@@ -34,6 +34,7 @@ const MESSAGES = {
   ok_fixed: "Fixed.",
   still_flagged: "Saved, but it is still not found in the PDF. Check it, or press It's fine.",
   stale: "This flag is from older checks. Press Run the checks again first.",
+  has_table: "Not split: this part holds a table, which would be lost. Press Read it again instead.",
   ok_undone: "Undone.",
   ok_started: "Started. Progress shows at the top.",
   running: "A brain run is already going. Wait for it to finish.",
@@ -527,11 +528,14 @@ function FlagBox({ flag, base, busy, item, current, onAdjust, canFix, canRead, o
   const done = flag.item === "paper" || flag.kind === "missing" ? undefined : onFixed([flag.item]);
   const isItem = flag.item !== "paper" && flag.kind !== "figure" && flag.kind !== "missing";
   const stale = isStale(flag) && !!flag.pdfText && isItem;
+  // A part with a table is never split by code (its table would be lost): read it again instead.
+  const tableSplit = isSplitFlag(flag) && !!item && holdsTable(item);
   return (
     <div className={`flag-box flag-${flag.colour}${current ? " flag-current" : ""}`} data-flag={flag.key}>
       <p className="flag-reason"><span className="flag-tag">{COLOUR_WORDS[flag.colour]}</span> {flag.reason}</p>
       {flag.pdfText && isItem ? <p className="flag-pdf"><span className="muted">{flag.kind === "structure" ? "The paper's lead-in:" : "The PDF says:"}</span> <Notation text={flag.pdfText} /></p> : null}
       {stale ? <p className="flag-stale-note">Checked before the latest update. Run the checks again to use this fix.</p> : null}
+      {tableSplit && !stale ? <p className="flag-stale-note">This part holds a table, so its opening text cannot be split off here without losing the table. Use Read it again.</p> : null}
       {canFix ? <div className="row-actions">
         {flag.kind === "figure" ? (
           <>
@@ -548,7 +552,7 @@ function FlagBox({ flag, base, busy, item, current, onAdjust, canFix, canRead, o
               <ActionForm action={fix} messages={MESSAGES} onDone={isSplitFlag(flag) ? onFixed([flag.item, flag.key.split(":").at(-1) ?? ""]) : done}>
                 <input type="hidden" name="action" value="pdf" />
                 <input type="hidden" name="key" value={flag.key} />
-                <button className="btn btn-small" type="submit" disabled={stale}>{isSplitFlag(flag) ? "Give it its own part" : "Use the PDF's version"}</button>
+                <button className="btn btn-small" type="submit" disabled={stale || tableSplit}>{isSplitFlag(flag) ? "Give it its own part" : "Use the PDF's version"}</button>
               </ActionForm>
             ) : null}
             {flag.item !== "paper" && canRead ? (

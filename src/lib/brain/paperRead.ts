@@ -10,7 +10,7 @@ import { BRAIN } from "../config.ts";
 import { CLAUDE_MODEL_RE, GEMINI_MODEL_RE } from "./aiSetup.ts";
 import { cleanArt, cleanBox, cropSvg, pageSvg, wholePage, type PageArt } from "./figures.ts";
 import { stripLead } from "./notation.ts";
-import { cleanPaper, editItem, isSplitFlag, type AutoHold, isStale, splitLeadIn, paperScore, storedScore, type PaperScore, marksAgainstPaper, openFlags, recheckItem, type Flag, type FlagKind, type PaperContent, type PaperItem, type PaperKind } from "./paper.ts";
+import { cleanPaper, editItem, holdsTable, isSplitFlag, type AutoHold, isStale, splitLeadIn, paperScore, storedScore, type PaperScore, marksAgainstPaper, openFlags, recheckItem, type Flag, type FlagKind, type PaperContent, type PaperItem, type PaperKind } from "./paper.ts";
 
 export const PAPER_KINDS: readonly PaperKind[] = ["qp", "ms"];
 const KINDS: readonly FlagKind[] = ["words", "numbers", "marks", "numbering", "figure", "agree", "missing", "text", "notation", "structure"];
@@ -361,7 +361,7 @@ export async function autoHold(db: Db, doc: Pick<DocInfo, "id" | "code">): Promi
 // ---------- Fixes ----------
 
 export type FixAction = "pdf" | "edit" | "fine" | "looks_right" | "box" | "override" | "unoverride" | "review" | "unreview" | "undo";
-export type FixResult = "ok_fixed" | "ok_undone" | "ok_ready" | "ok_reviewed" | "ok_unreviewed" | "still_flagged" | "stale" | "bad" | "not_read";
+export type FixResult = "ok_fixed" | "ok_undone" | "ok_ready" | "ok_reviewed" | "ok_unreviewed" | "still_flagged" | "stale" | "has_table" | "bad" | "not_read";
 
 /**
  * The flags after an Undo: as they were before the fix, or for an automatic fix (one of many in a run, `merge`) the
@@ -439,6 +439,8 @@ export async function applyFix(db: Db, bucket: Bucket, doc: DocInfo, action: Fix
       // A lead-in joined to its first part (or left out): it becomes its own item before that part, in the paper's words.
       if (action === "pdf" && flag && isSplitFlag(flag)) {
         const parent = flag.key.split(":").at(-1) ?? "";
+        const joined = view.content.items.find((x) => x.number === flag.item);
+        if (joined && holdsTable(joined)) return "has_table";
         const content = splitLeadIn(view.content, flag.item, parent, flag.pdfText);
         if (!content || !flag.pdfText) return "bad";
         const pages = await loadPages(bucket, doc.id);
