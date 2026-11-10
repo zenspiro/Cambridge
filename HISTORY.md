@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-10: Mark scheme checks read a part as all its rows
+
+**What:** for mark schemes (`paperFlags`, kind `ms`): a part's number may repeat (one row per marking point), so only the same row twice is a repeat; Claude's and Gemini's readings are compared per part with all its rows joined and mark codes ("A2", "C1", "B1", "M1") left out, one flag per part, no "PDF's version" copy for a whole part; Gemini's marks are compared per part (the largest row or the sum); the "parts add up to the total" check is skipped (rows hold method marks inside a part's total; `marksAgainstPaper` checks marks against the question paper). `CHECKS_VERSION` 5. Question papers are unchanged.
+
+**Why:** owner, 10 Nov 2026: mark schemes showed many Wording flags (Mar 2025 Paper 42: 144 flags). The checks were written for question papers, where a part appears once: every extra row was "appears twice", each of Claude's rows was compared with one Gemini row, method marks were read as different marks, and Gemini keeps the mark codes Claude leaves out.
+
+**Tested:** `npm run check` exits 0 (258 unit tests; new: rows compared together, codes ignored, repeated numbers allowed, the same row twice still flagged, a real difference flagged once per part, marks per part). Read-only on the live mark schemes: Mar 2025 Paper 42 144 to 5 flags (left: a table as text lines, a number not printed, a lost superscript, 5(b)(ii) marks), Papers 52 and 62 36 and 26 to 0, Nov 2025 Paper 42 2 to 0; every cleared part reads word for word the same once rows are joined, or differs only by mark codes. Question papers unchanged. Browser suite from a fresh database.
+
 ## 2026-11-10: No false Wording flags on parts whose opening text was split off
 
 **What:** when Claude's and Gemini's readings are compared, Gemini's part with opening text that our reading holds as its own item still joined on (an exact cut, `stripLead`, of the opening texts just before the part: `leadsBefore`, `withoutLeads` in paper.ts) counts as the same reading, and its "PDF's version" no longer carries the opening text. A lead-in split by hand on the review screen is now made in Gemini's copy too (`splitGemini` in paperRead.ts, kept in the fix's `before.gemini` so Undo puts it back), as the automatic fix already did. `CHECKS_VERSION` 4: flags from older checks show the stale note and their PDF fix is off until the checks run again.

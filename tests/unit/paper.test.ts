@@ -478,3 +478,19 @@ test("Gemini's part with our opening text still joined on agrees with ours; a re
   const differs = { ...content, items: [{ ...part, text: `${lead.text} (a) Determine how many weeks the Earth needs.` }] };
   assert.ok(paperFlags({ content, pages, gemini: differs }).some((f) => f.kind === "agree" && f.item === "10(a)"));
 });
+
+test("mark schemes: a part's rows are compared together, mark codes ignored, repeated part numbers are not repeats", () => {
+  const row = (number: string, text: string, marks: number) => ({ number, page: 2, text, marks, options: [], answerLines: 0, figures: [], guidance: "", tables: [] });
+  const pages = [PAGES[0]!, "1(a) 50 000 N / m A2 (k =) F ÷ x C1 1(b) rocky B1 gaseous B1"];
+  const ours = { kind: "ms" as const, totalMarks: 80, figures: [], items: [row("1(a)", "50 000 N / m", 2), row("1(a)", "(k =) F ÷ x", 1), row("1(b)", "rocky", 1), row("1(b)", "gaseous", 1)] };
+  const gem = { ...ours, items: [row("1(a)", "50 000 N / m A2\n(k =) F ÷ x C1", 2), row("1(b)", "rocky B1", 1), row("1(b)", "gaseous B1", 1)] };
+  const flags = paperFlags({ content: ours, pages, gemini: gem });
+  assert.deepEqual(flags.map((f) => f.key), [], "same marking points, kept as rows or as one; no total check; no repeats");
+  const twice = { ...ours, items: [...ours.items, row("1(b)", "gaseous", 1)] };
+  assert.ok(paperFlags({ content: twice, pages, gemini: null }).some((f) => f.kind === "numbering"), "the same row twice is a repeat");
+  const differs = { ...gem, items: [row("1(a)", "the gradient of the force against extension line A2\nany two correct readings from the graph C1", 2), ...gem.items.slice(1)] };
+  const real = paperFlags({ content: { ...differs, items: [row("1(a)", "the gradient of the force against extension line", 2), ...ours.items.slice(2)] }, pages, gemini: gem });
+  assert.deepEqual(real.filter((f) => f.kind === "agree").map((f) => f.key), ["agree:1(a)"], "a real difference: one flag for the part");
+  const marks = { ...gem, items: [row("1(a)", "50 000 N / m A2\n(k =) F ÷ x C1", 4), ...gem.items.slice(1)] };
+  assert.deepEqual(paperFlags({ content: ours, pages, gemini: marks }).filter((f) => f.kind === "marks").map((f) => f.key), ["marks:1(a):gemini"]);
+});
