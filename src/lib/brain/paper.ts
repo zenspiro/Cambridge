@@ -71,9 +71,9 @@ export type Flag = {
 /**
  * Bump when a check changes what it finds or the text a fix copies (owner, 9 Nov 2026: a flag kept from older checks,
  * for example one Undo put back, must not be fixed with its old text). 2: the outline read as printed. 3: figures left out of lead-ins, figures on their lead-in. 4: Gemini's part with our
- * opening text still joined on agrees.
+ * opening text still joined on agrees. 5: a mark scheme's rows are compared per part.
  */
-export const CHECKS_VERSION = 4;
+export const CHECKS_VERSION = 5;
 
 /** Raised by older checks: shown with a note, and its "Use the PDF's version" / "Give it its own part" is off. */
 export const isStale = (f: Pick<Flag, "v">) => (f.v ?? 1) < CHECKS_VERSION;
@@ -211,6 +211,9 @@ export function fingerprint(...parts: string[]): string {
 }
 
 /** Everything of an item that must be in the PDF: its wording and its options. */
+/** A mark scheme's mark codes ("A2", "C1", "B1", "M1"), printed beside its marking points. */
+const MARK_CODE = /\b[ABCM][0-9]\b/g;
+
 export const itemWording = (it: Pick<PaperItem, "text" | "options"> & { tables?: PaperTable[] }) =>
   [it.text, ...it.options.map((o) => o.text), ...(it.tables ?? []).flatMap((t) => [t.label, ...t.rows.flat()])].filter(Boolean).join(" ");
 
@@ -317,7 +320,9 @@ export function paperFlags({ content, pages, gemini, outline }: CheckInput): Fla
   if (!textOk) add("text", "paper", "The PDF's text could not be read (a scan?), so wording and numbers were not checked against it.", "unreadable");
   const seen = new Set<string>();
   for (const it of content.items) {
-    if (seen.has(it.number)) add("numbering", it.number, `Question ${it.number} appears twice.`, it.number + itemWording(it), "", `#${content.items.indexOf(it)}`);
+    // A mark scheme prints one row per marking point, so a part's number repeats; only the same row twice is a repeat.
+    const repeat = content.kind === "ms" ? content.items.slice(0, content.items.indexOf(it)).some((x) => x.number === it.number && squash(x.text) === squash(it.text)) : seen.has(it.number);
+    if (repeat) add("numbering", it.number, `Question ${it.number} appears twice.`, it.number + itemWording(it), "", `#${content.items.indexOf(it)}`);
     seen.add(it.number);
     if (textOk) {
       const wording = itemWording(it);
@@ -344,7 +349,9 @@ export function paperFlags({ content, pages, gemini, outline }: CheckInput): Fla
       add("structure", it.number, "A table is written as text lines with \"|\". Read it again to keep it as a table.", `table|${it.text}`, "", ":table");
     }
   }
-  if (content.totalMarks !== null) {
+  // A mark scheme's rows hold method marks inside a part's total, so its rows never add up to the paper's total; its
+  // marks are checked against the question paper instead (marksAgainstPaper).
+  if (content.totalMarks !== null && content.kind !== "ms") {
     const sum = content.items.reduce((a, it) => a + (it.marks ?? 0), 0);
     if (sum > 0 && sum !== content.totalMarks) add("marks", "paper", `The parts add up to ${sum} marks, but the paper's total is ${content.totalMarks}.`, `${sum}/${content.totalMarks}`);
     if (textOk && !nums.has(String(content.totalMarks))) add("numbers", "paper", `The total of ${content.totalMarks} marks is not printed in the PDF.`, `total ${content.totalMarks}`);
@@ -353,7 +360,31 @@ export function paperFlags({ content, pages, gemini, outline }: CheckInput): Fla
     const flag = figureFlag(f);
     if (flag) add("figure", f.id, flag.reason, flag.what);
   }
-  if (gemini) {
+  if (gemini && content.kind === "ms") {
+    // Mark schemes (owner, 10 Nov 2026): a part is all its rows, read in order; one reading may keep a part's marking
+    // points as rows and the other as one, and mark codes ("A2", "C1") may or may not be kept. So the part's rows are
+    // compared together, and once per part; its marks by the part's largest row (the answer's total) or the sum.
+    const rows = (items: readonly PaperItem[]) => {
+      const m = new Map<string, PaperItem[]>();
+      for (const x of items) m.set(x.number, [...(m.get(x.number) ?? []), x]);
+      return m;
+    };
+    const ours = rows(content.items);
+    const theirs = rows(gemini.items);
+    const plain = (xs: readonly PaperItem[]) => xs.map(itemWording).join(" ").replace(MARK_CODE, " ");
+    const most = (xs: readonly PaperItem[]) => Math.max(...xs.map((x) => x.marks ?? 0));
+    const total = (xs: readonly PaperItem[]) => xs.reduce((a, x) => a + (x.marks ?? 0), 0);
+    for (const [number, mine] of ours) {
+      const other = theirs.get(number);
+      if (!other) continue;
+      const a = plain(mine), b = plain(other);
+      if (similarity(a, b) < BRAIN.sameText && !(textOk && found(a) && !found(b))) add("agree", number, "Claude and Gemini read this part of the mark scheme differently.", `${a}|${b}`);
+      if (most(mine) !== most(other) && total(mine) !== total(other)) add("marks", number, `Gemini reads ${most(other)} marks here, we have ${most(mine)}.`, `${most(mine)}|${most(other)}|${a}`, "", ":gemini");
+    }
+    for (const [number, other] of theirs) {
+      if (!ours.has(number)) add("missing", number, `Gemini found ${number} in the mark scheme; our reading does not have it.`, plain(other));
+    }
+  } else if (gemini) {
     const theirs = new Map(gemini.items.map((g) => [g.number, g]));
     const ours = new Set(content.items.map((i) => i.number));
     for (const it of content.items) {
