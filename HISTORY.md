@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-10: Read it again on a first part also reads the opening text above it
+
+**What:** `withLeadIns` (paper.ts): "Read it again" on a first part ("(a)", "(i)") also asks for the opening text of its question or part ("9(b)(i)" reads 9(b) too; "1(a)(i)" reads 1(a) and 1). `mergeReading` already puts a returned opening text back before its part, tables included. The `/read` route expands the parts asked for.
+
+**Why:** owner, 10 Nov 2026: on Nov 2025 Paper 42, after the jumbled split was undone, Read it again on 9(b)(i) asked Claude for that part only; the part came back right, but 9(b)'s opening text and Table 9.1 were in no part (Gemini had them right). Case 1 in `docs/benchmark-cases.md`.
+
+**Tested:** `npm run check` exits 0 (262 unit tests; new: which opening texts are added, and a re-read that returns a lost opening text puts it back before its part with its table). Browser suite from a fresh database.
+
 ## 2026-11-10: A part holding a table is never split by code
 
 **What:** `holdsTable` (paper.ts): a part with `tables`, or two or more text lines with "|". "Give it its own part" on such a part is refused (`applyFix` answers `has_table`, the button is off with a note to use Read it again), and the automatic fix skips it. First case in `docs/benchmark-cases.md`.

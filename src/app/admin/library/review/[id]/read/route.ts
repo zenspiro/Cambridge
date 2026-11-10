@@ -6,7 +6,7 @@ import { dispatchBrain } from "@/lib/agent/github";
 import { failBrainRun, startPaperRun } from "@/lib/brain/runs";
 import { PAPER_KINDS, paperDoc } from "@/lib/brain/paperRead";
 import { readerChoices } from "@/lib/brain/spend";
-import type { PaperKind } from "@/lib/brain/paper";
+import { withLeadIns, type PaperKind } from "@/lib/brain/paper";
 
 const ITEM_RE = /^[0-9]{1,3}(\([a-z]{1,4}\)){0,3}$/;
 const FIG_RE = /^[A-Za-z0-9_.-]{1,20}$/;
@@ -19,7 +19,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   return staffPost(request, back, ADMIN_EDIT, async ({ db, env, form, actorId }) => {
     const doc = await paperDoc(db, id);
     if (!doc || !PAPER_KINDS.includes(doc.docType as PaperKind)) return "bad";
-    const items = form.getAll("item").map(String).filter((x) => ITEM_RE.test(x)).slice(0, 50);
+    // A first part is read with the opening text above it, so a lost or joined opening text comes back with it.
+    const items = withLeadIns(form.getAll("item").map(String).filter((x) => ITEM_RE.test(x)).slice(0, 50)).slice(0, 60);
     const figures = form.getAll("figure").map(String).filter((x) => FIG_RE.test(x)).slice(0, 50);
     const size = await db.prepare(`SELECT size_bytes FROM source_document WHERE id = ?1`).bind(id).first<{ size_bytes: number }>();
     // "Read with" (owner, 9 Nov 2026): the AI for this reading only, one of the choices the page offered; empty is the

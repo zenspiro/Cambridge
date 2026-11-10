@@ -567,6 +567,26 @@ export function withoutLeads(g: PaperItem, leads: readonly PaperItem[]): PaperIt
 export const holdsTable = (it: Pick<PaperItem, "text"> & { tables?: readonly unknown[] }) =>
   (it.tables?.length ?? 0) > 0 || it.text.split("\n").filter((l) => l.includes("|")).length >= 2;
 
+/**
+ * The parts to read again with the opening texts above them (owner, 10 Nov 2026): a first part ("(a)", "(i)") is read
+ * with its question's or part's opening text, so a re-read can bring back an opening text that was lost or joined
+ * (Nov 2025 Paper 42 9(b)). "9(b)(i)" gives 9(b) too; "1(a)(i)" gives 1(a) and 1; "9(b)" alone stays. Pure.
+ */
+export function withLeadIns(items: readonly string[]): string[] {
+  const out = new Set<string>();
+  for (const n of items) {
+    out.add(n);
+    let cur = n;
+    for (;;) {
+      const m = cur.match(/^(.*)\(([a-z]+)\)$/);
+      if (!m || !(m[2] === "a" || m[2] === "i")) break;
+      cur = m[1]!;
+      out.add(cur);
+    }
+  }
+  return [...out];
+}
+
 /** A structure flag whose fix splits a lead-in off its first part (not a lead-in's own words, not a table). */
 export const isSplitFlag = (f: Pick<Flag, "kind" | "key">) => f.kind === "structure" && !/:(lead|table)$/.test(f.key);
 

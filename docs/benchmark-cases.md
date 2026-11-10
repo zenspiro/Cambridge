@@ -13,5 +13,7 @@ a code rule"). Each case: the paper, what went wrong, what was done. The papers'
 - Done (10 Nov 2026): a safety guard, not a reading rule: a part holding a table is never split by code
   (`holdsTable`; `applyFix` answers `has_table`; `autoFixLeads` skips it; the button is off with a note). Read it
   again instead.
+- Then (10 Nov 2026): after Undo, Read it again on 9(b)(i) asked for that part only, so 9(b)'s opening text and
+  table were in no part. Fixed: a first part is read again with the opening text above it (`withLeadIns`).
 - For the benchmark: the expected reading has 9(b) as the opening text with Table 9.1 as a table, and 9(b)(i)
   "Define half-life of a radioactive isotope."
