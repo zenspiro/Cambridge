@@ -70,9 +70,10 @@ export type Flag = {
 
 /**
  * Bump when a check changes what it finds or the text a fix copies (owner, 9 Nov 2026: a flag kept from older checks,
- * for example one Undo put back, must not be fixed with its old text). 2: the outline read as printed. 3: figures left out of lead-ins, figures on their lead-in.
+ * for example one Undo put back, must not be fixed with its old text). 2: the outline read as printed. 3: figures left out of lead-ins, figures on their lead-in. 4: Gemini's part with our
+ * opening text still joined on agrees.
  */
-export const CHECKS_VERSION = 3;
+export const CHECKS_VERSION = 4;
 
 /** Raised by older checks: shown with a note, and its "Use the PDF's version" / "Give it its own part" is off. */
 export const isStale = (f: Pick<Flag, "v">) => (f.v ?? 1) < CHECKS_VERSION;
@@ -356,8 +357,11 @@ export function paperFlags({ content, pages, gemini, outline }: CheckInput): Fla
     const theirs = new Map(gemini.items.map((g) => [g.number, g]));
     const ours = new Set(content.items.map((i) => i.number));
     for (const it of content.items) {
-      const g = theirs.get(it.number);
-      if (!g) continue;
+      const found0 = theirs.get(it.number);
+      if (!found0) continue;
+      // Gemini's part with the opening text we hold as its own item still joined on is the same reading (owner,
+      // 10 Nov 2026: hand splits then raised a false flag whose "PDF's version" put the opening text back).
+      const g = withoutLeads(found0, leadsBefore(content.items, it));
       const mine = itemWording(it);
       const other = itemWording(g);
       if (similarity(mine, other) < BRAIN.sameText) {
@@ -493,6 +497,34 @@ export function autoFixLeads(input: CheckInput, hold: AutoHold): { content: Pape
     if (gNext) gemini = gNext;
   }
   return { content, gemini, fixes };
+}
+
+/**
+ * The opening texts held as their own items just before a part, nearest last ("3" then "3(d)" before "3(d)(i)"):
+ * consecutive items with no marks whose numbers the part's number starts with. Pure.
+ */
+export function leadsBefore(items: readonly PaperItem[], it: PaperItem): PaperItem[] {
+  const out: PaperItem[] = [];
+  for (let k = items.indexOf(it) - 1; k >= 0; k--) {
+    const x = items[k]!;
+    if (x.marks !== null || !it.number.startsWith(`${x.number}(`)) break;
+    out.unshift(x);
+  }
+  return out;
+}
+
+/**
+ * Another reading's part without opening text that we hold as its own items: an exact cut (`stripLead`) of the
+ * nearest run of them that it starts with, else the part as it is. Pure.
+ */
+export function withoutLeads(g: PaperItem, leads: readonly PaperItem[]): PaperItem {
+  const own = g.number.match(/\([a-z]+\)/g) ?? [];
+  for (let k = 0; k < leads.length; k++) {
+    const lead = leads.slice(k).map((x) => x.text).join(" ");
+    const rest = stripLead(g.text, lead, own);
+    if (rest) return { ...g, text: rest };
+  }
+  return g;
 }
 
 /** A structure flag whose fix splits a lead-in off its first part (not a lead-in's own words, not a table). */

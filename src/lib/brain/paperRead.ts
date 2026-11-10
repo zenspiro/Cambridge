@@ -9,7 +9,8 @@ import { audit } from "../auth/session.ts";
 import { BRAIN } from "../config.ts";
 import { CLAUDE_MODEL_RE, GEMINI_MODEL_RE } from "./aiSetup.ts";
 import { cleanArt, cleanBox, cropSvg, pageSvg, wholePage, type PageArt } from "./figures.ts";
-import { cleanPaper, editItem, isSplitFlag, type AutoHold, isStale, splitLeadIn, paperScore, storedScore, type PaperScore, marksAgainstPaper, openFlags, recheckItem, type Flag, type FlagKind, type PaperContent, type PaperKind } from "./paper.ts";
+import { stripLead } from "./notation.ts";
+import { cleanPaper, editItem, isSplitFlag, type AutoHold, isStale, splitLeadIn, paperScore, storedScore, type PaperScore, marksAgainstPaper, openFlags, recheckItem, type Flag, type FlagKind, type PaperContent, type PaperItem, type PaperKind } from "./paper.ts";
 
 export const PAPER_KINDS: readonly PaperKind[] = ["qp", "ms"];
 const KINDS: readonly FlagKind[] = ["words", "numbers", "marks", "numbering", "figure", "agree", "missing", "text", "notation", "structure"];
@@ -383,6 +384,23 @@ async function restoreGemini(bucket: Bucket, docId: string, kind: PaperKind, bef
   await putJson(bucket, key(docId, "gemini"), { ...gem, items: gem.items.filter((x) => !lead || x.number !== lead).map((x) => (x.number === old.number ? old : x)) });
 }
 
+/**
+ * A lead-in split by hand made in Gemini's reading too, when Gemini has the part with that opening text joined on
+ * (an exact cut, else nothing). Gives Gemini's part as it was, for Undo; null when nothing changed.
+ */
+async function splitGemini(bucket: Bucket, docId: string, kind: PaperKind, item: string, lead: string, leadText: string): Promise<PaperItem | null> {
+  const g = await getJson(bucket, key(docId, "gemini"));
+  if (!g) return null;
+  const gem = cleanPaper(g, kind);
+  const before = gem.items.find((x) => x.number === item);
+  if (!before || gem.items.some((x) => x.number === lead)) return null;
+  const rest = stripLead(before.text, leadText, item.match(/\([a-z]+\)/g) ?? []);
+  const out = rest ? splitLeadIn(gem, item, lead, leadText) : null;
+  if (!out) return null;
+  await putJson(bucket, key(docId, "gemini"), { ...gem, items: out.items.map((x) => (x.number === item ? { ...x, text: rest! } : x)) });
+  return before;
+}
+
 /** The actor of fixes the checks made themselves (owner, 10 Nov 2026), shown as "Automatic fix" with Undo. */
 export const AUTO_ACTOR = "auto";
 
@@ -428,7 +446,9 @@ export async function applyFix(db: Db, bucket: Bucket, doc: DocInfo, action: Fix
         await putJson(bucket, key(doc.id, "content"), content);
         await writeRow(db, doc.id, flags, row.dismissed, now);
         const child = view.content.items.find((x) => x.number === flag.item);
-        await recordFix(db, doc.id, "pdf", flag.item, flag.key, { item: child, lead: parent, flags: row.flags }, { lead: parent }, actorId, now);
+        // The same split in Gemini's reading (as the automatic fix does), so the two are compared like for like.
+        const gemini = await splitGemini(bucket, doc.id, kind, flag.item, parent, flag.pdfText);
+        await recordFix(db, doc.id, "pdf", flag.item, flag.key, { item: child, lead: parent, flags: row.flags, ...(gemini ? { gemini } : {}) }, { lead: parent }, actorId, now);
         return "ok_fixed";
       }
       const number = action === "pdf" ? flag?.item : args.item;
