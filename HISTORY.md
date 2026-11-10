@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-10: Merges deploy without running the browser suite twice
+
+**What:** CI on a push to main first checks whether the merge holds exactly the pull request's files (merge commit tree equals the pull request head's tree) and that pull request's CI passed (GitHub API, `actions: read`). If so, the browser suite is skipped; type checks, unit tests, the inline check, the build and migrations still run, then the deploy. A squash, a main that moved since the pull request, or no passing run runs the full suite as before.
+
+**Why:** owner, 10 Nov 2026: a merge took about 10 minutes to go live, running the same 607 browser checks the pull request had just passed.
+
+**Tested:** the rule checked against today's merge of pull request 63 (same tree as its head, whose pull request run passed): it would skip. The workflow file parses; the first real merge with this change shows the step's decision in its log.
+
 ## 2026-11-10: Mark as reviewed, and Back on the review screen
 
 **What:** a paper with no flags left now has "Mark as reviewed" on its Reading card (inline confirm; `applyFix` actions `review` / `unreview`, migration 0028 `paper_read.reviewed_at`, `reviewed_by`, audited `paper.review` / `paper.unreview`). It counts like a person's change: Documents shows Reviewed with that person as Last reviewed by (the later of a change and the mark), the card shows "Reviewed by ..., date" and "Take back reviewed". A new full reading after it means the new reading has not been looked at (`lastFullReading`, `markedReviewed`); a check run does not reset it; open flags win over the mark. The review screen's header has Back (`BackLink`): the last admin page you came from that was not a review screen (Documents with its filters, a session, Home), kept per tab so switching between a paper's files does not change it; without one it goes to the subject's Documents page.
