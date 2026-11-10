@@ -8,7 +8,7 @@ import { applyFix, autoHold, cleanScores, loadContent, loadPaperRow, markedRevie
 import { modelName } from "../../src/lib/brain/labels.ts";
 import { brainStep, claimBrainRun, cleanEvent, runState, startPaperRun } from "../../src/lib/brain/runs.ts";
 import { BRAIN } from "../../src/lib/config.ts";
-import { autoFixLeads, CHECKS_VERSION, isStale } from "../../src/lib/brain/paper.ts";
+import { autoFixLeads, CHECKS_VERSION, isStale, leadsBefore, withoutLeads } from "../../src/lib/brain/paper.ts";
 import { testBucket, testDb } from "./helpers/d1.ts";
 
 const NOW = Date.UTC(2026, 10, 7);
@@ -433,4 +433,48 @@ test("an automatic fix is recorded like a person's, shown as Automatic fix, undo
   assert.equal(autoFixLeads({ content, pages: PAGES, gemini: content, outline }, hold).fixes.length, 0);
   assert.equal(await applyFix(db, bucket, doc, "edit", { item: "2(a)", text: "Define the term density and state its unit for a solid block of steel.", marks: "2" }, "platform-admin", NOW + 30), "ok_fixed");
   assert.deepEqual((await autoHold(db, doc)).items, ["2(a)"]);
+});
+
+test("a lead-in split by hand: Gemini's copy is split too, no false Wording flag, and Undo puts both back", async () => {
+  const db = testDb();
+  const bucket = testBucket();
+  seedDoc(db);
+  const id = (await startPaperRun(db, "doc-qp-1", { items: [], figures: [] }, "platform-admin", NOW))!;
+  await claimBrainRun(db, id, null, NOW + 1);
+  const content = cleanPaper(READING, "qp");
+  const outline = [
+    { number: "1", page: 2, text: "A student rolls a trolley down a ramp and measures the time it takes to travel 1.5 m." },
+    { number: "1(a)", page: 2, text: "State the instrument used to measure the time." },
+    { number: "1(b)", page: 2, text: "The trolley takes 2.5 s. Calculate its average speed." },
+    { number: "2", page: 3, text: "" },
+    { number: "2(a)", page: 3, text: "Define the term density and state its unit for a solid block of steel." },
+  ];
+  const flags = paperFlags({ content, pages: PAGES, gemini: content, outline });
+  assert.equal(await savePaperReading(db, bucket, id, "doc-qp-1", { content, gemini: content, flags, pages: PAGES }, true, NOW + 10), "ok");
+  const doc = (await paperDoc(db, "doc-qp-1"))!;
+  assert.equal(await applyFix(db, bucket, doc, "pdf", { key: "structure:1(a):1" }, "platform-admin", NOW + 20), "ok_fixed");
+  const gem = (await readingForRun(db, bucket, doc)).gemini!;
+  assert.deepEqual(gem.items.slice(0, 2).map((i) => [i.number, i.text]), [["1", outline[0]!.text], ["1(a)", "State the instrument used to measure the time."]], "Gemini's copy split the same way");
+  const after = (await readingForRun(db, bucket, doc)).content!;
+  assert.ok(!paperFlags({ content: after, pages: PAGES, gemini: gem }).some((f) => f.kind === "agree"), "the two readings agree again");
+  const fix = (await paperView(db, bucket, doc)).fixes.find((f) => f.action === "pdf")!;
+  assert.equal(await applyFix(db, bucket, doc, "undo", { fix: fix.id }, "platform-admin", NOW + 30), "ok_undone");
+  const back = (await readingForRun(db, bucket, doc)).gemini!;
+  assert.ok(!back.items.some((i) => i.number === "1") && back.items[0]!.text === content.items[0]!.text, "Undo puts Gemini's part back too");
+});
+
+test("Gemini's part with our opening text still joined on agrees with ours; a real difference still flags", () => {
+  const lead = { number: "10", page: 18, text: "Fig. 10.1 shows the path of the Earth as it orbits the Sun.", marks: null, options: [], answerLines: 0, figures: [], guidance: "", tables: [] };
+  const part = { ...lead, number: "10(a)", text: "Determine how many days it takes the Earth to move from F to G.", marks: 2 };
+  assert.deepEqual(leadsBefore([lead, part], part).map((x) => x.number), ["10"]);
+  assert.equal(withoutLeads({ ...part, text: `${lead.text} (a) ${part.text}` }, [lead]).text, part.text);
+  assert.equal(withoutLeads({ ...part, text: `${lead.text} ${part.text}` }, [lead]).text, part.text);
+  const g = { ...part, text: "Something else entirely about the Moon." };
+  assert.equal(withoutLeads(g, [lead]).text, g.text, "no exact cut: left as it is");
+  const pages = ["", `${lead.text} (a) ${part.text}`];
+  const content = { kind: "qp" as const, totalMarks: null, items: [lead, part], figures: [] };
+  const joined = { ...content, items: [{ ...part, text: `${lead.text} (a) ${part.text}` }] };
+  assert.ok(!paperFlags({ content, pages, gemini: joined }).some((f) => f.kind === "agree"));
+  const differs = { ...content, items: [{ ...part, text: `${lead.text} (a) Determine how many weeks the Earth needs.` }] };
+  assert.ok(paperFlags({ content, pages, gemini: differs }).some((f) => f.kind === "agree" && f.item === "10(a)"));
 });

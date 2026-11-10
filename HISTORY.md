@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-10: No false Wording flags on parts whose opening text was split off
+
+**What:** when Claude's and Gemini's readings are compared, Gemini's part with opening text that our reading holds as its own item still joined on (an exact cut, `stripLead`, of the opening texts just before the part: `leadsBefore`, `withoutLeads` in paper.ts) counts as the same reading, and its "PDF's version" no longer carries the opening text. A lead-in split by hand on the review screen is now made in Gemini's copy too (`splitGemini` in paperRead.ts, kept in the fix's `before.gemini` so Undo puts it back), as the automatic fix already did. `CHECKS_VERSION` 4: flags from older checks show the stale note and their PDF fix is off until the checks run again.
+
+**Why:** owner, 10 Nov 2026: after "Run the checks again on all", Mar 2025 Paper 42 question 10(a) showed "Claude and Gemini read this differently" with the opening text in the "PDF says" box. The 14 parts split by hand still had the opening text joined in Gemini's copy; "Use the PDF's version" would have joined it back.
+
+**Tested:** `npm run check` exits 0 (257 unit tests; new: Gemini's joined copy agrees, a real difference still flags, a hand split also splits Gemini's copy and Undo puts both back). Read-only on the live papers: every agree flag worked out again with the new rule: Mar 2025 Paper 42 15 of 15 cleared, Nov 2025 Paper 42 3 of 3 cleared, Paper 22 and 62 and every mark scheme unchanged, no new flag anywhere. Browser suite from a fresh database.
+
 ## 2026-11-10: Merges deploy without running the browser suite twice
 
 **What:** CI on a push to main first checks whether the merge holds exactly the pull request's files (merge commit tree equals the pull request head's tree) and that pull request's CI passed (GitHub API, `actions: read`). If so, the browser suite is skipped; type checks, unit tests, the inline check, the build and migrations still run, then the deploy. A squash, a main that moved since the pull request, or no passing run runs the full suite as before.
