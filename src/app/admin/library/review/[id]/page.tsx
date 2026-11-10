@@ -15,7 +15,9 @@ import { ActionForm } from "@/components/ActionForm";
 import { PaperReview } from "@/components/PaperReview";
 import { ScoreBadge } from "@/components/ScoreBadge";
 import { RunProgress } from "@/components/RunProgress";
-import { loadPages, PAPER_KINDS, paperDoc, paperView, type PaperView } from "@/lib/brain/paperRead";
+import { BackLink } from "@/components/BackLink";
+import { loadPages, markedReviewed, PAPER_KINDS, paperDoc, paperView, type PaperView } from "@/lib/brain/paperRead";
+import { personName } from "@/lib/library/documents";
 import { isActive, runState } from "@/lib/brain/runs";
 import { modelName } from "@/lib/brain/labels";
 import { estimateWords, readerChoices, usdWords, type ReaderChoice } from "@/lib/brain/spend";
@@ -32,6 +34,8 @@ const MESSAGES = {
   ok_started: "Started. Progress shows below.",
   ok_ready: "Marked ready, with the remaining flags recorded as ignored.",
   ok_undone: "Undone.",
+  ok_reviewed: "Marked as reviewed.",
+  ok_unreviewed: "Taken back: it shows as not checked by a person again.",
   running: "A brain run is already going. Wait for it to finish.",
   over_cap: "Not started: this run would take this month past your spending cap. Raise the cap on the AI setup page, or wait for next month.",
   no_price: "Not started: a spending cap is set, but a model in use has no price, so the cost cannot be checked. Add the price on the AI setup page.",
@@ -75,6 +79,12 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
     readerChoices(env.DB, env, doc.bytes),
   ]) : [0, null, null];
   const busy = isActive(run);
+  // Who marked it reviewed, by name (a team member's from their account).
+  const reviewer = view?.row?.reviewedBy
+    ? personName(view.row.reviewedBy, view.row.reviewedBy.startsWith("team:")
+      ? (await env.DB.prepare(`SELECT name FROM "auth_user" WHERE id = ?1`).bind(view.row.reviewedBy.slice(5)).first<{ name: string }>())?.name ?? null
+      : null)
+    : "";
   const facts = (
     <dl className="facts">
       <dt>What it is</dt><dd>{title}</dd>
@@ -92,6 +102,7 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
       keepHead={false}
       crumbs={[{ label: "Library", href: "/admin/library" }, { label: subject, href: `/admin/library/${doc.code}` }, where, { label: "Review" }]}
       actions={<>
+        <BackLink fallback={`/admin/library/${doc.code}/documents`} fallbackLabel="← Documents" />
         <a className="btn" href={pdf} target="_blank" rel="noopener">Open the PDF in a new tab</a>
         <a className="btn" href={`/admin/library/file/${encodeURIComponent(doc.id)}`}>Download</a>
       </>}
@@ -106,7 +117,7 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
           </nav>
         ) : <span />}
       </div>
-      {view && choices?.length ? <ReadingCard docId={doc.id} view={view} choices={choices} run={run} busy={busy} facts={facts} canFix={canFix} canRead={canRead} /> : null}
+      {view && choices?.length ? <ReadingCard docId={doc.id} view={view} choices={choices} run={run} busy={busy} facts={facts} canFix={canFix} canRead={canRead} reviewer={reviewer} /> : null}
       {view?.content ? (
         <PaperReview
           docId={doc.id}
@@ -158,8 +169,8 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
 }
 
 /** The paper's reading: its state, Read this paper (with the rough cost), ready anyway, live progress and recent fixes. */
-function ReadingCard({ docId, view, choices, run, busy, facts, canFix, canRead }: {
-  docId: string; view: PaperView; choices: ReaderChoice[]; run: Awaited<ReturnType<typeof runState>>; busy: boolean; facts: React.ReactNode; canFix: boolean; canRead: boolean;
+function ReadingCard({ docId, view, choices, run, busy, facts, canFix, canRead, reviewer }: {
+  docId: string; view: PaperView; choices: ReaderChoice[]; run: Awaited<ReturnType<typeof runState>>; busy: boolean; facts: React.ReactNode; canFix: boolean; canRead: boolean; reviewer: string;
 }) {
   const base = `/admin/library/review/${encodeURIComponent(docId)}`;
   const read = !!view.content;
@@ -167,7 +178,10 @@ function ReadingCard({ docId, view, choices, run, busy, facts, canFix, canRead }
   const cost = choices[0]!.check;
   const override = !!view.row?.overrideAt;
   const cutAgain = (view.content?.figures ?? []).filter((f) => f.cut !== "manual").map((f) => f.id).slice(0, 50);
+  // Mark as reviewed (owner, 10 Nov 2026): no flags left and a person says they checked it; a new full reading undoes it.
+  const marked = !!view.row && markedReviewed(view.row);
   const pill = !read ? <span className="pill">Not read</span>
+    : view.open.length === 0 && marked ? <span className="pill pill-ok">Reviewed</span>
     : view.open.length === 0 ? <span className="pill pill-ok">Ready</span>
       : override ? <span className="pill pill-ok">Ready (marked ready)</span>
         : <span className="pill pill-gap">{view.open.length} flag{view.open.length === 1 ? "" : "s"} open</span>;
@@ -221,6 +235,19 @@ function ReadingCard({ docId, view, choices, run, busy, facts, canFix, canRead }
             <button className="btn" type="submit">Mark ready anyway</button>
           </ActionForm>
         ) : null}
+        {canFix && read && view.open.length === 0 && !marked ? (
+          <ActionForm action={`${base}/fix`} messages={MESSAGES} yes="Yes, mark it" no="No"
+            confirm="Mark this paper as reviewed? Say yes only if you have checked it against the PDF. Your name and today's date are kept.">
+            <input type="hidden" name="action" value="review" />
+            <button className="btn btn-primary" type="submit">Mark as reviewed</button>
+          </ActionForm>
+        ) : null}
+        {canFix && marked ? (
+          <ActionForm action={`${base}/fix`} messages={MESSAGES}>
+            <input type="hidden" name="action" value="unreview" />
+            <button className="btn btn-small" type="submit">Take back reviewed</button>
+          </ActionForm>
+        ) : null}
         {override && canFix ? (
           <ActionForm action={`${base}/fix`} messages={MESSAGES}>
             <input type="hidden" name="action" value="unoverride" />
@@ -250,6 +277,7 @@ function ReadingCard({ docId, view, choices, run, busy, facts, canFix, canRead }
           </ul>
         </div>
       ) : null}
+      {marked && view.row?.reviewedAt ? <p className="m-0">Reviewed by {reviewer}, {dateFmt.format(view.row.reviewedAt)}.</p> : null}
       {view.fixes.length ? <p className="muted m-0">{view.fixes.length} change{view.fixes.length === 1 ? "" : "s"} on this paper: see Changes beside the flags, each with a link to where it was made.</p> : null}
       <details>
         <summary className="link">About this file</summary>

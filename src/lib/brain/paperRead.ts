@@ -67,6 +67,8 @@ const list = (s: string | null) => {
 export type PaperRow = {
   docId: string; jobId: string | null; items: number; figures: number; flags: Flag[]; dismissed: string[]; revision: number;
   readAt: number | null; overrideAt: number | null; overrideBy: string | null;
+  /** Marked as reviewed by a person (owner, 10 Nov 2026); counts only when after the last full reading. */
+  reviewedAt: number | null; reviewedBy: string | null; firstAt: number | null;
   /** Read accuracy from the first full reading (estimated from the saved flags for papers read before it was kept). */
   score: PaperScore | null;
   /** One score per full reading with the models that read it, oldest first (owner, 8 Nov 2026: compare models). */
@@ -88,6 +90,19 @@ export function cleanScores(v: unknown): ReadScore[] {
     const gemini = typeof r.gemini === "string" && GEMINI_MODEL_RE.test(r.gemini) ? r.gemini : "";
     return at !== null && score ? [{ at, claude, gemini, score }] : [];
   });
+}
+
+/**
+ * When the last full reading was saved (a check run or a figure cut is not one): a person's change or "Mark as
+ * reviewed" at or after it is a review of that reading. Pure.
+ */
+export function lastFullReading(scores: readonly { at: number }[], firstAt: number | null, readAt: number | null): number {
+  return scores.at(-1)?.at ?? firstAt ?? readAt ?? 0;
+}
+
+/** Marked as reviewed and still standing: after the last full reading. Pure. */
+export function markedReviewed(r: { reviewedAt: number | null; scores: readonly { at: number }[]; firstAt: number | null; readAt: number | null }): boolean {
+  return r.reviewedAt !== null && r.reviewedAt >= lastFullReading(r.scores, r.firstAt, r.readAt);
 }
 
 /**
@@ -122,9 +137,9 @@ const safeJson = (s: string): unknown => {
 
 export async function loadPaperRow(db: Db, docId: string): Promise<PaperRow | null> {
   const r = await db
-    .prepare(`SELECT doc_id, job_id, items, figures, flags, dismissed, revision, read_at, override_at, override_by, first_items, first_clean, first_red, scores FROM paper_read WHERE doc_id = ?1`)
+    .prepare(`SELECT doc_id, job_id, items, figures, flags, dismissed, revision, read_at, override_at, override_by, first_items, first_clean, first_red, first_at, scores, reviewed_at, reviewed_by FROM paper_read WHERE doc_id = ?1`)
     .bind(docId)
-    .first<{ doc_id: string; job_id: string | null; items: number; figures: number; flags: string; dismissed: string; revision: number; read_at: number | null; override_at: number | null; override_by: string | null; first_items: number | null; first_clean: number | null; first_red: number | null; scores: string }>();
+    .first<{ doc_id: string; job_id: string | null; items: number; figures: number; flags: string; dismissed: string; revision: number; read_at: number | null; override_at: number | null; override_by: string | null; first_items: number | null; first_clean: number | null; first_red: number | null; first_at: number | null; scores: string; reviewed_at: number | null; reviewed_by: string | null }>();
   if (!r) return null;
   let flags: Flag[] = [];
   try {
@@ -135,6 +150,7 @@ export async function loadPaperRow(db: Db, docId: string): Promise<PaperRow | nu
   return {
     docId: r.doc_id, jobId: r.job_id, items: r.items, figures: r.figures, flags, dismissed: list(r.dismissed), revision: r.revision,
     readAt: r.read_at, overrideAt: r.override_at, overrideBy: r.override_by,
+    reviewedAt: r.reviewed_at, reviewedBy: r.reviewed_by, firstAt: r.first_at,
     score: rowScore(r), scores: cleanScores(safeJson(r.scores)),
   };
 }
@@ -343,8 +359,8 @@ export async function autoHold(db: Db, doc: Pick<DocInfo, "id" | "code">): Promi
 
 // ---------- Fixes ----------
 
-export type FixAction = "pdf" | "edit" | "fine" | "looks_right" | "box" | "override" | "unoverride" | "undo";
-export type FixResult = "ok_fixed" | "ok_undone" | "ok_ready" | "still_flagged" | "stale" | "bad" | "not_read";
+export type FixAction = "pdf" | "edit" | "fine" | "looks_right" | "box" | "override" | "unoverride" | "review" | "unreview" | "undo";
+export type FixResult = "ok_fixed" | "ok_undone" | "ok_ready" | "ok_reviewed" | "ok_unreviewed" | "still_flagged" | "stale" | "bad" | "not_read";
 
 /**
  * The flags after an Undo: as they were before the fix, or for an automatic fix (one of many in a run, `merge`) the
@@ -388,7 +404,8 @@ async function writeRow(db: Db, docId: string, flags: Flag[], dismissed: string[
  * One fix from the review screen. pdf: the item takes the PDF's own words for the flag (code copies them, no AI).
  * edit: the admin's wording and marks. Both are checked again against the PDF at once. fine: the flag is a false
  * alarm, remembered for this paper and as a rule for the subject. looks_right: a figure drawing is accepted.
- * override / unoverride: mark ready with flags left, or take that back. undo: reverses one earlier fix.
+ * override / unoverride: mark ready with flags left, or take that back. review / unreview: mark a paper with no flags
+ * left as checked by a person, or take that back. undo: reverses one earlier fix.
  */
 export async function applyFix(db: Db, bucket: Bucket, doc: DocInfo, action: FixAction, args: { key?: string; item?: string; text?: string; marks?: string; fix?: string; box?: string }, actorId: string, now = Date.now()): Promise<FixResult> {
   const kind = doc.docType as PaperKind;
@@ -465,6 +482,20 @@ export async function applyFix(db: Db, bucket: Bucket, doc: DocInfo, action: Fix
       await db.prepare(`UPDATE paper_read SET override_at = ?2, override_by = ?3, updated_at = ?2 WHERE doc_id = ?1`).bind(doc.id, now, actorId).run();
       await recordFix(db, doc.id, "override", null, null, { open: view.open.length }, undefined, actorId, now);
       return "ok_ready";
+    }
+    case "review": {
+      // Mark as reviewed (owner, 10 Nov 2026): only with no flags left; kept on the row, not as a change to undo
+      // (paper_fix.action allows the 0022 values only), and taken back with unreview.
+      if (view.open.length) return "bad";
+      await db.prepare(`UPDATE paper_read SET reviewed_at = ?2, reviewed_by = ?3, updated_at = ?2 WHERE doc_id = ?1`).bind(doc.id, now, actorId).run();
+      await audit(db, { actorId, action: "paper.review", entity: "source_document", entityId: doc.id, detail: {} }, now);
+      return "ok_reviewed";
+    }
+    case "unreview": {
+      if (row.reviewedAt === null) return "bad";
+      await db.prepare(`UPDATE paper_read SET reviewed_at = NULL, reviewed_by = NULL, updated_at = ?2 WHERE doc_id = ?1`).bind(doc.id, now).run();
+      await audit(db, { actorId, action: "paper.unreview", entity: "source_document", entityId: doc.id, detail: {} }, now);
+      return "ok_unreviewed";
     }
     case "unoverride":
     case "undo": {

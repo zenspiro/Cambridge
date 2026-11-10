@@ -708,6 +708,41 @@ try {
   check((await page.locator("#to-review .score-red").count()) === 1, "the session page shows the read accuracy beside Review");
   check(rows(`SELECT first_items, first_clean FROM paper_read WHERE doc_id = '${paperId}'`)[0].first_items === 3, "the first reading's numbers are kept, unchanged by the free figure cut");
 
+  // Back (owner, 10 Nov 2026): the review screen returns to where you came from, filters and all, even after
+  // switching to another file of the paper.
+  await page.goto(`${BASE}/admin/library/0625/documents?type=qp&dir=asc#documents`);
+  await page.locator(`#documents a[href="/admin/library/review/${paperId}"]`).click();
+  await page.waitForURL(/\/admin\/library\/review\//);
+  const back = page.locator(".page-actions a.btn, header a.btn", { hasText: "Back" }).first();
+  await back.waitFor({ timeout: 10_000 }).catch(() => {});
+  check(/\/admin\/library\/0625\/documents\?type=qp/.test((await back.getAttribute("href")) ?? ""), "Back on the review screen goes to the Documents page with its filters");
+  const other = page.locator(".review-switch a.review-switch-item").first();
+  if (await other.count()) {
+    await other.click();
+    await page.waitForLoadState("load");
+    const back2 = page.locator("a.btn", { hasText: "Back" }).first();
+    await back2.waitFor({ timeout: 10_000 }).catch(() => {});
+    check(/type=qp/.test((await back2.getAttribute("href")) ?? ""), "and still does after switching to another file of the paper");
+  }
+  await back.click().catch(() => {});
+
+  // Mark as reviewed (owner, 10 Nov 2026): a paper with nothing to fix can be marked checked by a person.
+  sql(`INSERT OR REPLACE INTO setting (key, value, updated_at) SELECT 'e2e_flags', json_object('flags', flags, 'dismissed', dismissed), 0 FROM paper_read WHERE doc_id = '${paperId}'`);
+  sql(`UPDATE paper_read SET flags = '[]' WHERE doc_id = '${paperId}'`);
+  await page.goto(`${BASE}/admin/library/review/${paperId}`);
+  await page.locator("#reading button", { hasText: "Mark as reviewed" }).click();
+  await page.locator("#reading button", { hasText: "Yes, mark it" }).click();
+  await page.locator("#reading .pill", { hasText: "Reviewed" }).waitFor({ timeout: 15_000 }).then(() => check(true, "Mark as reviewed: the paper shows Reviewed, in place"), () => check(false, "Mark as reviewed: the paper shows Reviewed, in place"));
+  check(/Reviewed by Owner/.test((await page.locator("#reading").textContent()) ?? ""), "with who and when");
+  check(rows(`SELECT reviewed_by FROM paper_read WHERE doc_id = '${paperId}'`)[0]?.reviewed_by === "platform-admin", "kept on the paper's row");
+  await page.goto(`${BASE}/admin/library/0625/documents?status=reviewed`);
+  check((await page.locator(`#documents a[href="/admin/library/review/${paperId}"]`).count()) === 1, "Documents lists it under Reviewed");
+  await page.goto(`${BASE}/admin/library/review/${paperId}`);
+  await page.locator("#reading button", { hasText: "Take back reviewed" }).click();
+  await page.locator("#reading button", { hasText: "Mark as reviewed" }).waitFor({ timeout: 15_000 }).then(() => check(true, "Take back reviewed puts it back"), () => check(false, "Take back reviewed puts it back"));
+  sql(`UPDATE paper_read SET flags = (SELECT json_extract(value, '$.flags') FROM setting WHERE key = 'e2e_flags'), dismissed = (SELECT json_extract(value, '$.dismissed') FROM setting WHERE key = 'e2e_flags') WHERE doc_id = '${paperId}'`);
+  sql(`DELETE FROM setting WHERE key = 'e2e_flags'`);
+
   // "Read with" (owner, 9 Nov 2026): the AI for one reading, priced; Gemini alone never asks Claude.
   await page.goto(`${BASE}/admin/library/review/${paperId}`);
   const withOpts = await page.locator("#reading select[name=reader] option").allTextContents();
