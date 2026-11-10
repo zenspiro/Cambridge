@@ -21,7 +21,7 @@ import {
   PAPER_SCHEMA, PAPER_SCHEMA_GEMINI, PAPER_SYSTEM, paperPrompt,
   retryPrompt, TOPIC_SCHEMA, TOPIC_SCHEMA_GEMINI, TOPIC_SYSTEM, topicPrompt,
 } from "../../src/lib/brain/prompts.ts";
-import { blankPages, cleanPaper, figuresToLeads, keptPages, mergeReading, paperFlags, picturePages, placeOnPages, remapPages, textPagesBlock, type PaperContent, type PaperKind } from "../../src/lib/brain/paper.ts";
+import { autoFixLeads, blankPages, cleanPaper, figuresToLeads, type AutoFix, type AutoHold, keptPages, mergeReading, paperFlags, picturePages, placeOnPages, remapPages, textPagesBlock, type PaperContent, type PaperKind } from "../../src/lib/brain/paper.ts";
 import {
   checkNumbers, checkWords, cleanDraft, compareDrafts, isReady, missingHeadings, retryNotes, textIndex,
   type Draft, type Problem, type TextIndex, type TreeReport,
@@ -40,7 +40,7 @@ type Job =
 type TopicJob = Extract<Job, { task: "topics" }>;
 type PaperJob = {
   task: "paper"; kind: PaperKind; subject: string; paper: string; pdfBytes: number;
-  scope: { items: string[]; figures: string[] }; prior: { content: unknown; gemini?: unknown; open: string[] };
+  scope: { items: string[]; figures: string[] }; prior: { content: unknown; gemini?: unknown; open: string[]; hold?: AutoHold };
   /** reading: the Claude model that reads papers (AI setup's Reading AI, else the main AI's; older sites send none). */
   models: { claude: string; gemini: string; drawing: string; reading?: string }; limits: Limits;
   /** Read all (owner, 8 Nov 2026): this paper's place in the batch. */
@@ -599,14 +599,23 @@ async function runPaper(job: PaperJob) {
     const second = alone ? null : gemini;
     // A figure printed before a question's first part goes on its lead-in (owner, 9 Nov 2026).
     content = figuresToLeads(content);
-    const flags = paperFlags({ content, pages, gemini: second, outline });
+    // Opening text put right without a click (owner, 10 Nov 2026), each fix kept only when every check agrees.
+    let auto: AutoFix[] = [];
+    if (final) {
+      const r = autoFixLeads({ content, pages, gemini: second, outline }, job.prior.hold ?? { fingerprints: [], keys: [], items: [] });
+      content = r.content;
+      if (second && r.gemini) gemini = r.gemini;
+      auto = r.fixes;
+      if (auto.length) await step(`Put right ${auto.length} opening text${auto.length === 1 ? "" : "s"} from the paper's own words (listed under Changes, each with Undo)`, { stage: "checks", state: "done" });
+    }
+    const flags = paperFlags({ content, pages, gemini: alone ? null : gemini, outline });
     if (final) await step(`Checks done: ${flags.length} flag${flags.length === 1 ? "" : "s"} for the review screen`, { stage: "checks", state: "done" });
     const own = final && fresh ? {
       fresh: { items: fresh.items.map((i) => ({ number: i.number, marks: i.marks })), flags: paperFlags({ content: fresh, pages, gemini: second, outline }) },
       models: { claude: alone ? "" : reader, gemini: job.models.gemini },
     } : {};
     // `read`: a full reading (not a figures-only run), so the first one sets the paper's read accuracy.
-    const r = await api("/api/brain/paper", { content, gemini, pages, flags, final, read: !figuresOnly, ...own });
+    const r = await api("/api/brain/paper", { content, gemini, pages, flags, final, read: !figuresOnly, ...own, ...(auto.length ? { auto } : {}) });
     if (r.status !== 200) throw new Stop(`save_${r.status}`);
     if (final) await note("Saved", { stage: "save", state: "done" });
   };

@@ -9,7 +9,7 @@ import { audit } from "../auth/session.ts";
 import { BRAIN } from "../config.ts";
 import { CLAUDE_MODEL_RE, GEMINI_MODEL_RE } from "./aiSetup.ts";
 import { cleanArt, cleanBox, cropSvg, pageSvg, wholePage, type PageArt } from "./figures.ts";
-import { cleanPaper, editItem, isSplitFlag, isStale, splitLeadIn, paperScore, storedScore, type PaperScore, marksAgainstPaper, openFlags, recheckItem, type Flag, type FlagKind, type PaperContent, type PaperKind } from "./paper.ts";
+import { cleanPaper, editItem, isSplitFlag, type AutoHold, isStale, splitLeadIn, paperScore, storedScore, type PaperScore, marksAgainstPaper, openFlags, recheckItem, type Flag, type FlagKind, type PaperContent, type PaperKind } from "./paper.ts";
 
 export const PAPER_KINDS: readonly PaperKind[] = ["qp", "ms"];
 const KINDS: readonly FlagKind[] = ["words", "numbers", "marks", "numbering", "figure", "agree", "missing", "text", "notation", "structure"];
@@ -235,7 +235,7 @@ export async function paperView(db: Db, bucket: Bucket, doc: DocInfo): Promise<P
   return {
     row, content, flags, open,
     ready: !!content && (open.length === 0 || !!row?.overrideAt),
-    fixes: results.map((r) => fixView(r, r.actor === "platform-admin" ? "Owner" : r.member ?? (r.actor.startsWith("team:") ? "A team member" : r.actor))),
+    fixes: results.map((r) => fixView(r, r.actor === "platform-admin" ? "Owner" : r.actor === AUTO_ACTOR ? "Automatic fix" : r.member ?? (r.actor.startsWith("team:") ? "A team member" : r.actor))),
   };
 }
 
@@ -289,6 +289,21 @@ export async function savePaperReading(db: Db, bucket: Bucket, jobId: string, do
       await db.prepare(`UPDATE paper_read SET scores = ?2 WHERE doc_id = ?1`).bind(docId, JSON.stringify(list)).run();
     }
   }
+  // Opening text the checks put right themselves, each recorded like a person's fix so Changes lists it with Undo.
+  if (final && Array.isArray(raw.auto)) {
+    for (const a of raw.auto.slice(0, BRAIN.maxPaperItems)) {
+      const f = a && typeof a === "object" ? (a as Record<string, unknown>) : {};
+      const flagKey = str(f.key, 80);
+      const item = str(f.item, 24);
+      const before = cleanPaper({ items: [f.before] }, doc.docType as PaperKind).items[0];
+      if (!/^structure:/.test(flagKey) || !before || before.number !== item || !content.items.some((i) => i.number === item)) continue;
+      const lead = typeof f.lead === "string" && content.items.some((i) => i.number === f.lead) ? f.lead : undefined;
+      const gem = f.gemini ? cleanPaper({ items: [f.gemini] }, doc.docType as PaperKind).items[0] : undefined;
+      const now2 = now + raw.auto.indexOf(a);
+      await recordFix(db, docId, "pdf", item, flagKey, { item: before, ...(lead ? { lead } : {}), flags: cleanFlags(f.flags), merge: true, ...(gem ? { gemini: gem } : {}) },
+        lead ? { lead } : { text: str(f.text, BRAIN.maxItemText), marks: before.marks }, AUTO_ACTOR, now2);
+    }
+  }
   if (final) {
     // A batch (Read all) stays open for its next paper; the script asks for it and the last one closes the run.
     if (closeRun) await db.prepare(`UPDATE job SET status = 'succeeded', progress = 100, finished_at = ?2, step = NULL WHERE id = ?1 AND type = 'brain' AND status = 'running'`).bind(jobId, now).run();
@@ -298,16 +313,62 @@ export async function savePaperReading(db: Db, bucket: Bucket, jobId: string, do
 }
 
 /** What the script needs to merge a new reading: the stored one, Gemini's, and the items with open flags. */
-export async function readingForRun(db: Db, bucket: Bucket, doc: DocInfo): Promise<{ content: PaperContent | null; gemini: PaperContent | null; open: string[] }> {
+export async function readingForRun(db: Db, bucket: Bucket, doc: DocInfo): Promise<{ content: PaperContent | null; gemini: PaperContent | null; open: string[]; hold: AutoHold }> {
   const v = await paperView(db, bucket, doc);
   const g = v.content ? await getJson(bucket, key(doc.id, "gemini")) : null;
-  return { content: v.content, gemini: g ? cleanPaper(g, doc.docType as PaperKind) : null, open: [...new Set(v.open.map((f) => f.item))] };
+  return { content: v.content, gemini: g ? cleanPaper(g, doc.docType as PaperKind) : null, open: [...new Set(v.open.map((f) => f.item))], hold: await autoHold(db, doc) };
+}
+
+/**
+ * What automatic fixes leave alone (owner, 10 Nov 2026): flags settled with "It's fine" (this paper or the subject),
+ * automatic fixes a person undid, and parts a person edited or gave the PDF's words by hand.
+ */
+export async function autoHold(db: Db, doc: Pick<DocInfo, "id" | "code">): Promise<AutoHold> {
+  const [row, rules, { results }] = await Promise.all([
+    loadPaperRow(db, doc.id), paperRules(db, doc.code),
+    db.prepare(`SELECT action, item, flag_key, before, actor, undone_at FROM paper_fix WHERE doc_id = ?1`).bind(doc.id)
+      .all<{ action: string; item: string | null; flag_key: string | null; before: string | null; actor: string; undone_at: number | null }>(),
+  ]);
+  const byHand = (r: (typeof results)[number]) => {
+    if (r.actor === AUTO_ACTOR || r.undone_at !== null || !r.item || (r.action !== "edit" && r.action !== "pdf")) return false;
+    const b = (safeJson(r.before ?? "{}") ?? {}) as Record<string, unknown>;
+    return !b.figure && typeof b.lead !== "string";
+  };
+  return {
+    fingerprints: [...new Set([...(row?.dismissed ?? []), ...rules])],
+    keys: results.filter((r) => r.actor === AUTO_ACTOR && r.undone_at !== null && r.flag_key).map((r) => r.flag_key!),
+    items: [...new Set(results.filter(byHand).map((r) => r.item!))],
+  };
 }
 
 // ---------- Fixes ----------
 
 export type FixAction = "pdf" | "edit" | "fine" | "looks_right" | "box" | "override" | "unoverride" | "undo";
 export type FixResult = "ok_fixed" | "ok_undone" | "ok_ready" | "still_flagged" | "stale" | "bad" | "not_read";
+
+/**
+ * The flags after an Undo: as they were before the fix, or for an automatic fix (one of many in a run, `merge`) the
+ * flags open now with the one it settled brought back.
+ */
+function undoFlags(now: readonly Flag[], before: Record<string, unknown>): Flag[] {
+  const back = cleanFlags(before.flags);
+  if (before.merge !== true) return back;
+  const keys = new Set(back.map((f) => f.key));
+  return [...now.filter((f) => !keys.has(f.key)), ...back];
+}
+
+/** An automatic fix also made in Gemini's reading (so the two compared like for like): Undo puts Gemini's part back. */
+async function restoreGemini(bucket: Bucket, docId: string, kind: PaperKind, before: Record<string, unknown>, lead?: string) {
+  if (!before.gemini) return;
+  const old = cleanPaper({ items: [before.gemini] }, kind).items[0];
+  const g = await getJson(bucket, key(docId, "gemini"));
+  if (!old || !g) return;
+  const gem = cleanPaper(g, kind);
+  await putJson(bucket, key(docId, "gemini"), { ...gem, items: gem.items.filter((x) => !lead || x.number !== lead).map((x) => (x.number === old.number ? old : x)) });
+}
+
+/** The actor of fixes the checks made themselves (owner, 10 Nov 2026), shown as "Automatic fix" with Undo. */
+export const AUTO_ACTOR = "auto";
 
 async function recordFix(db: Db, docId: string, action: string, item: string | null, flagKey: string | null, before: unknown, after: unknown, actorId: string, now: number) {
   const id = randomId();
@@ -417,20 +478,22 @@ export async function applyFix(db: Db, bucket: Bucket, doc: DocInfo, action: Fix
         if (!old) return "bad";
         const content = { ...view.content, figures: view.content.figures.map((x) => (x.id === old.id ? old : x)) };
         await putJson(bucket, key(doc.id, "content"), content);
-        await writeRow(db, doc.id, cleanFlags(before.flags), row.dismissed, now);
+        await writeRow(db, doc.id, undoFlags(row.flags, before), row.dismissed, now);
       } else if (fix.action === "pdf" && typeof before.lead === "string") {
         // A lead-in split: its item goes and the first part gets its old text back.
         const old = cleanPaper({ items: [before.item] }, kind).items[0];
         if (!old) return "bad";
         const content = { ...view.content, items: view.content.items.filter((x) => x.number !== before.lead).map((x) => (x.number === old.number ? old : x)) };
         await putJson(bucket, key(doc.id, "content"), content);
-        await writeRow(db, doc.id, cleanFlags(before.flags), row.dismissed, now);
+        await restoreGemini(bucket, doc.id, kind, before, before.lead);
+        await writeRow(db, doc.id, undoFlags(row.flags, before), row.dismissed, now);
       } else if (fix.action === "pdf" || fix.action === "edit") {
         const old = cleanPaper({ items: [before.item] }, kind).items[0];
         if (!old) return "bad";
         const content = { ...view.content, items: view.content.items.map((x) => (x.number === old.number ? old : x)) };
         await putJson(bucket, key(doc.id, "content"), content);
-        await writeRow(db, doc.id, cleanFlags(before.flags), row.dismissed, now);
+        await restoreGemini(bucket, doc.id, kind, before);
+        await writeRow(db, doc.id, undoFlags(row.flags, before), row.dismissed, now);
       } else if (fix.action === "fine" || fix.action === "looks_right") {
         const fp = typeof before.fingerprint === "string" ? before.fingerprint : "";
         await writeRow(db, doc.id, row.flags, row.dismissed.filter((d) => d !== fp), now);

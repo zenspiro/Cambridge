@@ -4,11 +4,11 @@ import assert from "node:assert/strict";
 import {
   cleanPaper, cleanSvg, editItem, marksAgainstPaper, mergeReading, openFlags, paperFlags, paperScore, pdfVersion, placeOnPages, recheckItem, storedScore, type PaperContent,
 } from "../../src/lib/brain/paper.ts";
-import { applyFix, cleanScores, loadContent, loadPaperRow, paperDoc, paperView, savePaperReading } from "../../src/lib/brain/paperRead.ts";
+import { applyFix, autoHold, cleanScores, loadContent, loadPaperRow, paperDoc, paperView, readingForRun, savePaperReading } from "../../src/lib/brain/paperRead.ts";
 import { modelName } from "../../src/lib/brain/labels.ts";
 import { brainStep, claimBrainRun, cleanEvent, runState, startPaperRun } from "../../src/lib/brain/runs.ts";
 import { BRAIN } from "../../src/lib/config.ts";
-import { CHECKS_VERSION, isStale } from "../../src/lib/brain/paper.ts";
+import { autoFixLeads, CHECKS_VERSION, isStale } from "../../src/lib/brain/paper.ts";
 import { testBucket, testDb } from "./helpers/d1.ts";
 
 const NOW = Date.UTC(2026, 10, 7);
@@ -384,4 +384,44 @@ test("read accuracy is kept from the first full reading, not from a figures-only
   const view = await paperView(db, bucket, (await paperDoc(db, "doc-qp-score"))!);
   assert.equal(view.row?.score?.colour, "red");
   assert.equal(view.row?.score?.estimated, false);
+});
+
+test("an automatic fix is recorded like a person's, shown as Automatic fix, undone with Gemini's copy, and not made again", async () => {
+  const db = testDb();
+  const bucket = testBucket();
+  seedDoc(db);
+  const id = (await startPaperRun(db, "doc-qp-1", { items: [], figures: [] }, "platform-admin", NOW))!;
+  await claimBrainRun(db, id, null, NOW + 1);
+  const content = cleanPaper(READING, "qp");
+  const outline = [
+    { number: "1", page: 2, text: "A student rolls a trolley down a ramp and measures the time it takes to travel 1.5 m." },
+    { number: "1(a)", page: 2, text: "State the instrument used to measure the time." },
+    { number: "1(b)", page: 2, text: "The trolley takes 2.5 s. Calculate its average speed." },
+    { number: "2", page: 3, text: "" },
+    { number: "2(a)", page: 3, text: "Define the term density and state its unit for a solid block of steel." },
+  ];
+  const doc = (await paperDoc(db, "doc-qp-1"))!;
+  const r = autoFixLeads({ content, pages: PAGES, gemini: content, outline }, await autoHold(db, doc));
+  assert.deepEqual(r.fixes.map((f) => f.key), ["structure:1(a):1"]);
+  const flags = paperFlags({ content: r.content, pages: PAGES, gemini: r.gemini, outline });
+  assert.equal(await savePaperReading(db, bucket, id, "doc-qp-1", { content: r.content, gemini: r.gemini, flags, pages: PAGES, auto: r.fixes }, true, NOW + 10), "ok");
+  let view = await paperView(db, bucket, doc);
+  const fix = view.fixes[0]!;
+  assert.equal(fix.who, "Automatic fix");
+  assert.equal(fix.what, "Gave question 1's lead-in its own part");
+  assert.deepEqual(view.content!.items.slice(0, 2).map((i) => [i.number, i.text]), [["1", outline[0]!.text], ["1(a)", "State the instrument used to measure the time."]]);
+  // Undo: the part as it was, in our reading and Gemini's, and its flag back.
+  assert.equal(await applyFix(db, bucket, doc, "undo", { fix: fix.id }, "platform-admin", NOW + 20), "ok_undone");
+  view = await paperView(db, bucket, doc);
+  assert.ok(!view.content!.items.some((i) => i.number === "1"));
+  assert.equal(view.content!.items[0]!.text, content.items[0]!.text);
+  assert.ok(view.flags.some((f) => f.key === "structure:1(a):1"), "the flag it settled is back");
+  const gem = (await readingForRun(db, bucket, doc)).gemini!;
+  assert.ok(!gem.items.some((i) => i.number === "1") && gem.items[0]!.text === content.items[0]!.text, "Gemini's part is put back too");
+  // Undone once: the checks never make it again; a part edited by hand is left alone.
+  const hold = await autoHold(db, doc);
+  assert.deepEqual(hold.keys, ["structure:1(a):1"]);
+  assert.equal(autoFixLeads({ content, pages: PAGES, gemini: content, outline }, hold).fixes.length, 0);
+  assert.equal(await applyFix(db, bucket, doc, "edit", { item: "2(a)", text: "Define the term density and state its unit for a solid block of steel.", marks: "2" }, "platform-admin", NOW + 30), "ok_fixed");
+  assert.deepEqual((await autoHold(db, doc)).items, ["2(a)"]);
 });

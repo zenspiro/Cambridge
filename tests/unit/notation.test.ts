@@ -6,9 +6,9 @@ import assert from "node:assert/strict";
 import {
   fractionBars, fractions, fractionsIn, joinFractionLines, linearFraction, notationTree,
   applyNotation, bboxWords, leadInProblems, lostNotation, normaliseNotation, notate, notatedPages, notationOn, notationParts, notationPlain,
-  isCaptionLine, leadExtra, pdfOutline, withoutLead, wordsText, type Word,
+  isCaptionLine, leadExtra, pdfOutline, stripLead, withoutLead, wordsText, type Word,
 } from "../../src/lib/brain/notation.ts";
-import { cleanPaper, figuresToLeads, isSplitFlag, mergeReading, paperFlags, recheckItem, splitLeadIn, structureFlags } from "../../src/lib/brain/paper.ts";
+import { autoFixLeads, cleanPaper, figuresToLeads, isSplitFlag, mergeReading, paperFlags, recheckItem, splitLeadIn, structureFlags } from "../../src/lib/brain/paper.ts";
 
 type W = [number, number, number, number, string];
 /** Poppler's -bbox-layout shape: pages of lines of words. */
@@ -327,4 +327,61 @@ test("a figure printed in a lead-in goes on the lead-in, not its first part; a l
   const fixed = { ...moved, items: moved.items.map((i) => (i.number === "2" ? { ...i, text: flag.pdfText } : i)) };
   assert.ok(!recheckItem(fixed, [flag], "2", ["Trolley A moves. Fig. 2.1 shows trolley A."]).some((f) => f.key === flag.key));
   assert.ok(recheckItem(moved, [flag], "2", ["Trolley A moves. Fig. 2.1 shows trolley A."]).some((f) => f.key === flag.key), "still flagged while the labels are there");
+});
+
+test("a lead-in is cut from a part only where the part starts with exactly its words", () => {
+  const lead = "Fig. 6.1 shows an object O. Fig. 6.1 is drawn to full scale.";
+  assert.equal(stripLead("Fig. 6.1 shows an object O. Fig. 6.1 is drawn to full scale. On Fig. 6.1, label the axis.", lead), "On Fig. 6.1, label the axis.", "never at the full stop of \"Fig.\"");
+  assert.equal(stripLead("1 In this experiment, you will test a spring. (a) Hang a mass.", "In this experiment, you will test a spring.", ["(a)"]), "Hang a mass.", "a printed number before it and the part's own label after it go");
+  assert.equal(stripLead("The other lamp is 800 Ω. Calculate the current.", "The other lamp is 800 Ω."), "Calculate the current.", "a closing sign goes with the lead-in");
+  assert.equal(stripLead("A student uses a spring. Fig. 6.1 shows an object O.", lead), null, "not at the start: nothing is cut");
+  assert.equal(stripLead("Fig. 6.1 shows an object Q. Fig. 6.1 is drawn to full scale. Label it.", lead), null, "a different letter: nothing is cut");
+});
+
+test("opening text is put right without a click only when every check agrees, and never where a person decided", () => {
+  const pages = ["", "", "8 A rod hangs in a field. Fig. 8.1 shows the rod. (a) State the direction of the force. [2] (b) State the effect. [1] 9 Strontium-90 is radioactive. (a) (i) Explain what isotopes are. [1] (ii) Give a use. [1]"];
+  const outline = [
+    { number: "8", page: 3, text: "A rod hangs in a field. Fig. 8.1 shows the rod." },
+    { number: "8(a)", page: 3, text: "State the direction of the force." },
+    { number: "8(b)", page: 3, text: "State the effect." },
+    { number: "9", page: 3, text: "Strontium-90 is radioactive." },
+    { number: "9(a)", page: 3, text: "" },
+    { number: "9(a)(i)", page: 3, text: "Explain what isotopes are." },
+    { number: "9(a)(ii)", page: 3, text: "Give a use." },
+  ];
+  const reading = (t8: string) => cleanPaper({
+    items: [
+      { number: "8(a)", page: 3, text: t8, marks: 2, figures: ["F1"] },
+      { number: "8(b)", page: 3, text: "State the effect.", marks: 1 },
+      { number: "9(a)(i)", page: 3, text: "Strontium-90 is radioactive. Explain what isotopes are.", marks: 1 },
+      { number: "9(a)(ii)", page: 3, text: "Give a use.", marks: 1 },
+    ],
+    figures: [{ id: "F1", page: 3, caption: "Fig. 8.1", description: "" }],
+  }, "qp");
+  const content = reading("A rod hangs in a field. Fig. 8.1 shows the rod. State the direction of the force.");
+  const none = { fingerprints: [], keys: [], items: [] };
+  const r = autoFixLeads({ content, pages, gemini: content, outline }, none);
+  assert.deepEqual(r.fixes.map((f) => [f.key, f.lead]), [["structure:8(a):8", "8"], ["structure:9(a)(i):9", "9"]]);
+  assert.deepEqual(r.content.items.map((i) => [i.number, i.text, i.figures]), [
+    ["8", "A rod hangs in a field. Fig. 8.1 shows the rod.", ["F1"]],
+    ["8(a)", "State the direction of the force.", []],
+    ["8(b)", "State the effect.", []],
+    ["9", "Strontium-90 is radioactive.", []],
+    ["9(a)(i)", "Explain what isotopes are.", []],
+    ["9(a)(ii)", "Give a use.", []],
+  ], "each lead-in its own part, the parts keep the rest word for word, the figure with its lead-in");
+  assert.deepEqual(r.gemini?.items.map((i) => i.number), r.content.items.map((i) => i.number), "Gemini's reading gets the same split");
+  assert.ok(r.fixes.every((f) => f.flags.length === 1 && f.flags[0]!.key === f.key), "each fix keeps the one flag it settled, for Undo");
+  // Left alone: a part edited by hand, a flag settled with It's fine, a fix a person undid.
+  assert.equal(autoFixLeads({ content, pages, gemini: content, outline }, { ...none, items: ["8(a)", "9(a)(i)"] }).fixes.length, 0);
+  const fps = paperFlags({ content, pages, gemini: content, outline }).filter((f) => f.kind === "structure").map((f) => f.fingerprint);
+  assert.equal(autoFixLeads({ content, pages, gemini: content, outline }, { ...none, fingerprints: fps }).fixes.length, 0);
+  assert.deepEqual(autoFixLeads({ content, pages, gemini: content, outline }, { ...none, keys: ["structure:8(a):8"] }).fixes.map((f) => f.key), ["structure:9(a)(i):9"]);
+  // The lead-in written differently in the part (not its exact words): left for a person, nothing cut.
+  const reworded = reading("A rod is hanging in a field and Fig. 8.1 shows the rod. State the direction of the force.");
+  const r2 = autoFixLeads({ content: reworded, pages, gemini: reworded, outline }, none);
+  assert.ok(!r2.fixes.some((f) => f.key === "structure:8(a):8"));
+  assert.equal(r2.content.items.find((i) => i.number === "8(a)")!.text, reworded.items[0]!.text);
+  // A mark scheme, or a paper without an outline, is never touched.
+  assert.equal(autoFixLeads({ content, pages, gemini: content, outline: [] }, none).fixes.length, 0);
 });
