@@ -18,6 +18,7 @@ const NAV: readonly { group: string | null; items: readonly NavItem[] }[] = [
     group: "Library",
     items: [
       { href: "/admin/library", label: "Library", icon: "admin.library", need: { area: "library", level: "view" } },
+      { href: "/admin/library/documents", label: "Documents", icon: "admin.documents", need: { area: "library", level: "view" } },
       { href: "/admin/library/upload", label: "Upload", icon: "admin.upload", need: { area: "library", level: "edit" } },
       { href: "/admin/sources", label: "Sources", icon: "admin.sources" , need: ADMIN_VIEW },
       { href: "/admin/agent", label: "Agent", icon: "admin.agent" , need: ADMIN_VIEW },

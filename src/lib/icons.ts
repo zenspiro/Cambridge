@@ -40,6 +40,7 @@ export type IconSlot = { id: string; group: string; label: string; default: stri
 export const ICON_SLOTS: readonly IconSlot[] = [
   { id: "admin.home", group: "Admin menu", label: "Home", default: "house" },
   { id: "admin.library", group: "Admin menu", label: "Library", default: "library" },
+  { id: "admin.documents", group: "Admin menu", label: "Documents", default: "table" },
   { id: "admin.upload", group: "Admin menu", label: "Upload", default: "upload" },
   { id: "admin.sources", group: "Admin menu", label: "Sources", default: "globe" },
   { id: "admin.agent", group: "Admin menu", label: "Agent", default: "bot" },

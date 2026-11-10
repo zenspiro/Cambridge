@@ -72,11 +72,15 @@ try {
   await team.waitForURL(BASE + "/admin", { timeout: 10_000 }).then(() => check(true, "Accept opens the admin"), () => check(false, `Accept opens the admin (${team.url()})`));
   check((await team.locator("h1").textContent())?.startsWith("Welcome, ") && (await team.locator("#my-access").textContent())?.includes("0625"), "a team member's Home shows their access");
   const menu = await team.locator(".admin-side .side-link").allTextContents();
-  check(menu.join("|") === "Home|Library", `their menu has only what they may use (${menu.join("|")})`);
+  check(menu.join("|") === "Home|Library|Documents", `their menu has only what they may use (${menu.join("|")})`);
   check((await team.locator(".admin-side").textContent())?.includes("Signed in as") && (await team.locator(".ai-meter").count()) === 0, "the sidebar says who is signed in, without the owner's AI meter");
   await team.goto(BASE + "/admin/library");
   const cards = await team.locator("a[href^='/admin/library/0']").evaluateAll((as) => [...new Set(as.map((a) => a.getAttribute("href").split("/")[3]))]);
   check(cards.length === 1 && cards[0] === "0625" && (await team.locator(".page-actions a", { hasText: "Upload" }).count()) === 0, `the library shows only their subject, with no upload buttons (${cards.join(",")})`);
+  // Documents (owner, 10 Nov 2026): only their subjects, and no Subject choice for others.
+  await team.goto(BASE + "/admin/library/documents");
+  const docSubjects = await team.locator('.col-filter-box input[name="subject"]').evaluateAll((xs) => xs.map((x) => x.value));
+  check(docSubjects.every((c) => c === "0625"), `Documents lists only their subjects (${docSubjects.join(",") || "none stored"})`);
   await team.goto(BASE + "/admin/library/0625");
   check((await team.locator("#read-all").count()) === 0 && (await team.locator("#variants").count()) === 0 && (await team.locator(".page-actions a", { hasText: "Run the agent" }).count()) === 0, "the subject page hides Read all, the agent and essential variants");
   await team.goto(BASE + "/admin/library/0620");
