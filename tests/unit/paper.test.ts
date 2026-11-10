@@ -8,7 +8,7 @@ import { applyFix, autoHold, cleanScores, loadContent, loadPaperRow, markedRevie
 import { modelName } from "../../src/lib/brain/labels.ts";
 import { brainStep, claimBrainRun, cleanEvent, runState, startPaperRun } from "../../src/lib/brain/runs.ts";
 import { BRAIN } from "../../src/lib/config.ts";
-import { autoFixLeads, CHECKS_VERSION, holdsTable, isStale, leadsBefore, withoutLeads } from "../../src/lib/brain/paper.ts";
+import { autoFixLeads, CHECKS_VERSION, holdsTable, isStale, leadsBefore, withLeadIns, withoutLeads } from "../../src/lib/brain/paper.ts";
 import { testBucket, testDb } from "./helpers/d1.ts";
 
 const NOW = Date.UTC(2026, 10, 7);
@@ -519,4 +519,21 @@ test("a part holding a table is never split by code: the table would be lost (No
   assert.equal(await savePaperReading(db, bucket, id, "doc-qp-1", { content: withTable, flags, pages: PAGES }, true, NOW + 10), "ok");
   assert.equal(await applyFix(db, bucket, doc, "pdf", { key: "structure:1(a):1" }, "platform-admin", NOW + 20), "has_table", "and so does the button");
   assert.ok((await readingForRun(db, bucket, doc)).content!.items[0]!.text.includes("start | end"), "the table is still there");
+});
+
+test("Read it again on a first part also reads the opening text above it", () => {
+  assert.deepEqual(withLeadIns(["9(b)(i)"]), ["9(b)(i)", "9(b)"]);
+  assert.deepEqual(withLeadIns(["1(a)(i)"]), ["1(a)(i)", "1(a)", "1"]);
+  assert.deepEqual(withLeadIns(["9(b)"]), ["9(b)"], "not a first part: alone");
+  assert.deepEqual(withLeadIns(["2(a)", "2(b)"]), ["2(a)", "2", "2(b)"]);
+  assert.deepEqual(withLeadIns(["3"]), ["3"]);
+});
+
+test("a re-read that returns the lost opening text puts it back before its part, with its table", () => {
+  const item = (number: string, text: string, marks: number | null, tables: { label: string; rows: string[][] }[] = []) => ({ number, page: 16, text, marks, options: [], answerLines: 0, figures: [], guidance: "", tables });
+  const old = { kind: "qp" as const, totalMarks: 80, figures: [], items: [item("9(a)", "Fig. 9.1 shows a beam.", 1), item("9(b)(i)", "Define half-life of a radioactive isotope.", 1)] };
+  const fresh = { ...old, items: [item("9(b)", "Table 9.1 shows five radioactive sources.", null, [{ label: "Table 9.1", rows: [["source", "type"], ["P", "alpha"]] }]), item("9(b)(i)", "Define half-life of a radioactive isotope.", 1)] };
+  const merged = mergeReading(old, fresh, new Set(), { items: withLeadIns(["9(b)(i)"]), figures: [] });
+  assert.deepEqual(merged.items.map((i) => i.number), ["9(a)", "9(b)", "9(b)(i)"]);
+  assert.equal(merged.items[1]!.tables[0]!.rows[1]![1], "alpha");
 });
