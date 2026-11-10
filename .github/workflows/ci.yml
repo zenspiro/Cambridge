@@ -1,5 +1,6 @@
 # Order (brief 15.5): typecheck, checks, migrations, deploy. A broken change never ships.
-# Pull requests and pushes run the checks. Only a push to main migrates and deploys.
+# Pull requests and pushes run the checks. Only a push to main migrates and deploys, and only when
+# "All checks passed" is green (the check branch protection requires).
 name: CI
 
 on:
@@ -10,40 +11,26 @@ on:
 
 permissions:
   contents: read
-  actions: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  # A manual run gets its own group, so several can run on one commit (to find tests that fail by chance).
+  group: ci-${{ github.ref }}${{ github.event_name == 'workflow_dispatch' && format('-{0}', github.run_id) || '' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Fast checks: types, unit tests, the inline check and the Worker build.
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: 2
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: npm
       - run: npm ci
-      # Owner, 10 Nov 2026: a merge whose code is exactly the pull request's (same files) and whose pull request
-      # passed CI does not run the browser suite again. Anything else (main moved, a squash, no green run) runs it.
-      - name: Already tested on the pull request?
-        id: tested
-        if: github.event_name == 'push'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-        run: |
-          head=$(git rev-parse --verify --quiet HEAD^2 || true)
-          if [ -z "$head" ]; then echo "Not a merge commit: running the browser suite."; exit 0; fi
-          if [ "$(git rev-parse HEAD^{tree})" != "$(git rev-parse "$head^{tree}")" ]; then echo "Main moved since the pull request: running the browser suite."; exit 0; fi
-          ok=$(gh api "repos/$REPO/actions/runs?head_sha=$head&event=pull_request&status=success" --jq '[.workflow_runs[] | select(.path == ".github/workflows/ci.yml")] | length' || echo 0)
-          if [ "${ok:-0}" -gt 0 ]; then echo "The pull request passed CI on these exact files: skipping the browser suite."; echo "skip=true" >> "$GITHUB_OUTPUT"; else echo "No passing pull request run found: running the browser suite."; fi
       - name: Typecheck
         run: npm run typecheck
       - name: Unit tests
@@ -52,23 +39,83 @@ jobs:
         run: npm run check:inline
       - name: Build Worker
         run: npm run build:worker
+
+  # The browser suite in groups side by side (review, 10 Nov 2026: faster runs instead of skipping them), each
+  # on its own fresh local database. Every file also passes on its own (checked when the groups were made).
+  e2e:
+    name: browser (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: library and agent
+            files: smoke admin library folder agent
+          - name: subject brain
+            files: brain
+          - name: accounts and team
+            files: themes accounts profile family team
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build Worker
+        run: npm run build:worker
       - name: Migrations (local D1)
         run: npm run db:migrate:local
-      - name: Browser smoke test
-        if: steps.tested.outputs.skip != 'true'
+      - name: Browser tools
         run: |
           npx playwright install --with-deps chromium
           command -v pdftocairo || (sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends poppler-utils)
+      - name: Browser tests
+        env:
+          FILES: ${{ matrix.files }}
+        run: |
+          set -o pipefail
           cp .dev.vars.example .dev.vars
           npx wrangler dev --local --port 8787 > wrangler-dev.log 2>&1 &
           for i in $(seq 1 60); do curl -sf http://localhost:8787/health > /dev/null && break; sleep 1; done
-          npm run test:e2e
-      - name: Worker log on failure
+          status=0
+          for f in $FILES; do
+            echo "::group::$f"
+            node "tests/e2e/$f.mjs" 2>&1 | tee -a e2e.log || status=1
+            echo "::endgroup::"
+          done
+          exit $status
+      # The Worker log first, folded; the failing checks last, so they are what the log ends with.
+      - name: What failed
         if: failure()
-        run: cat wrangler-dev.log || true
+        run: |
+          echo "::group::Worker log (last 400 lines)"
+          tail -n 400 wrangler-dev.log || true
+          echo "::endgroup::"
+          echo "Failing checks:"
+          grep -nE "^FAIL|Error|Timeout|exceeded|triggerUncaughtException" e2e.log | tail -n 40 || echo "(none printed: see the test group above)"
+          grep -E "^FAIL" e2e.log | head -n 20 | while IFS= read -r line; do echo "::error::$line"; done || true
+
+  # The one check branch protection requires: green only when every job above is green.
+  all:
+    name: All checks passed
+    needs: [check, e2e]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every job passed
+        env:
+          CHECK: ${{ needs.check.result }}
+          E2E: ${{ needs.e2e.result }}
+        run: |
+          echo "check: $CHECK, browser: $E2E"
+          test "$CHECK" = success && test "$E2E" = success
 
   deploy:
-    needs: check
+    needs: all
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -89,6 +136,8 @@ jobs:
       - run: npm ci
       - name: Find the D1 database id
         run: node scripts/set-d1-id.ts
+      - name: Record the commit and time being deployed
+        run: node scripts/set-build-info.ts
       - name: Migrations (production D1)
         run: npm run db:migrate:remote
       - name: Deploy

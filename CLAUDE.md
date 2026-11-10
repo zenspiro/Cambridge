@@ -36,7 +36,7 @@ Product and commercial decisions (AI engine, accounts and portals, pricing, paym
 ## Stack in this repo
 - Next.js 16 + React 19 + Tailwind 4, on Cloudflare Workers through OpenNext (`@opennextjs/cloudflare`). Versions pinned exactly in `package.json`.
 - `wrangler.jsonc`: Worker `cambridge`, D1 `DB` (cambridge), R2 `FILES` (cambridge, app files) and `SOURCE` (cambridge-source, Cambridge documents, admin only, never served by URL). No routes: the app is on `cambridge.zenspiroapps.workers.dev`.
-- The D1 id in `wrangler.jsonc` is a placeholder; CI fills it by name (`scripts/set-d1-id.ts`).
+- The D1 id in `wrangler.jsonc` is a placeholder; CI fills it by name (`scripts/set-d1-id.ts`). CI (review, 10 Nov 2026): fast checks plus the browser suite in three groups side by side, never skipped; "All checks passed" gates the deploy and branch protection; the deploy writes `BUILD_COMMIT`/`BUILD_AT` (`scripts/set-build-info.ts`, `buildInfo`), shown on admin Home (`#live-build`) and in `/health`.
 - Settings come from `vars` or the database, never hardcoded (`APP_NAME` is the brand name; `CLAUDE_MODEL`, `GEMINI_MODEL` (defaults; the AI setup page wins), `BRAIN_WORKFLOW` for the subject brain).
 - Bindings in code: `getEnv()` in `src/lib/env.ts`. Types: `npm run cf:types` writes `cloudflare-env.d.ts` (not committed).
 

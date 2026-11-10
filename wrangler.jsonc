@@ -43,6 +43,9 @@
     // provider. The API keys are GitHub secrets (CLAUDE_API_KEY, GEMINI_API_KEY), never here.
     "BRAIN_WORKFLOW": "brain.yml",
     "CLAUDE_MODEL": "claude-sonnet-5-5",
-    "GEMINI_MODEL": "gemini-3.5-flash"
+    "GEMINI_MODEL": "gemini-3.5-flash",
+    // Which commit is live and when it went out: filled by CI at deploy (scripts/set-build-info.ts), empty locally.
+    "BUILD_COMMIT": "",
+    "BUILD_AT": ""
   }
 }

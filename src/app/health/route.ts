@@ -1,7 +1,8 @@
 import { getEnv } from "@/lib/env";
 import { newErrorRef, reportError } from "@/lib/errors";
+import { buildInfo } from "@/lib/buildInfo";
 
-// Public by design (access: public). Shows only pass or fail per check, never details.
+// Public by design (access: public). Shows only pass or fail per check, never details, and the live commit.
 export const dynamic = "force-dynamic";
 
 async function check(name: string, fn: () => Promise<unknown>, ref: string): Promise<boolean> {
@@ -24,7 +25,7 @@ export async function GET() {
   ]);
   const ok = database && files && source;
   return Response.json(
-    { ok, checks: { database, files, source }, ...(ok ? {} : { ref }) },
+    { ok, checks: { database, files, source }, build: buildInfo(env)?.short ?? "local", ...(ok ? {} : { ref }) },
     { status: ok ? 200 : 503, headers: { "Cache-Control": "no-store" } },
   );
 }

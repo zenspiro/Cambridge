@@ -26,7 +26,7 @@ Update this file whenever the process changes.
 - [ ] `npm run db:migrate:local`
 - [ ] `.dev.vars` exists (copy `.dev.vars.example`)
 - [ ] `npx wrangler dev --local --port 8787`, then `npm run test:e2e` (public pages at 375 px and 1400 px; admin pages at 1400 px only, desktop only by owner decision; student and parent frames at 375 px in all three themes)
-- [ ] CI runs the browser suite on every pull request; after a merge it is skipped when the merge holds exactly the pull request's files and that run passed (owner, 10 Nov 2026), so run it locally before pushing.
+- [ ] CI runs everything on every pull request and every merge (review, 10 Nov 2026: never skipped): fast checks, then the browser suite in three groups side by side, each on a fresh database; "All checks passed" is the one check branch protection requires, and only then does a merge deploy. Merge only on green. A failed run ends its log with "Failing checks". Every browser test file must pass on its own fresh database.
 - [ ] New test suites listed in `tests/README.md`
 - [ ] `CLAUDE.md`, `HISTORY.md`, `FEATURES.md`, `docs/guides/` updated in the same commit
 - [ ] Commit message carries no AI model names
