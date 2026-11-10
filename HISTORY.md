@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-10: The agent test no longer fails by chance
+
+**What:** the library test uploads a valid file under a random name; it could pick a June 2024 Physics question paper (about one run in a hundred) that the agent test's fake website offers, so the agent test then found it already stored and its counts were off (CI runs 129 and 148: with 0625_s24_qp_21 stored, seven checks failed; with 0625_s24_qp_31, the robots.txt and second run checks). The random name now never uses June 2024, and the agent test clears every file its fake website offers before it starts.
+
+**Why:** owner, 10 Nov 2026: main's run for the opening text change failed in the agent test with no code change behind it (the review: find and fix tests that fail by chance, no retries as cover).
+
+**Tested:** the library and agent group passes from a fresh database; both failures match the two names exactly. The failed run on main was re-run (the code was already merged and green on its pull request).
+
 ## 2026-11-10: Read it again on a first part also reads the opening text above it
 
 **What:** `withLeadIns` (paper.ts): "Read it again" on a first part ("(a)", "(i)") also asks for the opening text of its question or part ("9(b)(i)" reads 9(b) too; "1(a)(i)" reads 1(a) and 1). `mergeReading` already puts a returned opening text back before its part, tables included. The `/read` route expands the parts asked for.
