@@ -35,6 +35,18 @@ test("review status: a person's change after the last full reading is a review; 
   assert.equal(docRow(raw({ scores: JSON.stringify([{ at: 9000, items: 44, clean: 44, red: 0, claude: "", gemini: "gemini-3.6-flash" }]) }), subjects, papers, new Set(), owner, 2000).status, "ready", "read again after the review: needs a look again");
 });
 
+test("Mark as reviewed: a paper with nothing to fix can be reviewed; a new full reading needs a look again", () => {
+  const marked = docRow(raw({ reviewed_at: 3000, reviewed_by: "team:u1", reviewed_name: "Sara" }), subjects, papers, new Set(), undefined, null);
+  assert.equal(marked.status, "reviewed");
+  assert.equal(marked.reviewerName, "Sara");
+  assert.equal(marked.reviewedAt, 3000);
+  const later = docRow(raw({ reviewed_at: 3000, reviewed_by: "platform-admin" }), subjects, papers, new Set(), { ...owner, at: 4000 }, 4000);
+  assert.equal(later.reviewedAt, 4000, "the later of a change and the mark is the last review");
+  assert.equal(docRow(raw({ reviewed_at: 3000, reviewed_by: "platform-admin", scores: JSON.stringify([{ at: 9000, items: 44, clean: 44, red: 0, claude: "", gemini: "gemini-3.6-flash" }]) }), subjects, papers, new Set(), undefined, null).status, "ready");
+  const open = raw({ flags: JSON.stringify([flag("aaaa1111")]), reviewed_at: 3000, reviewed_by: "platform-admin" });
+  assert.equal(docRow(open, subjects, papers, new Set(), undefined, null).status, "needs", "flags open win over the mark");
+});
+
 test("filters: each column its own choice, the search across the row, the read dates; sorting and the summary", () => {
   const rows = [
     docRow(raw({ id: "a" }), subjects, papers, new Set(), owner, 2000),

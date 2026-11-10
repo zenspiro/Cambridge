@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import {
   cleanPaper, cleanSvg, editItem, marksAgainstPaper, mergeReading, openFlags, paperFlags, paperScore, pdfVersion, placeOnPages, recheckItem, storedScore, type PaperContent,
 } from "../../src/lib/brain/paper.ts";
-import { applyFix, autoHold, cleanScores, loadContent, loadPaperRow, paperDoc, paperView, readingForRun, savePaperReading } from "../../src/lib/brain/paperRead.ts";
+import { applyFix, autoHold, cleanScores, loadContent, loadPaperRow, markedReviewed, paperDoc, paperView, readingForRun, savePaperReading } from "../../src/lib/brain/paperRead.ts";
 import { modelName } from "../../src/lib/brain/labels.ts";
 import { brainStep, claimBrainRun, cleanEvent, runState, startPaperRun } from "../../src/lib/brain/runs.ts";
 import { BRAIN } from "../../src/lib/config.ts";
@@ -192,6 +192,13 @@ test("paper runs: started with a scope, progress events kept in order, a reading
   view = await paperView(db, bucket, doc);
   assert.equal(view.open.length, 0);
   assert.equal(view.ready, true, "no open flags: ready");
+  assert.equal(await applyFix(db, bucket, doc, "review", {}, "team:u1", NOW + 510), "ok_reviewed");
+  let row = (await paperView(db, bucket, doc)).row!;
+  assert.equal(row.reviewedBy, "team:u1");
+  assert.equal(markedReviewed(row), true, "after the last full reading");
+  assert.equal(await applyFix(db, bucket, doc, "unreview", {}, "team:u1", NOW + 520), "ok_unreviewed");
+  row = (await paperView(db, bucket, doc)).row!;
+  assert.equal(row.reviewedAt, null);
 
   const undo = view.fixes.find((f) => f.action === "fine")!;
   assert.equal(await applyFix(db, bucket, doc, "undo", { fix: undo.id }, "platform-admin", NOW + 600), "ok_undone");
@@ -202,6 +209,8 @@ test("paper runs: started with a scope, progress events kept in order, a reading
   assert.equal((await paperView(db, bucket, doc)).ready, true, "marked ready with a flag left");
   assert.equal(await applyFix(db, bucket, doc, "unoverride", {}, "platform-admin", NOW + 800), "ok_undone");
   assert.equal((await paperView(db, bucket, doc)).ready, false);
+  assert.equal(await applyFix(db, bucket, doc, "review", {}, "platform-admin", NOW + 810), "bad", "Mark as reviewed only with no flags left");
+  assert.equal(await applyFix(db, bucket, doc, "unreview", {}, "platform-admin", NOW + 820), "bad", "nothing to take back");
 
   const pdfFix = (await paperView(db, bucket, doc)).fixes.find((f) => f.action === "pdf")!;
   assert.equal(await applyFix(db, bucket, doc, "undo", { fix: pdfFix.id }, "platform-admin", NOW + 900), "ok_undone");

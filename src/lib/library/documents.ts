@@ -4,7 +4,7 @@
 // Pure helpers plus one loader; no Next imports.
 import type { Db } from "../db.ts";
 import { docTypeLabel, SESSION_LABELS } from "../config.ts";
-import { cleanFlags, cleanScores, rowScore } from "../brain/paperRead.ts";
+import { cleanFlags, cleanScores, lastFullReading, rowScore } from "../brain/paperRead.ts";
 import { openFlags, type PaperScore } from "../brain/paper.ts";
 import { modelName } from "../brain/labels.ts";
 import { listSubjects } from "./catalog.ts";
@@ -43,6 +43,8 @@ export type RawDoc = {
   id: string; syllabus_id: string; session: string; year: number; paper: number | null; variant: number | null; doc_type: string; file_name: string;
   items: number | null; flags: string | null; dismissed: string | null; read_at: number | null; override_at: number | null;
   first_items: number | null; first_clean: number | null; first_red: number | null; first_at: number | null; scores: string | null;
+  /** Mark as reviewed (owner, 10 Nov 2026), with the team member's name when it was one. */
+  reviewed_at?: number | null; reviewed_by?: string | null; reviewed_name?: string | null;
 };
 export type PersonFix = { doc_id: string; actor: string; at: number; name: string };
 
@@ -56,7 +58,7 @@ const json = (s: string | null): unknown => {
 
 /**
  * One row from the database's own facts. Review status: open flags left (needs review, or marked ready anyway), no
- * flags left with a person's change since the last full reading (reviewed) or without one (ready, not checked by a
+ * flags left with a person's change or Mark as reviewed since the last full reading (reviewed) or without one (ready, not checked by a
  * person); automatic fixes are not a review. Pure.
  */
 export function docRow(d: RawDoc, subjects: readonly { code: string; label: string }[], papers: readonly Pick<Paper, "syllabus_id" | "paper" | "name" | "format" | "tier">[],
@@ -70,7 +72,14 @@ export function docRow(d: RawDoc, subjects: readonly { code: string; label: stri
   const open = read ? openFlags(flags, dismissed, rules).length : 0;
   const scores = cleanScores(json(d.scores));
   // The last full reading (a check run or a figure cut is not one): a person's change after it is a review of it.
-  const lastFull = scores.at(-1)?.at ?? d.first_at ?? d.read_at ?? 0;
+  const lastFull = lastFullReading(scores, d.first_at, d.read_at);
+  // Mark as reviewed counts like a change by that person; the later of the two is the last review.
+  const mark: PersonFix | undefined = d.reviewed_at != null && d.reviewed_by
+    ? { doc_id: d.id, actor: d.reviewed_by, at: d.reviewed_at, name: personName(d.reviewed_by, d.reviewed_name ?? null) } : undefined;
+  if (mark && (lastFix === undefined || mark.at >= lastFix.at)) {
+    lastFix = mark;
+    lastPersonAt = mark.at;
+  }
   const status: ReviewStatus = !readable ? "unreadable" : !read ? "unread"
     : open > 0 ? (d.override_at ? "override" : "needs")
     : lastPersonAt !== null && lastPersonAt >= lastFull ? "reviewed" : "ready";
@@ -93,8 +102,10 @@ export async function loadDocRows(db: Db, codes: readonly string[] | null): Prom
   const like = codes && codes.length === 1 ? `${codes[0]}-%` : "%";
   const [docs, paperRows, ruleRows, fixRows, subjects] = await Promise.all([
     db.prepare(`SELECT d.id, d.syllabus_id, d.session, d.year, d.paper, d.variant, d.doc_type, d.file_name,
-                       p.items, p.flags, p.dismissed, p.read_at, p.override_at, p.first_items, p.first_clean, p.first_red, p.first_at, p.scores
+                       p.items, p.flags, p.dismissed, p.read_at, p.override_at, p.first_items, p.first_clean, p.first_red, p.first_at, p.scores,
+                       p.reviewed_at, p.reviewed_by, r.name AS reviewed_name
                 FROM source_document d LEFT JOIN paper_read p ON p.doc_id = d.id
+                LEFT JOIN "auth_user" r ON p.reviewed_by LIKE 'team:%' AND r.id = substr(p.reviewed_by, 6)
                 WHERE d.status = 'stored' AND d.syllabus_id LIKE ?1`).bind(like).all<RawDoc>(),
     db.prepare(`SELECT syllabus_id, paper, name, format, tier FROM syllabus_paper`).bind().all<Pick<Paper, "syllabus_id" | "paper" | "name" | "format" | "tier">>(),
     db.prepare(`SELECT code, fingerprint FROM paper_rule`).bind().all<{ code: string; fingerprint: string }>(),
