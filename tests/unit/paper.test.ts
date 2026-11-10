@@ -8,7 +8,7 @@ import { applyFix, autoHold, cleanScores, loadContent, loadPaperRow, markedRevie
 import { modelName } from "../../src/lib/brain/labels.ts";
 import { brainStep, claimBrainRun, cleanEvent, runState, startPaperRun } from "../../src/lib/brain/runs.ts";
 import { BRAIN } from "../../src/lib/config.ts";
-import { autoFixLeads, CHECKS_VERSION, isStale, leadsBefore, withoutLeads } from "../../src/lib/brain/paper.ts";
+import { autoFixLeads, CHECKS_VERSION, holdsTable, isStale, leadsBefore, withoutLeads } from "../../src/lib/brain/paper.ts";
 import { testBucket, testDb } from "./helpers/d1.ts";
 
 const NOW = Date.UTC(2026, 10, 7);
@@ -493,4 +493,30 @@ test("mark schemes: a part's rows are compared together, mark codes ignored, rep
   assert.deepEqual(real.filter((f) => f.kind === "agree").map((f) => f.key), ["agree:1(a)"], "a real difference: one flag for the part");
   const marks = { ...gem, items: [row("1(a)", "50 000 N / m A2\n(k =) F ÷ x C1", 4), ...gem.items.slice(1)] };
   assert.deepEqual(paperFlags({ content: ours, pages, gemini: marks }).filter((f) => f.kind === "marks").map((f) => f.key), ["marks:1(a):gemini"]);
+});
+
+test("a part holding a table is never split by code: the table would be lost (Nov 2025 Paper 42 9(b))", async () => {
+  assert.equal(holdsTable({ text: "Table 9.1 shows sources.\nsource | type\nP | alpha" }), true);
+  assert.equal(holdsTable({ text: "Define half-life.", tables: [{ label: "Table 9.1", rows: [["P", "alpha"]] }] }), true);
+  assert.equal(holdsTable({ text: "Calculate the speed. Use v = d | t." }), false, "one stray bar is not a table");
+  const db = testDb();
+  const bucket = testBucket();
+  seedDoc(db);
+  const id = (await startPaperRun(db, "doc-qp-1", { items: [], figures: [] }, "platform-admin", NOW))!;
+  await claimBrainRun(db, id, null, NOW + 1);
+  const withTable = cleanPaper({ ...READING, items: [{ ...READING.items[0]!, text: `${READING.items[0]!.text}\nstart | end\n0 s | 2.5 s` }, ...READING.items.slice(1)] }, "qp");
+  const outline = [
+    { number: "1", page: 2, text: "A student rolls a trolley down a ramp and measures the time it takes to travel 1.5 m." },
+    { number: "1(a)", page: 2, text: "State the instrument used to measure the time." },
+    { number: "1(b)", page: 2, text: "The trolley takes 2.5 s. Calculate its average speed." },
+    { number: "2", page: 3, text: "" },
+    { number: "2(a)", page: 3, text: "Define the term density and state its unit for a solid block of steel." },
+  ];
+  const doc = (await paperDoc(db, "doc-qp-1"))!;
+  assert.equal(autoFixLeads({ content: withTable, pages: PAGES, gemini: null, outline }, await autoHold(db, doc)).fixes.length, 0, "the automatic fix leaves it alone");
+  const flags = paperFlags({ content: withTable, pages: PAGES, gemini: null, outline });
+  assert.ok(flags.some((f) => f.key === "structure:1(a):1"));
+  assert.equal(await savePaperReading(db, bucket, id, "doc-qp-1", { content: withTable, flags, pages: PAGES }, true, NOW + 10), "ok");
+  assert.equal(await applyFix(db, bucket, doc, "pdf", { key: "structure:1(a):1" }, "platform-admin", NOW + 20), "has_table", "and so does the button");
+  assert.ok((await readingForRun(db, bucket, doc)).content!.items[0]!.text.includes("start | end"), "the table is still there");
 });

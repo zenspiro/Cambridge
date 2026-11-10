@@ -494,6 +494,7 @@ export function autoFixLeads(input: CheckInput, hold: AutoHold): { content: Pape
     const before = content.items.find((i) => i.number === f.item);
     if (!before) continue;
     const split = isSplitFlag(f);
+    if (split && holdsTable(before)) continue;
     const lead = split ? f.key.split(":").at(-1) ?? "" : undefined;
     if (lead !== undefined && hands.has(lead)) continue;
     // Exact cuts only: the part keeps everything after the lead-in's own words (none of them when it was left out);
@@ -557,6 +558,14 @@ export function withoutLeads(g: PaperItem, leads: readonly PaperItem[]): PaperIt
   }
   return g;
 }
+
+/**
+ * A part that holds a table (as data, or as text lines with "|"). Its opening text is never split off by code: the
+ * paper's own words for a table come out as one jumbled line, so the table would be lost (owner, 10 Nov 2026, Nov
+ * 2025 Paper 42 9(b)). Such a part is read again instead. Pure.
+ */
+export const holdsTable = (it: Pick<PaperItem, "text"> & { tables?: readonly unknown[] }) =>
+  (it.tables?.length ?? 0) > 0 || it.text.split("\n").filter((l) => l.includes("|")).length >= 2;
 
 /** A structure flag whose fix splits a lead-in off its first part (not a lead-in's own words, not a table). */
 export const isSplitFlag = (f: Pick<Flag, "kind" | "key">) => f.kind === "structure" && !/:(lead|table)$/.test(f.key);

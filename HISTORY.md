@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-10: A part holding a table is never split by code
+
+**What:** `holdsTable` (paper.ts): a part with `tables`, or two or more text lines with "|". "Give it its own part" on such a part is refused (`applyFix` answers `has_table`, the button is off with a note to use Read it again), and the automatic fix skips it. First case in `docs/benchmark-cases.md`.
+
+**Why:** owner, 10 Nov 2026: on Nov 2025 Paper 42, splitting 9(b)'s opening text off 9(b)(i) replaced Table 9.1 with the paper's words for it, one jumbled line, and left the table flag on the wrong part. A safety guard against losing content, not a new reading rule (review, 10 Nov 2026).
+
+**Tested:** `npm run check` exits 0 (260 unit tests; new: what counts as a table, the automatic fix and the button both leave such a part alone and the table stays). Browser suite from a fresh database.
+
 ## 2026-11-10: CI you can trust: no skipped tests, side by side groups, readable failures, live version shown
 
 **What:** following the review of 10 Nov 2026. The browser test that locks an address with five wrong passwords now uses its own address (`100.64.0.1`); before, other tests picked addresses at random from the same 250, and about one run in a hundred landed on the locked one and could not sign in (main's run for the mark scheme fix failed this way, so it was never deployed). The "skip the browser suite after a merge" step is gone: every pull request and every merge runs everything. The browser suite runs in three groups side by side (`e2e` matrix: library and agent, subject brain, accounts and team), each on a fresh database. A failed run ends its log with "Failing checks" (the Worker log is folded above it) and marks each failing check as an error. One job, "All checks passed", is green only when every job is; the deploy waits for it, and it is the check for branch protection. Manual runs get their own concurrency group, so a commit can be run many times to find tests that fail by chance. The deploy writes the commit and time into the Worker's vars (`scripts/set-build-info.ts`, `BUILD_COMMIT`, `BUILD_AT`); admin Home shows "Live version abc1234, deployed ..." with a link to the commit, and `/health` gives `build`.
