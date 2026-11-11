@@ -1,0 +1,241 @@
+{
+ "file": "0610_m23_qp_42",
+ "kind": "qp",
+ "total": 80,
+ "mcq": false,
+ "parts": [
+  {
+   "n": "1(a)(i)",
+   "marks": 1
+  },
+  {
+   "n": "1(a)(ii)",
+   "marks": 1
+  },
+  {
+   "n": "1(a)(iii)",
+   "marks": 1
+  },
+  {
+   "n": "1(a)(iv)",
+   "marks": 2
+  },
+  {
+   "n": "1(a)(v)",
+   "marks": 2
+  },
+  {
+   "n": "1(b)(i)",
+   "marks": 1
+  },
+  {
+   "n": "1(b)(ii)",
+   "marks": 2
+  },
+  {
+   "n": "1(b)(iii)",
+   "marks": 4
+  },
+  {
+   "n": "2(a)",
+   "marks": 6
+  },
+  {
+   "n": "2(b)",
+   "marks": 4
+  },
+  {
+   "n": "2(c)",
+   "marks": 1
+  },
+  {
+   "n": "3(a)(i)",
+   "marks": 2
+  },
+  {
+   "n": "3(a)(ii)",
+   "marks": 2
+  },
+  {
+   "n": "3(b)(i)",
+   "marks": 1
+  },
+  {
+   "n": "3(b)(ii)",
+   "marks": 3
+  },
+  {
+   "n": "3(b)(iii)",
+   "marks": 1
+  },
+  {
+   "n": "3(c)(i)",
+   "marks": 2
+  },
+  {
+   "n": "3(c)(ii)",
+   "marks": 3
+  },
+  {
+   "n": "3(c)(iii)",
+   "marks": 1
+  },
+  {
+   "n": "3(c)(iv)",
+   "marks": 3
+  },
+  {
+   "n": "4(a)(i)",
+   "marks": 4
+  },
+  {
+   "n": "4(a)(ii)",
+   "marks": 2
+  },
+  {
+   "n": "4(b)",
+   "marks": 3
+  },
+  {
+   "n": "4(c)",
+   "marks": 2
+  },
+  {
+   "n": "5(a)",
+   "marks": 2
+  },
+  {
+   "n": "5(b)",
+   "marks": 2
+  },
+  {
+   "n": "5(c)(i)",
+   "marks": 1
+  },
+  {
+   "n": "5(c)(ii)",
+   "marks": 3
+  },
+  {
+   "n": "5(d)",
+   "marks": 1
+  },
+  {
+   "n": "5(e)",
+   "marks": 3
+  },
+  {
+   "n": "6(a)",
+   "marks": 7
+  },
+  {
+   "n": "6(b)",
+   "marks": 2
+  },
+  {
+   "n": "6(c)",
+   "marks": 3
+  },
+  {
+   "n": "6(d)",
+   "marks": 2
+  }
+ ],
+ "leads": [
+  "1(a)",
+  "1(b)",
+  "2",
+  "3(a)",
+  "3(b)",
+  "3(c)",
+  "4(a)",
+  "5",
+  "5(c)",
+  "6"
+ ],
+ "figures": [
+  {
+   "label": "Fig. 1.1",
+   "part": "1(a)",
+   "also": [
+    "1(a)(i)"
+   ]
+  },
+  {
+   "label": "Fig. 1.2",
+   "part": "1(b)",
+   "also": [
+    "1(b)(i)"
+   ]
+  },
+  {
+   "label": "Fig. 2.1",
+   "part": "2",
+   "also": [
+    "2(a)"
+   ]
+  },
+  {
+   "label": "Fig. 3.1",
+   "part": "3(a)",
+   "also": [
+    "3(a)(i)"
+   ]
+  },
+  {
+   "label": "Fig. 3.2",
+   "part": "3(b)",
+   "also": [
+    "3(b)(ii)"
+   ]
+  },
+  {
+   "label": "Fig. 3.3",
+   "part": "3(c)",
+   "also": [
+    "3(c)(ii)"
+   ]
+  },
+  {
+   "label": "Fig. 4.1",
+   "part": "4(a)",
+   "also": [
+    "4(a)(i)"
+   ]
+  },
+  {
+   "label": "Fig. 5.1",
+   "part": "5(c)",
+   "also": [
+    "5(c)(i)"
+   ]
+  },
+  {
+   "label": "Fig. 6.1",
+   "part": "6",
+   "also": [
+    "6(a)"
+   ]
+  }
+ ],
+ "tables": [
+  {
+   "label": "Table 2.1",
+   "part": "2",
+   "also": [
+    "2(a)"
+   ]
+  },
+  {
+   "label": "Table 2.2",
+   "part": "2(b)"
+  },
+  {
+   "label": "Table 5.1",
+   "part": "5(c)(ii)"
+  }
+ ],
+ "notation": [],
+ "unsure": [],
+ "status": "checked"
+}

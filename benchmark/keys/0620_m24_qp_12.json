@@ -1,0 +1,295 @@
+{
+ "file": "0620_m24_qp_12",
+ "kind": "qp",
+ "total": 40,
+ "mcq": true,
+ "parts": [
+  {
+   "n": "1",
+   "marks": null
+  },
+  {
+   "n": "2",
+   "marks": null
+  },
+  {
+   "n": "3",
+   "marks": null
+  },
+  {
+   "n": "4",
+   "marks": null
+  },
+  {
+   "n": "5",
+   "marks": null
+  },
+  {
+   "n": "6",
+   "marks": null
+  },
+  {
+   "n": "7",
+   "marks": null
+  },
+  {
+   "n": "8",
+   "marks": null
+  },
+  {
+   "n": "9",
+   "marks": null
+  },
+  {
+   "n": "10",
+   "marks": null
+  },
+  {
+   "n": "11",
+   "marks": null
+  },
+  {
+   "n": "12",
+   "marks": null
+  },
+  {
+   "n": "13",
+   "marks": null
+  },
+  {
+   "n": "14",
+   "marks": null
+  },
+  {
+   "n": "15",
+   "marks": null
+  },
+  {
+   "n": "16",
+   "marks": null
+  },
+  {
+   "n": "17",
+   "marks": null
+  },
+  {
+   "n": "18",
+   "marks": null
+  },
+  {
+   "n": "19",
+   "marks": null
+  },
+  {
+   "n": "20",
+   "marks": null
+  },
+  {
+   "n": "21",
+   "marks": null
+  },
+  {
+   "n": "22",
+   "marks": null
+  },
+  {
+   "n": "23",
+   "marks": null
+  },
+  {
+   "n": "24",
+   "marks": null
+  },
+  {
+   "n": "25",
+   "marks": null
+  },
+  {
+   "n": "26",
+   "marks": null
+  },
+  {
+   "n": "27",
+   "marks": null
+  },
+  {
+   "n": "28",
+   "marks": null
+  },
+  {
+   "n": "29",
+   "marks": null
+  },
+  {
+   "n": "30",
+   "marks": null
+  },
+  {
+   "n": "31",
+   "marks": null
+  },
+  {
+   "n": "32",
+   "marks": null
+  },
+  {
+   "n": "33",
+   "marks": null
+  },
+  {
+   "n": "34",
+   "marks": null
+  },
+  {
+   "n": "35",
+   "marks": null
+  },
+  {
+   "n": "36",
+   "marks": null
+  },
+  {
+   "n": "37",
+   "marks": null
+  },
+  {
+   "n": "38",
+   "marks": null
+  },
+  {
+   "n": "39",
+   "marks": null
+  },
+  {
+   "n": "40",
+   "marks": null
+  }
+ ],
+ "leads": [],
+ "figures": [],
+ "tables": [],
+ "notation": [
+  {
+   "part": "3",
+   "token": "N^{3−}"
+  },
+  {
+   "part": "3",
+   "token": "Al^{3+}"
+  },
+  {
+   "part": "3",
+   "token": "Li^{+}"
+  },
+  {
+   "part": "3",
+   "token": "Cl^{−}"
+  },
+  {
+   "part": "8",
+   "token": "H_{2}"
+  },
+  {
+   "part": "8",
+   "token": "SO_{4}"
+  },
+  {
+   "part": "8",
+   "token": "MgSO_{4}"
+  },
+  {
+   "part": "8",
+   "token": "2H_{2}"
+  },
+  {
+   "part": "8",
+   "token": "Mg(SO_{4}"
+  },
+  {
+   "part": "8",
+   "token": "Mg_{2}"
+  },
+  {
+   "part": "9",
+   "token": "^{12}C"
+  },
+  {
+   "part": "9",
+   "token": "^{40}Ca"
+  },
+  {
+   "part": "9",
+   "token": "^{1}H"
+  },
+  {
+   "part": "10",
+   "token": "CO_{2}"
+  },
+  {
+   "part": "10",
+   "token": "2C_{2}"
+  },
+  {
+   "part": "10",
+   "token": "7O_{2}"
+  },
+  {
+   "part": "10",
+   "token": "4CO_{2}"
+  },
+  {
+   "part": "14",
+   "token": "2H_{2}"
+  },
+  {
+   "part": "14",
+   "token": "O_{2}"
+  },
+  {
+   "part": "16",
+   "token": "cm^{3}"
+  },
+  {
+   "part": "17",
+   "token": "cm^{3}"
+  },
+  {
+   "part": "19",
+   "token": "Ag_{2}"
+  },
+  {
+   "part": "21",
+   "token": "Na^{+}"
+  },
+  {
+   "part": "21",
+   "token": "H^{+}"
+  },
+  {
+   "part": "21",
+   "token": "Cl^{−}"
+  },
+  {
+   "part": "26",
+   "token": "Rb^{+}"
+  },
+  {
+   "part": "26",
+   "token": "Sr^{2+}"
+  },
+  {
+   "part": "35",
+   "token": "C_{3}"
+  },
+  {
+   "part": "35",
+   "token": "H_{10}"
+  },
+  {
+   "part": "35",
+   "token": "H_{12}"
+  }
+ ],
+ "unsure": [],
+ "status": "checked"
+}

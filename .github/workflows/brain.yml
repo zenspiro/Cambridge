@@ -32,8 +32,8 @@ jobs:
           cache: npm
       # The Anthropic SDK comes from the lockfile (exact versions); install scripts are not run.
       - run: npm ci --ignore-scripts --no-audit --no-fund
-      # Poppler (pdftocairo, pdftotext) cuts figures out of papers as SVG; from Ubuntu's own archive.
-      - run: command -v pdftocairo || (sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends poppler-utils)
+      # Poppler (pdftocairo, pdftotext) cuts figures out of papers as SVG; Ubuntu mirrors with fallbacks.
+      - run: bash scripts/ci/install-poppler.sh || echo "::warning::No Poppler: figures are left to box by hand"
       - name: Draft the topic tree
         env:
           APP_URL: ${{ vars.APP_URL || 'https://cambridge.zenspiroapps.workers.dev' }}

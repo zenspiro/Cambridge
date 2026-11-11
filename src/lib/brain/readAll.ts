@@ -127,3 +127,31 @@ export function readFilter(get: (k: string) => string | null | undefined, years:
 
 /** The query that shows a Read all choice on the subject overview. */
 export const filterQuery = (f: ReadFilter) => `ra=${f.tier}${f.session ? `&ras=${f.session}` : ""}${f.year ? `&ray=${f.year}` : ""}`;
+
+export type BenchPlan = { toRead: BatchDoc[]; read: number; missing: number };
+
+/**
+ * The subject's benchmark papers (src/lib/brain/benchmark.ts) not read yet, for "Read the benchmark papers" (owner,
+ * 11 Nov 2026): a Read all of just those, so the benchmark can be scored without reading every paper of a session.
+ */
+export async function planBenchmark(db: Db, files: readonly string[], state: ReadonlyMap<string, ReadState>): Promise<BenchPlan> {
+  if (!files.length) return { toRead: [], read: 0, missing: 0 };
+  const { results } = await db
+    .prepare(`SELECT id, file_name, doc_type, year, session, paper, variant, size_bytes, syllabus_id FROM source_document
+              WHERE status = 'stored' AND file_name IN (${files.map((_, i) => `?${i + 1}`).join(",")})`)
+    .bind(...files)
+    .all<{ id: string; file_name: string; doc_type: string; year: number; session: string; paper: number | null; variant: number | null; size_bytes: number; syllabus_id: string }>();
+  const toRead: BatchDoc[] = [];
+  let read = 0;
+  // In the set's own order: each question paper before its mark scheme.
+  for (const f of files) {
+    const r = results.find((x) => x.file_name === f);
+    if (!r || (r.doc_type !== "qp" && r.doc_type !== "ms")) continue;
+    if ((state.get(r.id) ?? "unread") !== "unread") {
+      read++;
+      continue;
+    }
+    toRead.push({ docId: r.id, fileName: r.file_name, docType: r.doc_type, year: r.year, session: r.session as BatchDoc["session"], paper: r.paper ?? 0, variant: r.variant, bytes: r.size_bytes, syllabusId: r.syllabus_id });
+  }
+  return { toRead: toRead.slice(0, BRAIN.maxBatchPapers), read, missing: files.length - results.length };
+}

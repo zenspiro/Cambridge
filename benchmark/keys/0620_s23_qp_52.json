@@ -1,0 +1,158 @@
+{
+ "file": "0620_s23_qp_52",
+ "kind": "qp",
+ "total": 40,
+ "mcq": false,
+ "parts": [
+  {
+   "n": "1(a)",
+   "marks": 4
+  },
+  {
+   "n": "1(b)",
+   "marks": 1
+  },
+  {
+   "n": "1(c)",
+   "marks": 4
+  },
+  {
+   "n": "1(d)",
+   "marks": 1
+  },
+  {
+   "n": "1(e)",
+   "marks": 2
+  },
+  {
+   "n": "1(f)",
+   "marks": 2
+  },
+  {
+   "n": "1(g)(i)",
+   "marks": 1
+  },
+  {
+   "n": "1(g)(ii)",
+   "marks": 1
+  },
+  {
+   "n": "1(h)",
+   "marks": 1
+  },
+  {
+   "n": "1(i)",
+   "marks": 2
+  },
+  {
+   "n": "2(a)",
+   "marks": 1
+  },
+  {
+   "n": "2(b)(i)",
+   "marks": 2
+  },
+  {
+   "n": "2(b)(ii)",
+   "marks": 1
+  },
+  {
+   "n": "2(c)",
+   "marks": 1
+  },
+  {
+   "n": "2(d)",
+   "marks": 2
+  },
+  {
+   "n": "2(e)",
+   "marks": 2
+  },
+  {
+   "n": "2(f)",
+   "marks": 3
+  },
+  {
+   "n": "2(g)",
+   "marks": 1
+  },
+  {
+   "n": "2(h)",
+   "marks": 2
+  },
+  {
+   "n": "3",
+   "marks": 6
+  }
+ ],
+ "leads": [
+  "1",
+  "2"
+ ],
+ "figures": [
+  {
+   "label": "Fig. 1.1",
+   "part": "1",
+   "also": [
+    "1(a)"
+   ]
+  },
+  {
+   "label": "Fig. 1.2",
+   "part": "1(c)",
+   "also": [
+    "1(e)"
+   ]
+  }
+ ],
+ "tables": [
+  {
+   "label": "Table 1.1",
+   "part": "1(a)"
+  },
+  {
+   "label": "Table 3.1",
+   "part": "3"
+  }
+ ],
+ "notation": [
+  {
+   "part": "1(a)",
+   "token": "cm^{3}"
+  },
+  {
+   "part": "1(i)",
+   "token": "cm^{3}"
+  },
+  {
+   "part": "2(f)",
+   "token": "cm^{3}"
+  },
+  {
+   "part": "3",
+   "token": "Cl^{−}"
+  },
+  {
+   "part": "3",
+   "token": "Br^{−}"
+  },
+  {
+   "part": "3",
+   "token": "I^{−}"
+  },
+  {
+   "part": "3",
+   "token": "Al^{3+}"
+  },
+  {
+   "part": "3",
+   "token": "Ca^{2+}"
+  },
+  {
+   "part": "3",
+   "token": "Cr^{3+}"
+  }
+ ],
+ "unsure": [],
+ "status": "checked"
+}

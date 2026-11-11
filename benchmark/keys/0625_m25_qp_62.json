@@ -1,0 +1,187 @@
+{
+ "file": "0625_m25_qp_62",
+ "kind": "qp",
+ "total": 40,
+ "mcq": false,
+ "parts": [
+  {
+   "n": "1(a)",
+   "marks": 2
+  },
+  {
+   "n": "1(b)",
+   "marks": 4
+  },
+  {
+   "n": "1(c)",
+   "marks": 1
+  },
+  {
+   "n": "1(d)(i)",
+   "marks": 1
+  },
+  {
+   "n": "1(d)(ii)",
+   "marks": 2
+  },
+  {
+   "n": "1(e)",
+   "marks": 1
+  },
+  {
+   "n": "2(a)(i)",
+   "marks": 1
+  },
+  {
+   "n": "2(a)(ii)",
+   "marks": 1
+  },
+  {
+   "n": "2(b)",
+   "marks": 1
+  },
+  {
+   "n": "2(c)",
+   "marks": 2
+  },
+  {
+   "n": "2(d)(i)",
+   "marks": 1
+  },
+  {
+   "n": "2(d)(ii)",
+   "marks": 1
+  },
+  {
+   "n": "2(e)",
+   "marks": 2
+  },
+  {
+   "n": "2(f)(i)",
+   "marks": 1
+  },
+  {
+   "n": "2(f)(ii)",
+   "marks": 1
+  },
+  {
+   "n": "3(a)(i)",
+   "marks": 1
+  },
+  {
+   "n": "3(a)(ii)",
+   "marks": 1
+  },
+  {
+   "n": "3(b)(i)",
+   "marks": 1
+  },
+  {
+   "n": "3(b)(ii)",
+   "marks": 1
+  },
+  {
+   "n": "3(c)",
+   "marks": 1
+  },
+  {
+   "n": "3(d)(i)",
+   "marks": 1
+  },
+  {
+   "n": "3(d)(ii)",
+   "marks": 2
+  },
+  {
+   "n": "3(e)",
+   "marks": 2
+  },
+  {
+   "n": "3(f)",
+   "marks": 1
+  },
+  {
+   "n": "4",
+   "marks": 7
+  }
+ ],
+ "leads": [
+  "1",
+  "1(d)",
+  "2",
+  "3",
+  "3(a)",
+  "3(b)"
+ ],
+ "figures": [
+  {
+   "label": "Fig. 1.1",
+   "part": "1",
+   "also": [
+    "1(a)"
+   ]
+  },
+  {
+   "label": "Fig. 1.2",
+   "part": "1(d)(i)"
+  },
+  {
+   "label": "Fig. 2.1",
+   "part": "2",
+   "also": [
+    "2(a)(i)"
+   ]
+  },
+  {
+   "label": "Fig. 3.1",
+   "part": "3",
+   "also": [
+    "3(a)"
+   ]
+  },
+  {
+   "label": "Fig. 4.1",
+   "part": "4"
+  }
+ ],
+ "tables": [
+  {
+   "label": "Table 1.1",
+   "part": "1(a)",
+   "also": [
+    "1(b)"
+   ]
+  },
+  {
+   "label": "Table 2.1",
+   "part": "2(b)",
+   "also": [
+    "2(d)(i)"
+   ]
+  }
+ ],
+ "notation": [
+  {
+   "part": "2(b)",
+   "token": "cm^{3}"
+  },
+  {
+   "part": "3(c)",
+   "token": "P_{1}"
+  },
+  {
+   "part": "3(c)",
+   "token": "P_{2}"
+  },
+  {
+   "part": "3(c)",
+   "token": "P_{3}"
+  },
+  {
+   "part": "3(c)",
+   "token": "P_{4}"
+  }
+ ],
+ "unsure": [],
+ "status": "checked"
+}

@@ -19,8 +19,9 @@ import { ActionForm } from "@/components/ActionForm";
 import { RunProgress } from "@/components/RunProgress";
 import { latestBatch } from "@/lib/brain/runs";
 import { RagDot } from "@/components/RagDot";
-import { filterWords, hasTiers, planBatch, ragOf, readFilter, readStates, rowDocIds } from "@/lib/brain/readAll";
+import { filterWords, hasTiers, planBatch, planBenchmark, ragOf, readFilter, readStates, rowDocIds } from "@/lib/brain/readAll";
 import { batchCostCheck, estimateWords, usdWords } from "@/lib/brain/spend";
+import { benchFilesFor } from "@/lib/brain/benchmark";
 
 export const metadata: Metadata = { title: "Library" };
 
@@ -109,6 +110,10 @@ export default async function SyllabusOverview({
   // The Read all running for this subject, or the last one (finished in the last 30 minutes): shown live in the card.
   const batchRun = await latestBatch(env.DB, code);
   const batchCost = plan?.toRead.length ? await batchCostCheck(env.DB, env, plan.toRead.map((d) => d.bytes)) : null;
+  // The benchmark papers of this subject (owner, 11 Nov 2026): read them on their own so the benchmark can be scored.
+  const benchFiles = benchFilesFor(code);
+  const bench = owner && benchFiles.length ? await planBenchmark(env.DB, benchFiles, states) : null;
+  const benchCost = bench?.toRead.length ? await batchCostCheck(env.DB, env, bench.toRead.map((d) => d.bytes)) : null;
   // Reading and review in one line; the list itself is the Documents page (owner, 10 Nov 2026: it will grow).
   const sum = reviewSummary(await loadDocRows(env.DB, [code]));
   const docs = `/admin/library/${code}/documents`;
@@ -211,6 +216,34 @@ export default async function SyllabusOverview({
                 </ActionForm>
               </>
             ) : <p className="notice m-0">Nothing to read: every stored paper in this choice is read already.</p>}
+          </div>
+        ) : null}
+        {bench ? (
+          <div className="stack-tight" id="read-benchmark">
+            <h3 className="subtitle">Benchmark papers</h3>
+            <p className="hint m-0">
+              {benchFiles.length} papers of this subject are in the reading benchmark: the set every change to the reading
+              rules is measured on. {bench.read} read already{bench.missing ? `, ${bench.missing} not in the library` : ""}.
+            </p>
+            {bench.toRead.length ? (
+              <>
+                <ol className="read-plan">
+                  {bench.toRead.map((d) => <li key={d.docId}>{describeFile(d.fileName, d.syllabusId, look)}</li>)}
+                </ol>
+                {benchCost ? (
+                  <p className={benchCost.verdict === "ok" ? "muted m-0" : "alert m-0"}>
+                    {estimateWords(benchCost.estimate).replace("Rough cost:", `Rough cost for ${bench.toRead.length}:`)}
+                    {benchCost.cap > 0 ? ` This month: ${usdWords(benchCost.spent)} of your ${usdWords(benchCost.cap)} cap.` : ""}
+                    {benchCost.verdict === "over_cap" ? " This would go past the cap, so it will not start." : benchCost.verdict === "no_price" ? " With a cap set, runs need a price for every model in use." : ""}
+                  </p>
+                ) : null}
+                <ActionForm action={`/admin/library/${code}/read-benchmark`} messages={MESSAGES} yes="Yes, proceed" no="No"
+                  confirm={`Read the ${bench.toRead.length} benchmark paper${bench.toRead.length === 1 ? "" : "s"}? This uses AI tokens: ${benchCost?.estimate.usd == null ? "cost unknown" : `about ${usdWords(benchCost.estimate.usd)}`}. Proceed?`}>
+                  <button className="btn btn-primary" type="submit">Read the {bench.toRead.length} benchmark papers</button>
+                </ActionForm>
+              </>
+            ) : bench.read ? <p className="notice m-0">Every benchmark paper of this subject in the library is read.</p>
+              : <p className="muted m-0">None of them is in the library yet.</p>}
           </div>
         ) : null}
       </section> : null}

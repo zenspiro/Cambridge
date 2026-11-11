@@ -78,7 +78,9 @@ export function notate(words: readonly Word[]): { words: Word[]; tokens: Notatio
   words.forEach((x, i) => {
     // A superscript is short: digits, signs, a letter or two ("max", "™"); a smaller-font label is not one.
     const frac = x.t.startsWith("\\frac{");
-    if (h(x) <= 0 || (!frac && (x.t.length > 8 || (x.t.match(/[A-Za-z]/g) ?? []).length > 3))) return;
+    // Nor is bare punctuation or control codes: page furniture prints an invisible comma and control codes over the
+    // margin (Jun 2024 0620 Paper 42, page 5, where it joined "symbol" and hid question 3's number).
+    if (h(x) <= 0 || !/[^\s,.;:\p{C}]/u.test(x.t) || (!frac && (x.t.length > 8 || (x.t.match(/[A-Za-z]/g) ?? []).length > 3))) return;
     let best: { j: number; gap: number; kind: "sup" | "sub"; side: "pre" | "post" } | null = null;
     words.forEach((base, j) => {
       // A fraction is never the base of a superscript (its box is two lines tall, so its neighbours look lowered).
@@ -565,8 +567,8 @@ export function fractions(words: readonly Word[], bars: readonly Bar[]): { words
 // ---------- The paper's own outline: questions, parts and their lead-ins ----------
 
 /** A label on the paper and the text printed after it, up to the next label. */
-export type OutlinePart = { number: string; page: number; text: string };
-type Building = OutlinePart & { words: Word[] };
+export type OutlinePart = { number: string; page: number; text: string; /** The printed "[n]" marks inside the part (benchmark keys); absent when none. */ marks?: number };
+type Building = OutlinePart & { words: Word[]; got: number };
 
 const ROMAN = ["i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x", "xi", "xii"];
 /** Header (page number, bar code) and footer (copyright, paper code) bands, in points. */
@@ -593,11 +595,20 @@ export function visualLines(words: readonly Word[]): Word[] {
  * The paper's questions and parts as printed: a question number alone at the left margin (the next number in turn),
  * a part letter "(a)" or numeral "(i)" at the start of a line (the next in turn; "(i)" after "(h)" is a letter only when
  * it lines up with the letters), and the words after each label up to the next one. Answer lines, [marks], the header
- * and footer are left out. Questions numbers that do not follow on (page numbers, values) are text. Pure.
+ * and footer are left out of the text; each part's printed [marks] are added up as `marks`. Questions numbers that do not follow on (page numbers, values) are text. Pure.
  */
 /** A figure's printed label on its own line ("Fig. 2.1", "Fig. 2.1 (not drawn to scale)"), not a sentence about it. */
 export const isCaptionLine = (text: string) => /^Fig(ure)?\.?\s*\d+\.\d+\b/i.test(text) && text.split(/\s+/).length <= 8
   && !/\b(in|of|on|shows?|is)\b/i.test(text.replace(/\((not )?(drawn )?to scale\)/i, ""));
+
+/** A part's last "[2]" can sit just inside the footer band, beside the copyright line (Mar 2025 0625 Paper 62, 3(d)(ii); Jun 2025 0478 Paper 22, 3, at 806 pt). */
+const MARK_FOOT = 810;
+const MARK_X = 530;
+/** Question numbers start at 48.7 to 50.4 pt on every paper measured; a table's row numbers sit further in (60.7, 0478 Mar 2023 Paper 12). */
+const Q_X = 56;
+/** A printed mark, alone or joined to its answer dots ("......[1]", Jun 2025 0620 Paper 42, 3(c)(ii)). */
+const MARK_WORD = /^\.*\[(\d+)\]$/;
+const offPage = (w: Word) => w.b[1] < TOP_BAND || (w.b[3] > FOOT_BAND && !(w.b[3] <= MARK_FOOT && MARK_WORD.test(w.t))) || w.b[0] < 30 || w.b[2] > 565;
 
 export function pdfOutline(pages: readonly (readonly Word[])[], figures: readonly (readonly WBox[])[] = []): OutlinePart[] {
   const out: Building[] = [];
@@ -607,7 +618,7 @@ export function pdfOutline(pages: readonly (readonly Word[])[], figures: readonl
   let roman = 0;
   let cur: Building | null = null;
   const start = (number: string, page: number) => {
-    cur = { number, page, text: "", words: [] };
+    cur = { number, page, text: "", words: [], got: 0 };
     out.push(cur);
   };
   pages.forEach((raw, pi) => {
@@ -623,7 +634,7 @@ export function pdfOutline(pages: readonly (readonly Word[])[], figures: readonl
       return x >= b[0] - 2 && x <= b[2] + 2 && y >= b[1] - 2 && y <= b[3] + 2;
     });
     const lines: Word[][] = [];
-    for (const w of visualLines(raw.filter((w) => !(w.b[1] < TOP_BAND || w.b[3] > FOOT_BAND || w.b[0] < 30 || w.b[2] > 565)))) {
+    for (const w of visualLines(raw.filter((w) => !offPage(w)))) {
       if (w.first || !lines.length) lines.push([w]);
       else lines.at(-1)!.push(w);
     }
@@ -636,12 +647,12 @@ export function pdfOutline(pages: readonly (readonly Word[])[], figures: readonl
     });
     let prevLabelLine = -1;
     words.forEach((w, wi) => {
-      if (w.b[1] < TOP_BAND || w.b[3] > FOOT_BAND || w.b[0] < 30 || w.b[2] > 565) return;
+      if (offPage(w)) return;
       const t = w.t;
       const lineStart = w.first || prevLabelLine === wi - 1;
       // The first question may be any number (a paper read from part way, or a cover without one); then they follow on.
       const qn = Number(t);
-      if (lineStart && /^\d{1,2}$/.test(t) && w.b[0] < 62 && page > 1 && qn > q && (q === 0 || qn <= q + 3)) {
+      if (lineStart && /^\d{1,2}$/.test(t) && w.b[0] < Q_X && page > 1 && qn > q && (q === 0 || qn <= q + 3)) {
         q = qn;
         letter = "";
         letterX = -1;
@@ -672,11 +683,14 @@ export function pdfOutline(pages: readonly (readonly Word[])[], figures: readonl
         }
       }
       if (!cur) return;
-      if (/^\.{3,}/.test(t) || /^\[\d+\]$/.test(t) || /^\[Total:?$/.test(t) || /^\d+\]$/.test(t)) return;
+      const mark = MARK_WORD.exec(t);
+      // Marks end at the right margin; "[1] [2] [3]" further in is a table's heading (Nov 2025 0478 Paper 22, 5(a)).
+      if (mark && w.b[2] >= MARK_X) (cur as Building).got += Number(mark[1]);
+      if (/^\.{3,}/.test(t) || mark || /^\[Total:?$/.test(t) || /^\d+\]$/.test(t)) return;
       (cur as Building).words.push(w);
     });
   });
-  return out.map((p) => ({ number: p.number, page: p.page, text: wordsText(p.words, false).replace(/\.{3,}/g, " ").replace(/\s+/g, " ").trim() }));
+  return out.map((p) => ({ number: p.number, page: p.page, text: wordsText(p.words, false).replace(/\.{3,}/g, " ").replace(/\s+/g, " ").trim(), ...(p.got ? { marks: p.got } : {}) }));
 }
 
 /** Letters, digits and signs only, markup and spacing gone ("C = \frac{1}{4} xy^{2}" and "C = 1/4 xy2" both "C=14xy2"). */
