@@ -71,6 +71,18 @@ test("store: good file is reserved, written, marked stored and audited", async (
   assert.deepEqual(a.map((x) => x.action), ["source.upload"]);
 });
 
+test("store: the agent's declared SHA-256 is used as is, and R2 refuses bytes that do not match it", async () => {
+  const db = testDb();
+  const bucket = testBucket();
+  const bytes = pdf("declared");
+  const sha = [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes as BufferSource))].map((x) => x.toString(16).padStart(2, "0")).join("");
+  assert.ok((await storeDocument(db, bucket, { fileName: "0625_s23_qp_41.pdf", bytes, actorId: "agent", origin: "agent", sha256: sha })).ok);
+  assert.equal((db.raw.prepare("SELECT sha256 FROM source_document").get() as { sha256: string }).sha256, sha);
+  await assert.rejects(storeDocument(db, bucket, { fileName: "0625_s23_qp_43.pdf", bytes: pdf("other"), actorId: "agent", origin: "agent", sha256: "0".repeat(64) }));
+  assert.equal((db.raw.prepare("SELECT COUNT(*) AS n FROM source_document WHERE file_name = '0625_s23_qp_43.pdf'").get() as { n: number }).n, 0, "nothing kept");
+  assert.ok(!bucket.objects.has("0625/2023/s/0625_s23_qp_43.pdf"));
+});
+
 test("store: picks the syllabus version by year", async () => {
   const db = testDb();
   for (const [name, syl] of [["0625_w22_ms_11.pdf", "0625-2020"], ["0625_m26_qp_22.pdf", "0625-2026"]] as const) {

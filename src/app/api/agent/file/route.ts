@@ -8,7 +8,7 @@ import { storeDocument } from "@/lib/library/store";
 // The agent hands over one downloaded PDF. Signed only. Stored through the same
 // path as manual uploads (name, year, size, PDF and duplicate checks, audit).
 export async function POST(request: Request) {
-  const a = await agentRequest(request, LIBRARY.maxFileBytes);
+  const a = await agentRequest(request, LIBRARY.maxFileBytes, true);
   if (!a.ok) return a.response;
   const h = request.headers;
   const jobId = h.get("x-agent-job") ?? "";
@@ -31,7 +31,8 @@ export async function POST(request: Request) {
   }
   try {
     const out = await storeDocument(a.env.DB, a.env.SOURCE, {
-      fileName, bytes: a.body, actorId: "agent", origin: "agent", jobId, sourceUrl, sourceSiteId: siteId,
+      // The body's SHA-256 from the signed request (worked out once, or declared and checked by R2 on put).
+      fileName, bytes: a.body, actorId: "agent", origin: "agent", jobId, sourceUrl, sourceSiteId: siteId, sha256: a.hash,
     });
     return json(out);
   } catch (err) {

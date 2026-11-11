@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { testDb } from "./helpers/d1.ts";
-import { signRequest, verifyRequest, MAX_SKEW_MS } from "../../src/lib/agent/sign.ts";
+import { bodyHash, signRequest, verifyRequest, MAX_SKEW_MS } from "../../src/lib/agent/sign.ts";
 import { parseRobots } from "../../src/lib/agent/robots.ts";
 import { extractPdfLinks, toCambridgeName } from "../../src/lib/agent/links.ts";
 import { checkRunParams, claimRun, finishRun, startRun, spendNonce, activeRun, recordProgress, cancelRun, closeStaleRuns, cleanEventText, cleanRunUrl, getRun } from "../../src/lib/agent/runs.ts";
@@ -27,6 +27,18 @@ test("signed requests verify; tampering, old clocks and weak secrets fail", asyn
   assert.equal((await bad("short", "POST", "/api/agent/job", body, h, T)).reason, "secret");
   assert.equal((await bad(undefined, "POST", "/api/agent/job", body, h, T)).reason, "secret");
   assert.equal((await bad(SECRET, "POST", "/api/agent/job", body, new Headers(), T)).reason, "headers");
+});
+
+test("a file upload may declare its SHA-256: the signature covers it and the body is not hashed", async () => {
+  const pdf = new TextEncoder().encode("%PDF-1.4 a file");
+  const hash = await bodyHash(pdf);
+  const h = new Headers(await signRequest(SECRET, "POST", "/api/agent/file", pdf, T));
+  const ok = await verifyRequest(SECRET, "POST", "/api/agent/file", pdf, h, T, hash);
+  assert.ok(ok.ok && ok.hash === hash);
+  assert.equal((await verifyRequest(SECRET, "POST", "/api/agent/file", pdf, h, T)).ok, true, "or worked out here as before");
+  const other = await bodyHash(new TextEncoder().encode("%PDF-1.4 another"));
+  assert.equal((await verifyRequest(SECRET, "POST", "/api/agent/file", pdf, h, T, other)) .ok, false, "a declared hash that was not signed fails");
+  assert.equal(((await verifyRequest(SECRET, "POST", "/api/agent/file", pdf, h, T, "nothex")) as { reason?: string }).reason, "headers");
 });
 
 test("nonces are spent once (replay guard)", async () => {

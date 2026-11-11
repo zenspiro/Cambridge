@@ -31,6 +31,8 @@ export type StoreInput = {
   jobId?: string | null;
   sourceUrl?: string | null;
   sourceSiteId?: string | null;
+  /** The bytes' SHA-256 when the caller has it already (the agent's signed upload); R2 checks it on put. */
+  sha256?: string;
 };
 
 const PDF_MAGIC = [0x25, 0x50, 0x44, 0x46, 0x2d]; // "%PDF-"
@@ -63,7 +65,7 @@ export async function storeDocument(db: Db, bucket: Bucket, input: StoreInput, n
   const syl = await db.prepare(Q.SYLLABUS_FOR_FILE).bind(p.code, p.year, p.session).first<{ id: string }>();
   if (!syl) return fail("no_syllabus");
 
-  const sha = await sha256HexBytes(input.bytes);
+  const sha = input.sha256 && /^[0-9a-f]{64}$/.test(input.sha256) ? input.sha256 : await sha256HexBytes(input.bytes);
   const key = storageKey(p);
   await db.prepare(Q.DROP_STALE_PENDING).bind(now - 3_600_000).run();
   const reserved = await db

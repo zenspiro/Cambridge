@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-11: Agent uploads stay inside the free plan's limit
+
+**What:** the agent sends each file's SHA-256 with it; the signature covers that value and R2 checks the bytes against it when storing, so the Worker no longer hashes uploads at all (it hashed every file twice: for the signature and for duplicates). When Cloudflare turns the Worker away (503) or the connection drops, the agent waits 30 s, 1 minute and 2 minutes and tries again, for each upload and for the run's final report, and says so in the activity list.
+
+**Why:** owner, 11 Nov 2026: the first Biology (0610) download stored 94 of 175 files, then every upload and the final report came back 503, and the run page showed Error 1102 "Worker exceeded resource limits". Cloudflare's figures for the Worker that morning: 5,292 requests fine (about 7 ms each, the slowest 1% about 80 ms) and 231 cut off at exactly 10 ms, the free plan's limit. The owner chose to stay on the free plan for now.
+
+**Tested:** unit tests: a declared hash verifies only when signed, R2 (the test bucket now checks like R2) refuses bytes that do not match and nothing is kept. Browser suite: a signed upload whose bytes do not match the declared hash is refused with nothing kept, the right one is stored; library and agent groups pass.
+
 ## 2026-11-11: The agent finds a subject on a website by itself; essential files only
 
 **What:** a website needs no start pages. When it has none for the run's subject, the agent starts at its address and follows the site's own pages: the qualification ("IGCSE") from the front page, the subject by its code ("igcse-biology-0610"), then the session pages for the run's years ("...-0610-2025-oct-nov"), and takes the files those pages link, also when they sit inside a download link ("download_file.php?files=...") or the page sets a `<base href>`. A file's own viewer page is never read. At most 60 pages per site per run, 5 seconds apart, robots.txt first; a robots.txt that redirects is followed as the standard says (up to 5 times, to any site), and a page that is not a robots file sets no rules. New run option "Essential files only" (on by default): only the essential variant (variant 2) plus examiner reports, thresholds and syllabus documents, from every source; the run page counts the other variants left out. The Sources page says a website needs no start page.

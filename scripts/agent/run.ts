@@ -2,7 +2,7 @@
 // Reads its run from the Worker, visits only approved start pages, obeys robots.txt,
 // waits between requests, never logs in, and hands each PDF to the Worker to store.
 // Needs: APP_URL, AGENT_SECRET, JOB_ID. Uses only Node built-ins and shared src/lib files.
-import { signRequest } from "../../src/lib/agent/sign.ts";
+import { BODY_HASH_HEADER, bodyHash, signRequest } from "../../src/lib/agent/sign.ts";
 import { extractPdfLinks, toCambridgeName } from "../../src/lib/agent/links.ts";
 import { CRAWL, linkKind, onSite, pageLinks, pdfOf, type CrawlScope } from "../../src/lib/agent/crawl.ts";
 import { parseRobots } from "../../src/lib/agent/robots.ts";
@@ -75,6 +75,27 @@ async function api(path: string, body: Uint8Array, extra: Record<string, string>
     // keep null
   }
   return { status: res.status, data };
+}
+
+/**
+ * A signed call that waits and tries again when Cloudflare turns the Worker away (503: "Worker exceeded resource
+ * limits", the free plan's 10 ms of processing per request, owner 11 Nov 2026) or the connection drops: after 30 s,
+ * 60 s and 120 s (TEST_MODE: AGENT_RETRY_MS). Each try is signed afresh (a nonce is spent once).
+ */
+const RETRY_WAITS = TEST_MODE ? [1, 2, 3].map((n) => n * Number(process.env.AGENT_RETRY_MS ?? 50)) : [30_000, 60_000, 120_000];
+async function apiPatient(path: string, body: Uint8Array, extra: Record<string, string> = {}, contentType = "application/json", onWait?: (ms: number) => Promise<unknown>) {
+  for (let i = 0; ; i++) {
+    let r: { status: number; data: unknown };
+    try {
+      r = await api(path, body, extra, contentType);
+    } catch {
+      r = { status: 0, data: null };
+    }
+    const busy = r.status === 503 || r.status === 502 || r.status === 0;
+    if (!busy || i >= RETRY_WAITS.length) return r;
+    await onWait?.(RETRY_WAITS[i]!);
+    await sleep(RETRY_WAITS[i]!);
+  }
 }
 
 /** A signed request whose answer is a file (library check). */
@@ -284,7 +305,7 @@ async function finish(ok: boolean) {
       pageErrors: trim(report.pageErrors, 100),
     },
   };
-  const r = await api("/api/agent/finish", enc.encode(JSON.stringify(body)));
+  const r = await apiPatient("/api/agent/finish", enc.encode(JSON.stringify(body)));
   log(`finish: ${r.status}`);
 }
 
@@ -723,7 +744,10 @@ async function main() {
       }
     };
     const store = async (name: string, bytes: Uint8Array, siteId: string, url: string) => {
-      const res = await api("/api/agent/file", bytes, { "x-agent-job": JOB_ID, "x-agent-file": name, "x-agent-site": siteId, "x-agent-url": url }, "application/pdf");
+      // The file's SHA-256 goes with it, so the Worker does not hash it (the free plan's 10 ms per request).
+      const headers = { "x-agent-job": JOB_ID, "x-agent-file": name, "x-agent-site": siteId, "x-agent-url": url, [BODY_HASH_HEADER]: await bodyHash(bytes) };
+      const res = await apiPatient("/api/agent/file", bytes, headers, "application/pdf", (wait) =>
+        progress(Math.min(99, findShare), `Waiting for the library`, `The library was busy (Cloudflare's limit per request); trying ${name} again in ${wait / 1000} s.`));
       const out = res.data as { ok?: boolean; reason?: string; error?: string } | null;
       return { ok: res.status === 200 && !!out?.ok, reason: out?.reason ?? out?.error ?? `worker_${res.status}`, stop: res.status === 429 || res.status === 409 };
     };

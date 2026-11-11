@@ -40,9 +40,15 @@ export function testBucket(opts: { failPut?: boolean } = {}): Bucket & { objects
   const objects = new Map<string, Uint8Array>();
   return {
     objects,
-    async put(key, value) {
+    async put(key, value, o?: { sha256?: string }) {
       if (opts.failPut) throw new Error("storage down");
-      objects.set(key, value instanceof Uint8Array ? value : new Uint8Array(value));
+      const bytes = value instanceof Uint8Array ? value : new Uint8Array(value);
+      // Like R2: a given SHA-256 is checked against the bytes before anything is written.
+      if (o?.sha256) {
+        const d = [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes as BufferSource))].map((x) => x.toString(16).padStart(2, "0")).join("");
+        if (d !== o.sha256) throw new Error("BadDigest: the SHA-256 does not match");
+      }
+      objects.set(key, bytes);
     },
     async get(key) {
       const v = objects.get(key);
