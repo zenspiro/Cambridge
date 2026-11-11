@@ -5,7 +5,7 @@ import { chromium, request as apiRequest } from "playwright";
 import { execFileSync, spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { startFakeSource } from "./fake-source.mjs";
-import { signRequest } from "../../src/lib/agent/sign.ts";
+import { bodyHash, signRequest } from "../../src/lib/agent/sign.ts";
 
 const BASE = "http://localhost:8787";
 const vars = readFileSync(new URL("../../.dev.vars", import.meta.url), "utf8");
@@ -346,6 +346,22 @@ try {
     headers: { ...offsite, "x-agent-job": run3, "x-agent-file": "0625_s24_qp_12.pdf", "x-agent-site": "local-test", "x-agent-url": "https://evil.example/x.pdf" },
   });
   check(res.status() === 403, "file from outside the source address refused");
+  // A declared SHA-256 (the Worker hashes nothing, owner 11 Nov 2026): signed over another file's hash, the bytes
+  // are refused by R2 and nothing is kept.
+  sql(`DELETE FROM source_document WHERE file_name = '0625_s24_qp_32.pdf'`);
+  const decoy = enc.encode("%PDF-1.4\n% another file\n%%EOF");
+  const swapped = await signRequest(SECRET, "POST", "/api/agent/file", decoy);
+  const sw = await api.post("/api/agent/file", {
+    data: Buffer.from(pdf),
+    headers: { ...swapped, "x-agent-sha256": await bodyHash(decoy), "x-agent-job": run3, "x-agent-file": "0625_s24_qp_32.pdf", "x-agent-site": "local-test", "x-agent-url": `${fake.base}x.pdf` },
+  });
+  check(sw.status() === 500 && rows(`SELECT COUNT(*) AS n FROM source_document WHERE file_name = '0625_s24_qp_32.pdf'`)[0].n === 0, `bytes that do not match the declared SHA-256 are refused and nothing is kept (${sw.status()})`);
+  const good = await signRequest(SECRET, "POST", "/api/agent/file", pdf);
+  const gd = await api.post("/api/agent/file", {
+    data: Buffer.from(pdf),
+    headers: { ...good, "x-agent-sha256": await bodyHash(pdf), "x-agent-job": run3, "x-agent-file": "0625_s24_qp_32.pdf", "x-agent-site": "local-test", "x-agent-url": `${fake.base}x.pdf` },
+  });
+  check(gd.status() === 200 && (await gd.json()).ok === true, "the right declared SHA-256 stores the file");
   await api.dispose();
 
   // A website with no start page for the subject (owner, 11 Nov 2026): the agent follows its menus to the subject

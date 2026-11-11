@@ -3,7 +3,7 @@
 import type { Db } from "../db.ts";
 import { getEnv, type AppEnv } from "../env.ts";
 import { reportError } from "../errors.ts";
-import { verifyRequest } from "./sign.ts";
+import { BODY_HASH_HEADER, verifyRequest } from "./sign.ts";
 import { spendNonce } from "./runs.ts";
 
 const MAX_JSON_BYTES = 512 * 1024;
@@ -11,7 +11,9 @@ const MAX_JSON_BYTES = 512 * 1024;
 export async function agentRequest(
   request: Request,
   maxBytes = MAX_JSON_BYTES,
-): Promise<{ ok: true; env: AppEnv; db: Db; body: Uint8Array } | { ok: false; response: Response }> {
+  /** A file upload: the body's SHA-256 may come in BODY_HASH_HEADER, so the body is not hashed here (see sign.ts). */
+  file = false,
+): Promise<{ ok: true; env: AppEnv; db: Db; body: Uint8Array; hash: string; declared: boolean } | { ok: false; response: Response }> {
   const deny = (status = 401) => ({ ok: false as const, response: new Response(null, { status, headers: { "Cache-Control": "no-store" } }) });
   const length = Number(request.headers.get("content-length") ?? "0");
   if (!Number.isFinite(length) || length > maxBytes) return deny(413);
@@ -19,13 +21,14 @@ export async function agentRequest(
   const body = new Uint8Array(await request.arrayBuffer());
   if (body.length > maxBytes) return deny(413);
   const path = new URL(request.url).pathname;
-  const v = await verifyRequest(env.AGENT_SECRET, request.method, path, body, request.headers);
+  const declared = file ? request.headers.get(BODY_HASH_HEADER) ?? undefined : undefined;
+  const v = await verifyRequest(env.AGENT_SECRET, request.method, path, body, request.headers, Date.now(), declared);
   if (!v.ok) {
     if (v.reason === "secret") reportError("agent.auth", new Error("AGENT_SECRET missing or too short"));
     return deny();
   }
   if (!(await spendNonce(env.DB, v.nonce))) return deny();
-  return { ok: true, env, db: env.DB, body };
+  return { ok: true, env, db: env.DB, body, hash: v.hash, declared: declared !== undefined };
 }
 
 export function json(data: unknown, status = 200): Response {
