@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-11: Browser tests survive an outage of Ubuntu's mirrors
+
+**What:** CI's "Browser tools" step installs Chromium from Playwright's own servers, tries its system packages for 2 minutes only (the runner image already has what headless Chromium needs), and installs Poppler through `scripts/ci/install-poppler.sh`: Ubuntu's mirrors with short timeouts, then two other Ubuntu mirrors. The step stops after 8 minutes. The brain workflow uses the same script.
+
+**Why:** owner, 11 Nov 2026: GitHub's runners could not resolve Ubuntu's mirrors from about 15:30 UTC, so all three browser groups of the benchmark pull request failed twice before a single test ran (about 45 runner minutes, 11 minutes per group on the second try).
+
+**Tested:** the script's syntax, and its first line (Poppler already there: nothing to do) in this session; the fallback mirrors could not be reached from this session, so the pull request run is the test.
+
 ## 2026-11-11: The reading benchmark
 
 **What:** a fixed set of 54 real papers (48 question papers, 6 mark schemes; Biology, Chemistry, Physics, Maths, Computer Science and Geography, variant 2, 2023 to 2026) with answer keys, and a score script, so every change to the reading rules is measured on all of them (`docs/benchmark.md`). 16 papers are locked: never tuned on, only their totals shown. Keys hold structure only (parts and printed marks, opening text, where each figure and table sits, notation), drafted from the PDFs by `scripts/benchmark/keys.ts` and checked: on every question paper the marks add up to the cover's total. `scripts/benchmark/score.ts` reads the stored readings (read only), scores each paper, and fails when anything that passed before fails now. Each subject's Read all card has "Benchmark papers" with "Read the N benchmark papers" and its rough cost. Checking the keys found five outline faults, now fixed (checks version 6): a part's last mark beside the footer, a mark joined to answer dots, a trace table's "[1] [2]" heading counted as marks, a table's row number taken for a question, and page furniture's invisible comma hiding Jun 2024 Chemistry P42's question 3.

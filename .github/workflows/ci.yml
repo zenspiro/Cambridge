@@ -69,10 +69,15 @@ jobs:
         run: npm run build:worker
       - name: Migrations (local D1)
         run: npm run db:migrate:local
+      # Owner, 11 Nov 2026: an outage of Ubuntu's mirrors failed every group before a test ran, 11 minutes each. The
+      # browser comes from Playwright's own servers; its system packages are tried for 2 minutes (the runner image
+      # already has what headless Chromium needs); Poppler falls back to other mirrors. Fails in minutes, not 11.
       - name: Browser tools
+        timeout-minutes: 8
         run: |
-          npx playwright install --with-deps chromium
-          command -v pdftocairo || (sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends poppler-utils)
+          npx playwright install chromium
+          timeout 120 npx playwright install-deps chromium || echo "::warning::Browser system packages not installed (Ubuntu's mirrors did not answer); using the runner image's own"
+          bash scripts/ci/install-poppler.sh
       - name: Browser tests
         env:
           FILES: ${{ matrix.files }}
