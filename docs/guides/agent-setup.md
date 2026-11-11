@@ -39,3 +39,13 @@ The key only reads folders shared as "anyone with the link". It is sent to Googl
 - If the deploy fails with a permission error about AI, the Cloudflare API token used by GitHub needs the **Workers AI** permission (Account, Workers AI, Read) added.
 - To try another model, change `AI_MODEL` in `wrangler.jsonc` to a Workers AI model that supports JSON mode.
 - If AI is not available, the run page says so and the agent uses its rules only.
+
+## 6. Another website (no start pages needed)
+
+1. Sources, Websites and Google Drive: add the website's address, for example `https://pastpapers.papacambridge.com/`.
+2. Agent: choose the subject, the years and sessions, keep **Essential files only** ticked, and pick **Dry run**.
+3. The agent reads the site's robots.txt, then follows the site's own pages to the subject (by its code) and the
+   sessions of your years. The run page lists what it would download and where it found the subject.
+4. Press **Download these N files**. They are stored in the library like any other file, checked against their cover.
+
+A site whose pages sit behind a bot check (pastpapers.co) cannot be read this way.

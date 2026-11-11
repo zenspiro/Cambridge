@@ -87,6 +87,9 @@ export default async function AgentPage({ searchParams }: { searchParams: Promis
             <label className="check"><input type="radio" name="mode" value="check" /> Check library (read the first page of stored files)</label>
           </div>
         </fieldset>
+        <label className="check">
+          <input type="checkbox" name="essential" value="1" defaultChecked /> Essential files only (the essential variant, variant 2, plus examiner reports, thresholds and syllabus documents)
+        </label>
         <button className="btn btn-primary btn-block" type="submit">Run agent</button>
       </form>
 

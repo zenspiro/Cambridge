@@ -63,6 +63,9 @@ test("the notation is written into our reader's page text where it is printed, a
 test("an AI's notation in one markup; shown as text and as pieces for the review screen", () => {
   assert.equal(normaliseNotation("²⁰⁸₈₁Tl, 5.8 × 10⁻² kg, cm³, x^2, 10^-3, H₂O"), "^{208}_{81}Tl, 5.8 × 10^{−2} kg, cm^{3}, x^{2}, 10^{−3}, H_{2}O");
   assert.equal(normaliseNotation("total_marks ← 0"), "total_marks ← 0");
+  // A bare subscript (Nov 2025 Paper 42 1(c): l₀ written "l_0"); names in code are left alone.
+  assert.equal(normaliseNotation("the length l_0 of the spring. l_0 = cm, v_1 and T_12"), "the length l_{0} of the spring. l_{0} = cm, v_{1} and T_{12}");
+  assert.equal(normaliseNotation("x_pos ← my_1 + a_b2 + l_{0}"), "x_pos ← my_1 + a_b2 + l_{0}");
   assert.equal(notationPlain("^{208}_{81}Tl and v_{max}"), "²⁰⁸₈₁Tl and v_{max}");
   assert.deepEqual(notationParts("H_{2}O"), [{ kind: "text", text: "H" }, { kind: "sub", text: "2" }, { kind: "text", text: "O" }]);
   assert.deepEqual(notationOn("( ^{208}_{81}Tl ) and 3.0 × 10^{8} m / s").map((t) => t.marked), ["^{208}_{81}Tl", "10^{8}"]);

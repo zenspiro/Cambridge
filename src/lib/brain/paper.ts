@@ -766,6 +766,16 @@ export function editItem(c: PaperContent, number: string, text: string, marks: n
   return { ...c, items: c.items.map((it) => (it.number === number ? { ...it, text: str(text, BRAIN.maxItemText), marks } : it)) };
 }
 
+/**
+ * Where each figure is shown: the first part that lists it (owner, 11 Nov 2026: a graph listed under 1(b) and again
+ * under 1(c), "use your graph", was drawn twice; the paper prints it once). Later parts that list it point back. Pure.
+ */
+export function figureHome(items: readonly Pick<PaperItem, "number" | "figures">[]): Map<string, string> {
+  const home = new Map<string, string>();
+  for (const it of items) for (const f of it.figures) if (!home.has(f)) home.set(f, it.number);
+  return home;
+}
+
 /** Pages of a reading, in order, with their items: what the review screen lays out like the paper. */
 export function itemsByPage(c: PaperContent): { page: number; items: PaperItem[] }[] {
   const m = new Map<number, PaperItem[]>();

@@ -214,7 +214,12 @@ export function fixView(r: { id: string; action: string; item: string | null; fl
   const text = (v: unknown) => (typeof v === "string" ? v.slice(0, 600) : "");
   let what = FIX_WHAT[r.action] ?? r.action;
   let before = "", after = "";
-  if (b.figure) {
+  if (b.figure && b.deleted === true) {
+    const f = b.figure as Record<string, unknown>;
+    what = `Deleted ${text(f.caption) || `figure ${text(f.id)}`}`;
+  } else if (typeof b.unfigure === "string") {
+    what = `Took figure ${b.unfigure} off this part`;
+  } else if (b.figure) {
     what = "Moved the figure's box";
   } else if (r.action === "pdf" && typeof b.lead === "string") {
     what = `Gave question ${b.lead}'s lead-in its own part`;
@@ -360,7 +365,7 @@ export async function autoHold(db: Db, doc: Pick<DocInfo, "id" | "code">): Promi
 
 // ---------- Fixes ----------
 
-export type FixAction = "pdf" | "edit" | "fine" | "looks_right" | "box" | "override" | "unoverride" | "review" | "unreview" | "undo";
+export type FixAction = "pdf" | "edit" | "fine" | "looks_right" | "box" | "unfigure" | "delfigure" | "override" | "unoverride" | "review" | "unreview" | "undo";
 export type FixResult = "ok_fixed" | "ok_undone" | "ok_ready" | "ok_reviewed" | "ok_unreviewed" | "still_flagged" | "stale" | "has_table" | "bad" | "not_read";
 
 /**
@@ -423,9 +428,11 @@ async function writeRow(db: Db, docId: string, flags: Flag[], dismissed: string[
  * edit: the admin's wording and marks. Both are checked again against the PDF at once. fine: the flag is a false
  * alarm, remembered for this paper and as a rule for the subject. looks_right: a figure drawing is accepted.
  * override / unoverride: mark ready with flags left, or take that back. review / unreview: mark a paper with no flags
- * left as checked by a person, or take that back. undo: reverses one earlier fix.
+ * left as checked by a person, or take that back. unfigure: a figure taken off one part; delfigure: a figure that is
+ * not in the paper deleted from the reading (owner, 11 Nov 2026: clean-up by hand on any part, flagged or not).
+ * undo: reverses one earlier fix.
  */
-export async function applyFix(db: Db, bucket: Bucket, doc: DocInfo, action: FixAction, args: { key?: string; item?: string; text?: string; marks?: string; fix?: string; box?: string }, actorId: string, now = Date.now()): Promise<FixResult> {
+export async function applyFix(db: Db, bucket: Bucket, doc: DocInfo, action: FixAction, args: { key?: string; item?: string; text?: string; marks?: string; fix?: string; box?: string; figure?: string }, actorId: string, now = Date.now()): Promise<FixResult> {
   const kind = doc.docType as PaperKind;
   const view = await paperView(db, bucket, doc);
   const row = view.row;
@@ -499,6 +506,32 @@ export async function applyFix(db: Db, bucket: Bucket, doc: DocInfo, action: Fix
       await recordFix(db, doc.id, "edit", fig.id, args.key ?? null, { figure: fig, flags: row.flags }, { box: b }, actorId, now);
       return "ok_fixed";
     }
+    case "unfigure": {
+      // Recorded as an edit of the part (paper_fix.action allows the 0022 values only): Undo puts the part back.
+      const it = view.content.items.find((x) => x.number === args.item);
+      if (!it || !args.figure || !it.figures.includes(args.figure)) return "bad";
+      const content = { ...view.content, items: view.content.items.map((x) => (x.number === it.number ? { ...x, figures: x.figures.filter((f) => f !== args.figure) } : x)) };
+      await putJson(bucket, key(doc.id, "content"), content);
+      await writeRow(db, doc.id, row.flags, row.dismissed, now);
+      await recordFix(db, doc.id, "edit", it.number, null, { item: it, flags: row.flags, unfigure: args.figure }, { text: it.text, marks: it.marks }, actorId, now);
+      return "ok_fixed";
+    }
+    case "delfigure": {
+      const at = view.content.figures.findIndex((f) => f.id === args.figure);
+      const fig = view.content.figures[at];
+      if (!fig) return "bad";
+      const parts = view.content.items.filter((x) => x.figures.includes(fig.id));
+      const content = {
+        ...view.content,
+        figures: view.content.figures.filter((f) => f.id !== fig.id),
+        items: view.content.items.map((x) => (x.figures.includes(fig.id) ? { ...x, figures: x.figures.filter((f) => f !== fig.id) } : x)),
+      };
+      const flags = row.flags.filter((f) => f.item !== fig.id);
+      await putJson(bucket, key(doc.id, "content"), content);
+      await writeRow(db, doc.id, flags, row.dismissed, now);
+      await recordFix(db, doc.id, "edit", args.item && parts.some((x) => x.number === args.item) ? args.item : fig.id, null, { figure: fig, deleted: true, at, items: parts, flags: row.flags }, undefined, actorId, now);
+      return "ok_fixed";
+    }
     case "override": {
       if (!view.open.length) return "bad";
       await db.prepare(`UPDATE paper_read SET override_at = ?2, override_by = ?3, updated_at = ?2 WHERE doc_id = ?1`).bind(doc.id, now, actorId).run();
@@ -526,7 +559,18 @@ export async function applyFix(db: Db, bucket: Bucket, doc: DocInfo, action: Fix
         : await db.prepare(`SELECT id, action, before FROM paper_fix WHERE id = ?1 AND doc_id = ?2 AND undone_at IS NULL`).bind(args.fix ?? "", doc.id).first<{ id: string; action: string; before: string | null }>();
       if (!fix) return "bad";
       const before = fix.before ? (JSON.parse(fix.before) as Record<string, unknown>) : {};
-      if (fix.action === "edit" && before.figure) {
+      if (fix.action === "edit" && before.figure && before.deleted === true) {
+        // A deleted figure comes back where it was, on the parts that had it.
+        const old = cleanPaper({ items: Array.isArray(before.items) ? before.items : [], figures: [before.figure] }, kind);
+        const fig = old.figures[0];
+        if (!fig || view.content.figures.some((f) => f.id === fig.id)) return "bad";
+        const figures = [...view.content.figures];
+        figures.splice(Math.min(typeof before.at === "number" ? before.at : figures.length, figures.length), 0, fig);
+        const parts = new Map(old.items.map((x) => [x.number, x]));
+        const items = view.content.items.map((x) => (parts.has(x.number) && !x.figures.includes(fig.id) ? { ...x, figures: [...x.figures, fig.id] } : x));
+        await putJson(bucket, key(doc.id, "content"), { ...view.content, figures, items });
+        await writeRow(db, doc.id, undoFlags(row.flags, before), row.dismissed, now);
+      } else if (fix.action === "edit" && before.figure) {
         const old = cleanPaper({ items: [], figures: [before.figure] }, kind).figures[0];
         if (!old) return "bad";
         const content = { ...view.content, figures: view.content.figures.map((x) => (x.id === old.id ? old : x)) };

@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { ActionForm } from "@/components/ActionForm";
 import { Notation, PaperTables } from "@/components/Notation";
-import { holdsTable, isLeadIn, isSplitFlag, isStale, type Flag, type FlagColour, type PaperItem } from "@/lib/brain/paper";
+import { figureHome, holdsTable, isLeadIn, isSplitFlag, isStale, type Flag, type FlagColour, type PaperItem } from "@/lib/brain/paper";
 import type { FixView } from "@/lib/brain/paperRead";
 
 export type ReviewFigure = { id: string; page: number; caption: string; description: string; shown: boolean; cut: string };
@@ -249,7 +249,8 @@ export function PaperReview({ docId, pdfUrl, kind, items, figures, flags, pageCo
     );
   };
   // Figures no question part points to still show on their page.
-  const shownByItems = new Set(items.flatMap((i) => i.figures));
+  const home = figureHome(items);
+  const shownByItems = new Set(home.keys());
   const loose = figures.filter((f) => f.page === page && !shownByItems.has(f.id));
   const staleCount = flags.filter((f) => isStale(f) && f.pdfText).length;
 
@@ -387,13 +388,16 @@ export function PaperReview({ docId, pdfUrl, kind, items, figures, flags, pageCo
                           {it.options.map((o) => <li key={o.letter}><span className="pq-letter">{o.letter}</span> <Notation text={o.text} /></li>)}
                         </ol>
                       ) : null}
-                      {it.figures.map(figureCard)}
+                      {it.figures.map((id) => (home.get(id) === it.number ? figureCard(id) : (
+                        <p key={id} className="muted pq-figref">Uses {figures.find((x) => x.id === id)?.caption || "the figure"} in {home.get(id)}.</p>
+                      )))}
                       {it.answerLines > 0 ? <div className="pq-lines" aria-label={`${it.answerLines} answer lines`}>{Array.from({ length: Math.min(it.answerLines, 12) }, (_, i) => <span key={i} />)}</div> : null}
                       {kind === "ms" && it.guidance ? <p className="pq-guidance"><strong>Guidance:</strong> <Notation text={it.guidance} /></p> : null}
                     </div>
                     <span className="pq-marks">{it.marks !== null ? `[${it.marks}]` : ""}</span>
                   </div>
                   {fl.map((f) => box(f, it))}
+                  {canFix ? <PartEdit item={it} figures={figures} base={base} onFixed={(parts) => afterFix(parts)} /> : null}
                   {fixedNote(it.number, (byItem.get(it.number) ?? []).length)}
                 </article>
               );
@@ -569,24 +573,63 @@ function FlagBox({ flag, base, busy, item, current, onAdjust, canFix, canRead, o
           </>
         )}
       </div> : null}
-      {item && isItem && canFix ? (
-        <details className="flag-edit">
-          <summary className="link">Edit it yourself</summary>
-          <ActionForm className="stack-tight" action={fix} messages={MESSAGES} onDone={onFixed([item.number])}>
-            <input type="hidden" name="action" value="edit" />
-            <input type="hidden" name="item" value={item.number} />
-            <label className="field">
-              <span className="label-inline">Wording of {item.number}</span>
-              <textarea className="input" name="text" rows={4} defaultValue={item.text} />
-            </label>
-            <label className="field">
-              <span className="label-inline">Marks</span>
-              <input className="input input-money" name="marks" inputMode="numeric" defaultValue={item.marks ?? ""} />
-            </label>
-            <button className="btn btn-small btn-primary" type="submit">Save and check against the PDF</button>
-          </ActionForm>
-        </details>
-      ) : null}
     </div>
+  );
+}
+
+/**
+ * Edit any part, flagged or not (owner, 11 Nov 2026: "I should be able to delete a diagram where it does not belong,
+ * and edit the text even after its green"): its wording and marks (checked against the PDF), and its figures, each
+ * taken off this part or deleted from the reading. Every change is listed under Changes with Undo.
+ */
+function PartEdit({ item, figures, base, onFixed }: { item: PaperItem; figures: ReviewFigure[]; base: string; onFixed: (parts: string[]) => (ok: boolean) => void }) {
+  const fix = `${base}/fix`;
+  const done = onFixed([item.number]);
+  return (
+    <details className="flag-edit part-edit">
+      <summary className="link">Edit this part</summary>
+      <ActionForm className="stack-tight" action={fix} messages={MESSAGES} onDone={done}>
+        <input type="hidden" name="action" value="edit" />
+        <input type="hidden" name="item" value={item.number} />
+        <label className="field">
+          <span className="label-inline">Wording of {item.number}</span>
+          <textarea className="input" name="text" rows={4} defaultValue={item.text} />
+        </label>
+        <p className="hint m-0">Write a power as ^&#123;2&#125;, a subscript as _&#123;0&#125; (l_&#123;0&#125; for l₀) and a fraction as \frac&#123;a&#125;&#123;b&#125;.</p>
+        <label className="field">
+          <span className="label-inline">Marks</span>
+          <input className="input input-money" name="marks" inputMode="numeric" defaultValue={item.marks ?? ""} />
+        </label>
+        <button className="btn btn-small btn-primary" type="submit">Save and check against the PDF</button>
+      </ActionForm>
+      {item.figures.length ? (
+        <div className="stack-tight part-edit-figs">
+          <p className="label-inline m-0">Figures on {item.number}</p>
+          {item.figures.map((id) => {
+            const f = figures.find((x) => x.id === id);
+            const name = f?.caption || f?.description || `Figure ${id}`;
+            return (
+              <div key={id} className="part-edit-fig">
+                <span>{name}</span>
+                <span className="row-actions">
+                  <ActionForm className="inline-form" action={fix} messages={MESSAGES} onDone={done}>
+                    <input type="hidden" name="action" value="unfigure" />
+                    <input type="hidden" name="item" value={item.number} />
+                    <input type="hidden" name="figure" value={id} />
+                    <button className="btn btn-small" type="submit">Take off this part</button>
+                  </ActionForm>
+                  <ActionForm className="inline-form" action={fix} messages={MESSAGES} onDone={done} confirm={`Delete ${name} from this paper's reading? Undo brings it back.`} yes="Yes, delete" no="No">
+                    <input type="hidden" name="action" value="delfigure" />
+                    <input type="hidden" name="item" value={item.number} />
+                    <input type="hidden" name="figure" value={id} />
+                    <button className="btn btn-small btn-danger" type="submit">Delete this figure</button>
+                  </ActionForm>
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+    </details>
   );
 }

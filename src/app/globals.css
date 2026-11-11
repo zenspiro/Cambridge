@@ -412,6 +412,12 @@
   .flag-stale-note { @apply m-0 text-sm text-amber-900; }
   .flag-tag { @apply mr-1 rounded bg-wash px-1.5 py-0.5 text-sm font-semibold; }
   .flag-edit textarea { @apply font-sans; }
+  /* Edit any part, flagged or not (owner, 11 Nov 2026). */
+  .part-edit { @apply mt-2; }
+  .part-edit[open] { @apply rounded border border-line p-3; }
+  .part-edit-figs { @apply mt-3 border-t border-line pt-3; }
+  .part-edit-fig { @apply flex flex-wrap items-center justify-between gap-2; }
+  .pq-figref { @apply my-2 text-sm italic; }
   /* Read accuracy badge (owner, 7 Nov 2026). */
   .score { @apply inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-sm font-semibold; }
   .score-dot { @apply h-2.5 w-2.5 rounded-full; }

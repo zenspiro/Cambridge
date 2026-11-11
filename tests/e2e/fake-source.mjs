@@ -67,11 +67,28 @@ export function startFakeSource(port = 9911) {
     const kids = drive[parent]?.kids ?? [];
     return send(200, { files: kids.map(([id, name, mimeType]) => ({ id, name, mimeType })) });
   }
+  // A site with no start page for the subject (owner, 11 Nov 2026): menus down to session pages whose files sit
+  // inside download links, as on pastpapers.papacambridge.com.
+  const B = `http://127.0.0.1:${port}/crawl/`;
+  const crawl = {
+    "/crawl/": `<a href="/crawl/igcse">IGCSE</a> <a href="/crawl/a-level">A Level</a>`,
+    "/crawl/igcse": `<base href="/crawl/"><a href="igcse-physics-0625">Physics</a> <a href="igcse-chemistry-0620">Chemistry</a>`,
+    "/crawl/igcse-physics-0625": `<base href="/crawl/"><a href="igcse-physics-0625-2024-may-june">2024</a> <a href="igcse-physics-0625-2019-may-june">2019</a>`,
+    "/crawl/igcse-physics-0625-2024-may-june": `<title>Physics 0625 May June 2024</title>
+      ${["0625_s24_qp_21", "0625_s24_qp_22", "0625_s24_ms_22", "0625_s24_gt"].map((n) => `<a href="${B}download_file.php?files=${B}upload/${n}.pdf">${n}</a>`).join(" ")}
+      <a href="/crawl/viewer-igcse-physics-0625-2024-may-june-0625-s24-qp-22-pdf">view</a>`,
+  };
+  const crawlFiles = { "/crawl/upload/0625_s24_qp_21.pdf": pdf("c21"), "/crawl/upload/0625_s24_qp_22.pdf": pdf("c22"), "/crawl/upload/0625_s24_ms_22.pdf": pdf("cm22"), "/crawl/upload/0625_s24_gt.pdf": pdf("cgt") };
   const server = createServer((req, res) => {
     if (req.url?.startsWith("/drive/v3/")) return driveApi(req, res);
     hits.push({ path: req.url, ua: req.headers["user-agent"] });
     if (req.url === "/robots.txt") return res.end("User-agent: *\nDisallow: /blocked/\n");
     if (req.url === "/papers/0625/") return res.end(page);
+    if (crawl[req.url]) return res.end(`<html><body>${crawl[req.url]}</body></html>`);
+    if (crawlFiles[req.url]) {
+      res.setHeader("Content-Type", "application/pdf");
+      return res.end(crawlFiles[req.url]);
+    }
     if (files[req.url]) {
       res.setHeader("Content-Type", "application/pdf");
       return res.end(files[req.url]);

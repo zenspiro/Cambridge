@@ -308,7 +308,7 @@ const FROM_SUB = Object.fromEntries(Object.entries(SUB).map(([k, v]) => [v, k]))
 
 /**
  * An AI's notation in our one markup: Unicode superscripts and subscripts (²⁰⁸, ₈₁, ⁻²) become ^{...} and _{...},
- * "x^2" and "10^-3" get their braces, and a minus inside the braces is U+2212. Program code is left alone (its "_"
+ * "x^2", "10^-3" and "l_0" get their braces, and a minus inside the braces is U+2212. Program code is left alone (its "_"
  * is part of a name). Pure.
  */
 export function normaliseNotation(s: string): string {
@@ -316,6 +316,9 @@ export function normaliseNotation(s: string): string {
   let out = s.replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ⁿⁱ]+/g, (m) => `^{${[...m].map((c) => FROM_SUP[c] ?? c).join("")}}`);
   out = out.replace(/[₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎]+/g, (m) => `_{${[...m].map((c) => FROM_SUB[c] ?? c).join("")}}`);
   out = out.replace(/\^([–\-−]?\d+(?:\.\d+)?|[a-z])(?![\w{])/g, "^{$1}");
+  // "l_0" and "v_1": one letter standing alone, then _ and one or two digits or one letter (owner, 11 Nov 2026: l₀ shown
+  // as "l_0"). A name in code ("total_marks", "x_pos") is longer on one side, so it is left alone.
+  out = out.replace(/(?<![\p{L}\p{N}_])(\p{L})_(\d{1,2}|[a-z])(?![\p{L}\p{N}_{])/gu, "$1_{$2}");
   out = out.replace(/([\^_])\{([^{}]{0,40})\}/g, (_m, k: string, t: string) => `${k}{${t.replace(MINUS, "−")}}`);
   // Fractions in one markup too: ¾ is \frac{3}{4}.
   out = out.replace(/[¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]/g, (c) => VULGAR[c] ?? c);

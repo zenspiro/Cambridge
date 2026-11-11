@@ -101,8 +101,11 @@ Admin > Students and parents > Parent approval sets who needs a parent's yes: st
 5. Fix each flag:
    - **Use the PDF's version**: copies the PDF's own words.
    - **Read it again**: that part only, re-checked.
-   - **Edit it yourself**: your wording, checked against the PDF.
    - **It's fine**: a false alarm, remembered for the whole subject.
-   - Figures: **Looks right** or **Redraw**.
+   - Figures: **Looks right** or **Adjust box**.
+   - **Edit this part** (under every part, flagged or green): your wording and marks, checked against the PDF
+     (write l₀ as `l_{0}`, a power as `^{2}`, a fraction as `\frac{a}{b}`), and each figure on the part with
+     **Take off this part** or **Delete this figure** (asks first). A figure listed under two parts shows once, on
+     the first; the later part says "Uses ... in 1(b)".
 6. The paper is Ready when no flag is left. **Mark ready anyway** records that the remaining flags were ignored.
 7. Every fix can be undone under **Fixes on this paper**. **Read it again** keeps everything already confirmed.

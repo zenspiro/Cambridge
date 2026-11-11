@@ -66,6 +66,10 @@ test("AI requests: running run only, capped per run, checked against the checkli
   assert.deepEqual(await ask(), { ok: false, status: 409, error: "no_run" }, "a queued run cannot ask yet");
   await claimRun(db, id, T + 1);
   assert.ok((await wantedNames(db, p)).has("0625_s24_qp_22.pdf"));
+  // Essential files only (owner, 11 Nov 2026): variant 2 and the session's own files, not variants 1 and 3.
+  const ess = await wantedNames(db, p, true);
+  assert.ok(ess.has("0625_s24_qp_22.pdf") && ess.has("0625_s24_ms_42.pdf") && ess.has("0625_s24_er.pdf") && ess.has("0625_s24_gt.pdf"));
+  assert.ok(!ess.has("0625_s24_qp_21.pdf") && !ess.has("0625_s24_qp_23.pdf"), "other variants left out");
   const r = await ask();
   assert.ok(r.ok);
   assert.deepEqual((r.data as { files: { outcome: string; name: string }[] }).files[0], { i: 0, outcome: "named", name: "0625_s24_qp_22.pdf", why: "folder and name" });

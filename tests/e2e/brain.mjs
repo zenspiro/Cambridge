@@ -678,6 +678,18 @@ try {
   const halves2 = await page.evaluate(() => [...document.querySelectorAll(".review-pane")].map((e) => Math.round(e.getBoundingClientRect().width)));
   check(halves2.length === 2 && Math.abs(halves2[0] - halves2[1]) < 4, "the PDF and the rebuilt paper each take half");
 
+  // Edit any part, flagged or not (owner, 11 Nov 2026): a figure taken off the part it does not belong to, then Undo.
+  const holder = page.locator("article.pq", { has: page.locator("#figure-F2") }).first();
+  const holderId = (await holder.getAttribute("id")) ?? "";
+  check(holderId.startsWith("item-") && (await page.locator("article.pq summary", { hasText: "Edit this part" }).count()) === (await page.locator("article.pq").count()), "every part on the page has Edit this part");
+  await holder.locator("summary", { hasText: "Edit this part" }).click();
+  await holder.locator(".part-edit button", { hasText: "Take off this part" }).click();
+  const holderNow = page.locator(`#${holderId.replace(/[()]/g, "\\$&")}`);
+  await holderNow.locator("#figure-F2").waitFor({ state: "detached", timeout: 15_000 }).catch(() => {});
+  check((await holderNow.locator("#figure-F2").count()) === 0 && (await page.locator("#figure-F2").count()) === 1, "Take off this part: the figure leaves the part and still shows on its page");
+  await holderNow.locator(".fixed-note button", { hasText: "Undo" }).click();
+  await holderNow.locator("#figure-F2").waitFor({ timeout: 15_000 }).then(() => check(true, "Undo puts the figure back on the part"), () => check(false, "Undo puts the figure back on the part"));
+
   // Documents (owner, 10 Nov 2026): the overview keeps a summary; the list, with a filter on every column, is its own page.
   await page.goto(`${BASE}/admin/library/0625`);
   check(/1 read/.test((await page.locator("#papers-read").textContent()) ?? "") && (await page.locator('#papers-read a[href="/admin/library/0625/documents"]').count()) >= 1, "the subject overview sums up the papers read and links to Documents");

@@ -347,6 +347,24 @@ try {
   });
   check(res.status() === 403, "file from outside the source address refused");
   await api.dispose();
+
+  // A website with no start page for the subject (owner, 11 Nov 2026): the agent follows its menus to the subject
+  // and the run's sessions, and with "essential files only" keeps variant 2 and the session's own files.
+  sql(`UPDATE source_site SET enabled = 0 WHERE id IN ('local-test', 'local-drive')`);
+  sql(`INSERT OR REPLACE INTO source_site (id, name, base_url, enabled, notes, created_at) VALUES ('local-crawl', 'Local menus site', '${fake.base}crawl/', 1, '', 1)`);
+  sql(`DELETE FROM source_document WHERE file_name IN ('0625_s24_qp_22.pdf','0625_s24_ms_22.pdf','0625_s24_gt.pdf','0625_s24_qp_21.pdf')`);
+  const mr = `e2e${Date.now()}c`;
+  sql(`INSERT INTO job (id, type, status, params, created_by, created_at) VALUES ('${mr}', 'agent', 'queued', '{"code":"0625","years":[2024],"sessions":["s"],"mode":"dry","essential":true}', 'platform-admin', ${Date.now()})`);
+  const crawlFrom = fake.hits.length;
+  const rmc = await runAgent(mr);
+  const mrep = JSON.parse(rows(`SELECT result FROM job WHERE id = '${mr}'`)[0]?.result ?? "{}");
+  const mnames = (mrep.candidates ?? []).map((c) => c.name).sort();
+  check(rmc.status === 0 && mnames.join(",") === "0625_s24_gt.pdf,0625_s24_ms_22.pdf,0625_s24_qp_22.pdf", `menus site: the run's essential files are found with no start page (${mnames.join(",") || rmc.stderr.slice(-300)})`);
+  check(mrep.skippedNotEssential === 1, "menus site: the other variant is left out and counted");
+  check(mrep.found?.subjectPages?.[0]?.endsWith("/crawl/igcse-physics-0625") && mrep.found.sessionPages === 1, "menus site: the report says where the subject was found");
+  const crawled = fake.hits.slice(crawlFrom).map((h) => h.path);
+  check(!crawled.some((p) => /2019|chemistry|viewer|a-level|upload/.test(p ?? "")), `menus site: no other year, subject, viewer page or file is opened in a dry run (${crawled.join(" ")})`);
+  sql(`DELETE FROM source_site WHERE id = 'local-crawl'`);
 } finally {
   await browser.close();
   fake.server.close();
@@ -355,6 +373,7 @@ try {
   sql(`DELETE FROM source_site WHERE id = 'local-test'`);
   sql(`UPDATE source_document SET source_site_id = NULL WHERE source_site_id = 'local-drive'`);
   sql(`DELETE FROM source_site WHERE id = 'local-drive'`);
+  sql(`DELETE FROM source_site WHERE id = 'local-crawl'`);
   sql(`UPDATE source_site SET enabled = 1 WHERE id = 'revisiontown-drive'`);
   sql(`UPDATE source_site SET enabled = 1 WHERE id = 'cambridge-official'`);
   sql(`UPDATE job SET status = 'failed' WHERE type = 'agent' AND status IN ('queued', 'running')`);

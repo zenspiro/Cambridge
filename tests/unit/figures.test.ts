@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { assignBoxes, cleanArt, cleanBox, cropSvg, findBoxes, labelBoxes, pageArt, pageSvg, textLines, wholePage } from "../../src/lib/brain/figures.ts";
-import { cleanPaper, figureFlag, paperFlags, placeOnPages } from "../../src/lib/brain/paper.ts";
+import { cleanPaper, figureFlag, figureHome, paperFlags, placeOnPages } from "../../src/lib/brain/paper.ts";
 import { applyFix, figurePageSvg, figureSvg, loadContent, paperDoc, paperView, saveArt, savePaperReading } from "../../src/lib/brain/paperRead.ts";
 import { claimBrainRun, startPaperRun } from "../../src/lib/brain/runs.ts";
 import { testBucket, testDb } from "./helpers/d1.ts";
@@ -197,6 +197,56 @@ test("figures stored, served cut, and a box drawn by hand saved and undone", asy
   assert.ok((await paperView(db, bucket, doc)).open.some((f) => f.kind === "figure"), "and its flag");
   assert.equal(await applyFix(db, bucket, doc, "box", { item: "F1", box: "whole" }, "platform-admin", NOW + 30), "ok_fixed");
   assert.equal((await loadContent(bucket, "doc-qp-fig", "qp"))!.figures[0]!.cut, "page");
+});
+
+test("a figure is shown once, on the first part that lists it (Nov 2025 Paper 42, the graph in 1(b) and 1(c))", () => {
+  const home = figureHome([{ number: "1(a)", figures: [] }, { number: "1(b)", figures: ["F1"] }, { number: "1(c)", figures: ["F1", "F2"] }]);
+  assert.equal(home.get("F1"), "1(b)");
+  assert.equal(home.get("F2"), "1(c)");
+});
+
+test("a figure taken off a part, or deleted, by hand on any part; Undo brings each back", async () => {
+  const db = testDb();
+  const bucket = testBucket();
+  db.raw.exec(`INSERT INTO source_document (id, syllabus_id, session, year, paper, variant, doc_type, file_name, r2_key, sha256, size_bytes, origin, status, acquired_at)
+               VALUES ('doc-qp-del', '0625-2023', 'w', 2025, 4, 2, 'qp', '0625_w25_qp_42.pdf', 'k', 'sha', 100000, 'upload', 'stored', ${NOW})`);
+  const id = (await startPaperRun(db, "doc-qp-del", { items: [], figures: [] }, "platform-admin", NOW))!;
+  await claimBrainRun(db, id, null, NOW + 1);
+  const content = cleanPaper({
+    items: [
+      { number: "1(b)", page: 3, text: "Plot a graph of l against m.", marks: 4, options: [], answerLines: 0, figures: ["F1"], guidance: "" },
+      { number: "1(c)", page: 3, text: "Use your graph to determine the length l_0 of the spring with no load on it.", marks: 1, options: [], answerLines: 1, figures: ["F1"], guidance: "" },
+    ],
+    figures: [{ id: "F1", page: 3, caption: "", description: "graph grid", box: [190, 140, 370, 300], cut: "match" }],
+  }, "qp");
+  assert.equal(content.items[1]!.text, "Use your graph to determine the length l_{0} of the spring with no load on it.", "l_0 is a subscript");
+  assert.equal(await savePaperReading(db, bucket, id, "doc-qp-del", { content, flags: [], pages: [] }, true, NOW + 5), "ok");
+  const doc = (await paperDoc(db, "doc-qp-del"))!;
+
+  assert.equal(await applyFix(db, bucket, doc, "unfigure", { item: "1(c)", figure: "F9" }, "platform-admin", NOW + 10), "bad");
+  assert.equal(await applyFix(db, bucket, doc, "unfigure", { item: "1(c)", figure: "F1" }, "platform-admin", NOW + 10), "ok_fixed");
+  let c = (await loadContent(bucket, "doc-qp-del", "qp"))!;
+  assert.deepEqual(c.items.map((x) => x.figures), [["F1"], []]);
+  let view = await paperView(db, bucket, doc);
+  const off = view.fixes[0]!;
+  assert.equal(off.item, "1(c)");
+  assert.equal(off.what, "Took figure F1 off this part");
+  assert.equal(await applyFix(db, bucket, doc, "undo", { fix: off.id }, "platform-admin", NOW + 20), "ok_undone");
+  assert.deepEqual((await loadContent(bucket, "doc-qp-del", "qp"))!.items.map((x) => x.figures), [["F1"], ["F1"]], "back on 1(c)");
+
+  assert.equal(await applyFix(db, bucket, doc, "delfigure", { item: "1(b)", figure: "F1" }, "platform-admin", NOW + 30), "ok_fixed");
+  c = (await loadContent(bucket, "doc-qp-del", "qp"))!;
+  assert.equal(c.figures.length, 0);
+  assert.deepEqual(c.items.map((x) => x.figures), [[], []], "off every part");
+  view = await paperView(db, bucket, doc);
+  const del = view.fixes[0]!;
+  assert.equal(del.item, "1(b)");
+  assert.equal(del.what, "Deleted figure F1");
+  assert.equal(await applyFix(db, bucket, doc, "undo", { fix: del.id }, "platform-admin", NOW + 40), "ok_undone");
+  c = (await loadContent(bucket, "doc-qp-del", "qp"))!;
+  assert.equal(c.figures[0]!.id, "F1");
+  assert.deepEqual(c.figures[0]!.box, [190, 140, 370, 300]);
+  assert.deepEqual(c.items.map((x) => x.figures), [["F1"], ["F1"]], "back where it was");
 });
 
 test("a figure's labels by text alone: short lines between the question text and its printed label (Mar 2025 Paper 42, Fig. 7.1)", () => {

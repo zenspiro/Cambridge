@@ -2,6 +2,22 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-11: The agent finds a subject on a website by itself; essential files only
+
+**What:** a website needs no start pages. When it has none for the run's subject, the agent starts at its address and follows the site's own pages: the qualification ("IGCSE") from the front page, the subject by its code ("igcse-biology-0610"), then the session pages for the run's years ("...-0610-2025-oct-nov"), and takes the files those pages link, also when they sit inside a download link ("download_file.php?files=...") or the page sets a `<base href>`. A file's own viewer page is never read. At most 60 pages per site per run, 5 seconds apart, robots.txt first; a robots.txt that redirects is followed as the standard says (up to 5 times, to any site), and a page that is not a robots file sets no rules. New run option "Essential files only" (on by default): only the essential variant (variant 2) plus examiner reports, thresholds and syllabus documents, from every source; the run page counts the other variants left out. The Sources page says a website needs no start page.
+
+**Why:** owner, 11 Nov 2026: more Biology (0610) and Chemistry (0620) papers from 2023 onwards for the benchmark, from pastpapers.papacambridge.com, without pasting links ("the whole reason to build a system is not to use the manual links"), variant 2 only.
+
+**Tested:** unit tests for links, download links, the site's own pages and which links lead to the subject's sessions; run choices and the essential list. The browser suite's fake site with menus and no start page: the essential files found, the other variant counted, nothing else opened. Live, read-only, from this session against pastpapers.papacambridge.com: 0610 and 0620 each found in 19 pages, all 11 sessions from Mar 2023 to Jun 2026, 159 essential files each (Jun 2024 has 13); its robots.txt redirects to papacambridge.com's home page, which allows our agent. pastpapers.co was checked too: its file pages work, but its menus and sitemap sit behind Cloudflare's bot check, so it is not handled.
+
+## 2026-11-11: Edit any part; l_0 read as l₀; a figure shown once
+
+**What:** every part on the review screen has Edit this part, flagged or green: wording and marks (checked against the PDF, as before), and each of its figures with Take off this part or Delete this figure (inline confirm). Both are recorded as edits under Changes with Undo (a deleted figure comes back where it was, on the parts that had it). The flag box no longer has its own editor. The cleaner turns a lone letter's "l_0" into the subscript markup (names in code such as "total_marks" are left alone); stored readings are cleaned when loaded, so they show right at once. A figure listed under two parts is shown once, on the first; the later part says "Uses ... in 1(b)".
+
+**Why:** owner, 11 Nov 2026, Nov 2025 Paper 42 question 1: l₀ showed as "l_0", the graph grid of 1(b) showed again under 1(c) ("use your graph"), and there was no way to clean up a green part by hand.
+
+**Tested:** unit tests for the subscript, `figureHome`, and take off / delete / Undo on a stored reading; the browser test opens Edit this part on every part, takes a figure off its part (it still shows on its page) and undoes it.
+
 ## 2026-11-10: The agent test no longer fails by chance
 
 **What:** the library test uploads a valid file under a random name; it could pick a June 2024 Physics question paper (about one run in a hundred) that the agent test's fake website offers, so the agent test then found it already stored and its counts were off (CI runs 129 and 148: with 0625_s24_qp_21 stored, seven checks failed; with 0625_s24_qp_31, the robots.txt and second run checks). The random name now never uses June 2024, and the agent test clears every file its fake website offers before it starts.

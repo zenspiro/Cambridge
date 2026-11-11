@@ -64,6 +64,10 @@ export type RunReport = {
   stored?: string[];
   skippedHave?: number;
   skippedNotRequested?: number;
+  /** Other variants left out by "essential files only". */
+  skippedNotEssential?: number;
+  /** A site with no start page for the subject: what the agent found by following its pages. */
+  found?: { site: string; subjectPages: string[]; sessionPages: number };
   failed?: { name: string; reason: string }[];
   unmatched?: string[];
   robotsBlocked?: string[];

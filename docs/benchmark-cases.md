@@ -17,3 +17,12 @@ a code rule"). Each case: the paper, what went wrong, what was done. The papers'
   table were in no part. Fixed: a first part is read again with the opening text above it (`withLeadIns`).
 - For the benchmark: the expected reading has 9(b) as the opening text with Table 9.1 as a table, and 9(b)(i)
   "Define half-life of a radioactive isotope."
+
+## 2. Nov 2025 Paper 42 (0625_w25_qp_42), question 1(b) and 1(c): l₀ and the graph grid
+
+- The AI wrote l₀ as "l_0", which our markup did not take, so it showed as typed and no check flagged it.
+- The AI listed 1(b)'s graph grid under 1(c) too ("Use your graph"), so it was drawn twice.
+- Done (11 Nov 2026): "l_0" after a lone letter becomes the subscript markup (`normaliseNotation`); a figure is shown
+  once, on the first part that lists it (`figureHome`); Edit this part on every part (take a figure off, delete it).
+- For the benchmark: 1(b) holds the grid; 1(c) "Use your graph to determine the length l_{0} of the spring with no
+  load on it." with no figure of its own.

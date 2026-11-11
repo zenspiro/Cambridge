@@ -9,13 +9,14 @@ import { parseCambridgeName } from "../library/names.ts";
 /** dry: list only; download: fetch missing files; check: read the first page of stored files. */
 export type RunMode = "dry" | "download" | "check";
 export type RunSession = "m" | "s" | "w" | "y";
-export type RunParams = { code: string; years: number[]; sessions: RunSession[]; mode: RunMode };
+/** essential: only the checklist's essential files (owner, 11 Nov 2026: variant 2, not every variant). */
+export type RunParams = { code: string; years: number[]; sessions: RunSession[]; mode: RunMode; essential?: boolean };
 
 const SESSIONS: readonly RunSession[] = ["m", "s", "w", "y"];
 
 /** Checks run choices against the library settings. Untrusted input in, clean params out. */
 export function checkRunParams(
-  input: { code: unknown; years: unknown[]; sessions: unknown[]; mode: unknown },
+  input: { code: unknown; years: unknown[]; sessions: unknown[]; mode: unknown; essential?: unknown },
   lib: LibrarySettings,
   codes: readonly string[],
 ): RunParams | null {
@@ -30,7 +31,8 @@ export function checkRunParams(
   const sessions = input.sessions.length === 0 ? [...SESSIONS]
     : [...new Set(input.sessions)].filter((s): s is RunSession => SESSIONS.includes(s as RunSession));
   if (years.length === 0 || (input.years.length && years.length !== input.years.length) || sessions.length === 0 || (input.sessions.length && sessions.length !== input.sessions.length)) return null;
-  return { code, years: years.sort((a, b) => b - a), sessions: SESSIONS.filter((s) => sessions.includes(s)), mode: input.mode };
+  const essential = input.essential === "1" && input.mode !== "check";
+  return { code, years: years.sort((a, b) => b - a), sessions: SESSIONS.filter((s) => sessions.includes(s)), mode: input.mode, ...(essential ? { essential: true } : {}) };
 }
 
 /**

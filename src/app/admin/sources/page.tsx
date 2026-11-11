@@ -211,6 +211,7 @@ export default async function SourcesPage({ searchParams }: { searchParams: Prom
       <section className="card stack" id="sites">
         <h2 className="subtitle">Websites and Google Drive</h2>
         <p className="muted">Switch a source off to stop the agent using it for every subject.</p>
+        <p className="muted">A website with no start page for a subject needs none: the agent starts at its address and follows the site&apos;s own pages to the subject (by its code) and the run&apos;s years.</p>
         <ul className="list">
           {sites.map((s) => (
             <li className="list-row" key={s.id}>
