@@ -19,6 +19,7 @@ Update this file whenever the process changes.
 - [ ] Any outside script or host added to `buildCsp` on purpose.
 - [ ] AI calls: model names in Worker vars, keys only in secrets, never logged; every AI answer cleaned and checked by code before it is stored.
 - [ ] Changing how papers are read or checked: score the benchmark before and after (`scripts/benchmark/score.ts`, `docs/benchmark.md`); no check that passed may fail on the tuning set; bump `CHECKS_VERSION` when a check finds something different.
+- [ ] Workflow files: a `run:` line with ": " inside needs a block (`run: |`); `tests/unit/workflows.test.ts` parses them all.
 - [ ] No em dash characters anywhere.
 
 ## Before every push
