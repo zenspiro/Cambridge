@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-11: The brain workflow file reads again
+
+**What:** a line added to `.github/workflows/brain.yml` with the Poppler fallback held an unquoted ": ", which made the file invalid YAML, so GitHub refused every brain run ("GitHub refused to start the run"). Fixed, and a unit test now parses every workflow file (`tests/unit/workflows.test.ts`, with the `yaml` package pinned as a dev dependency; it was already installed through OpenNext).
+
+**Why:** owner, 11 Nov 2026: "Read the benchmark papers" failed to start right after the benchmark was merged.
+
+**Tested:** the new test fails on the broken file and passes on the fixed one; every workflow parses.
+
 ## 2026-11-11: Browser tests survive an outage of Ubuntu's mirrors
 
 **What:** CI's "Browser tools" step installs Chromium from Playwright's own servers, tries its system packages for 2 minutes only (the runner image already has what headless Chromium needs), and installs Poppler through `scripts/ci/install-poppler.sh`: Ubuntu's mirrors with short timeouts, then two other Ubuntu mirrors. Poppler goes first and stops any apt-get left running (the first try of this fix failed on that: the cut-short browser packages install held apt's lock); only the brain group needs Poppler, so the other groups carry on without it. The step stops after 8 minutes. The brain workflow uses the same script.
