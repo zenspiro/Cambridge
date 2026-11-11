@@ -4,7 +4,9 @@
 # then other Ubuntu mirrors, each with short timeouts. Exits non-zero only when none of them answered.
 set -u
 command -v pdftocairo >/dev/null && exit 0
-apt_try() { timeout 120 sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 "$@"; }
+# An apt-get left behind by an earlier step that was cut short holds the lock (it did on 11 Nov 2026): stop it first.
+sudo pkill -x apt-get 2>/dev/null && sleep 2
+apt_try() { timeout 90 sudo apt-get -o DPkg::Lock::Timeout=30 -o Acquire::Retries=0 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 "$@"; }
 if apt_try update -qq && apt_try install -y -qq --no-install-recommends poppler-utils; then exit 0; fi
 . /etc/os-release
 for mirror in https://mirrors.edge.kernel.org/ubuntu https://mirror.math.princeton.edu/pub/ubuntu; do

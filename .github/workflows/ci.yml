@@ -54,6 +54,7 @@ jobs:
             files: smoke admin library folder agent
           - name: subject brain
             files: brain
+            poppler: true
           - name: accounts and team
             files: themes accounts profile family team
     steps:
@@ -76,8 +77,15 @@ jobs:
         timeout-minutes: 8
         run: |
           npx playwright install chromium
-          timeout 120 npx playwright install-deps chromium || echo "::warning::Browser system packages not installed (Ubuntu's mirrors did not answer); using the runner image's own"
-          bash scripts/ci/install-poppler.sh
+          # Poppler first: only the brain group needs it, and it must not wait on a cut-short apt-get's lock.
+          if ! bash scripts/ci/install-poppler.sh; then
+            if [ "${{ matrix.poppler }}" = "true" ]; then exit 1; fi
+            echo "::warning::No Poppler; this group does not need it"
+          fi
+          if ! timeout 120 npx playwright install-deps chromium; then
+            sudo pkill -x apt-get || true
+            echo "::warning::Browser system packages not installed (Ubuntu's mirrors did not answer); using the runner image's own"
+          fi
       - name: Browser tests
         env:
           FILES: ${{ matrix.files }}

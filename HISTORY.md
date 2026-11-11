@@ -4,11 +4,11 @@ Newest first. What changed, why, and how it was tested.
 
 ## 2026-11-11: Browser tests survive an outage of Ubuntu's mirrors
 
-**What:** CI's "Browser tools" step installs Chromium from Playwright's own servers, tries its system packages for 2 minutes only (the runner image already has what headless Chromium needs), and installs Poppler through `scripts/ci/install-poppler.sh`: Ubuntu's mirrors with short timeouts, then two other Ubuntu mirrors. The step stops after 8 minutes. The brain workflow uses the same script.
+**What:** CI's "Browser tools" step installs Chromium from Playwright's own servers, tries its system packages for 2 minutes only (the runner image already has what headless Chromium needs), and installs Poppler through `scripts/ci/install-poppler.sh`: Ubuntu's mirrors with short timeouts, then two other Ubuntu mirrors. Poppler goes first and stops any apt-get left running (the first try of this fix failed on that: the cut-short browser packages install held apt's lock); only the brain group needs Poppler, so the other groups carry on without it. The step stops after 8 minutes. The brain workflow uses the same script.
 
 **Why:** owner, 11 Nov 2026: GitHub's runners could not resolve Ubuntu's mirrors from about 15:30 UTC, so all three browser groups of the benchmark pull request failed twice before a single test ran (about 45 runner minutes, 11 minutes per group on the second try).
 
-**Tested:** the script's syntax, and its first line (Poppler already there: nothing to do) in this session; the fallback mirrors could not be reached from this session, so the pull request run is the test.
+**Tested:** in this session, the script with a running apt-get holding the lock: it stopped it and installed in 6 seconds; the fallback mirrors could not be reached from this session, so the pull request run is the test.
 
 ## 2026-11-11: The reading benchmark
 
