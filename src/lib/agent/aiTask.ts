@@ -22,15 +22,16 @@ export type AiResult =
 const strings = (v: unknown, max: number, len: number): string[] | null =>
   Array.isArray(v) && v.length > 0 && v.length <= max && v.every((s) => typeof s === "string" && s.length <= len) ? (v as string[]) : null;
 
-/** Files this run's checklist asks for (any status): what an AI-suggested name must be. */
-export async function wantedNames(db: Db, p: RunParams): Promise<Set<string>> {
+/** Files this run's checklist asks for (any status): what an AI-suggested name must be. With `onlyEssential`, the
+ * essential ones (the essential variant, examiner reports, thresholds, syllabus documents). */
+export async function wantedNames(db: Db, p: RunParams, onlyEssential = false): Promise<Set<string>> {
   const list = await loadSyllabus(db, p.code);
   const out = new Set<string>();
   if (!list) return out;
   for (const g of [...list.versions, ...list.sessions]) {
     for (const c of groupCells(g)) {
       const f = parseCambridgeName(c.fileName);
-      if (f && p.years.includes(f.year) && p.sessions.includes(f.session)) out.add(c.fileName);
+      if (f && p.years.includes(f.year) && p.sessions.includes(f.session) && (!onlyEssential || c.essential)) out.add(c.fileName);
     }
   }
   return out;

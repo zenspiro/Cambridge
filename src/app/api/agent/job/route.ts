@@ -5,6 +5,7 @@ import { AGENT, LIBRARY } from "@/lib/config";
 import { STORED_NAMES } from "@/lib/library/queries";
 import { getLibrarySettings } from "@/lib/settings";
 import { decisionsForAgent } from "@/lib/agent/review";
+import { wantedNames } from "@/lib/agent/aiTask";
 
 // The agent asks what to do: the run's choices, the enabled sources with their start
 // pages, the names already stored (so it never fetches them again) and the owner's decisions
@@ -27,10 +28,12 @@ export async function POST(request: Request) {
     : undefined;
   const [{ results: rows }, { results: names }, lib, { results: folders }, { results: subjects }, decisions] = await Promise.all([
     a.db
-      .prepare(`SELECT s.id, s.name, s.base_url, p.url FROM source_site s JOIN source_page p ON p.site_id = s.id
-                WHERE s.enabled = 1 AND s.kind = 'web' AND p.syllabus_code = ?1 ORDER BY s.created_at, p.created_at`)
+      // Every enabled website: its start pages for this subject, or none, and then the agent finds the subject by
+      // following the site's own pages (owner, 11 Nov 2026).
+      .prepare(`SELECT s.id, s.name, s.base_url, p.url FROM source_site s LEFT JOIN source_page p ON p.site_id = s.id AND p.syllabus_code = ?1
+                WHERE s.enabled = 1 AND s.kind = 'web' ORDER BY s.created_at, p.created_at`)
       .bind(params.code)
-      .all<{ id: string; name: string; base_url: string; url: string }>(),
+      .all<{ id: string; name: string; base_url: string; url: string | null }>(),
     a.db.prepare(STORED_NAMES).bind(params.code).all<{ file_name: string }>(),
     getLibrarySettings(a.db),
     a.db
@@ -44,7 +47,7 @@ export async function POST(request: Request) {
   const sources = new Map<string, { siteId: string; name: string; baseUrl: string; pages: string[] }>();
   for (const r of rows) {
     const s = sources.get(r.id) ?? { siteId: r.id, name: r.name, baseUrl: r.base_url, pages: [] };
-    if (r.url.startsWith(r.base_url)) s.pages.push(r.url);
+    if (r.url && r.url.startsWith(r.base_url)) s.pages.push(r.url);
     sources.set(r.id, s);
   }
   return json({
@@ -55,6 +58,8 @@ export async function POST(request: Request) {
     subjects,
     have: names.map((n) => n.file_name),
     decisions,
+    // Essential files only: the checklist's essential files for the run's years and sessions.
+    ...(params.essential ? { essential: [...(await wantedNames(a.db, params, true))] } : {}),
     ...(storedDocs ? { storedDocs } : {}),
     limits: {
       maxFiles: AGENT.maxFilesPerRun, maxFileBytes: LIBRARY.maxFileBytes, delayMs: AGENT.delayMs, userAgentToken: AGENT.userAgentToken,

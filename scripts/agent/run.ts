@@ -4,6 +4,7 @@
 // Needs: APP_URL, AGENT_SECRET, JOB_ID. Uses only Node built-ins and shared src/lib files.
 import { signRequest } from "../../src/lib/agent/sign.ts";
 import { extractPdfLinks, toCambridgeName } from "../../src/lib/agent/links.ts";
+import { CRAWL, linkKind, onSite, pageLinks, pdfOf, type CrawlScope } from "../../src/lib/agent/crawl.ts";
 import { parseRobots } from "../../src/lib/agent/robots.ts";
 import { isKnownType, parseCambridgeName } from "../../src/lib/library/names.ts";
 import { reasonText } from "../../src/lib/agent/labels.ts";
@@ -17,7 +18,9 @@ import { firstPageText } from "../../src/lib/pdf/firstPage.ts";
 import { readCover, type CoverReading } from "../../src/lib/library/cover.ts";
 
 type Job = {
-  params: { code: string; years: number[]; sessions: string[]; mode: "dry" | "download" | "check" };
+  params: { code: string; years: number[]; sessions: string[]; mode: "dry" | "download" | "check"; essential?: boolean };
+  /** With "essential files only": the checklist's essential files for the run's years and sessions. */
+  essential?: string[];
   /** Library check: the subject's stored files. */
   storedDocs?: { id: string; fileName: string }[];
   sources: { siteId: string; name: string; baseUrl: string; pages: string[] }[];
@@ -128,6 +131,30 @@ async function politeFetch(url: string, maxBytes: number): Promise<{ status: num
   return { status: 310, bytes: new Uint8Array(), type: "" };
 }
 
+/**
+ * robots.txt, following redirects as RFC 9309 says (up to 5, to any site): pastpapers.papacambridge.com's sends you
+ * to papacambridge.com's home page, which is not a robots file, so it sets no rules (owner, 11 Nov 2026).
+ */
+async function robotsFetch(url: string): Promise<{ status: number; bytes: Uint8Array }> {
+  let current = new URL(url);
+  for (let hop = 0; hop <= 5; hop++) {
+    const wait = (lastHit.get(current.origin) ?? 0) + delayMs - Date.now();
+    if (wait > 0) await sleep(wait);
+    lastHit.set(current.origin, Date.now());
+    const res = await fetch(current, { redirect: "manual", headers: { "User-Agent": userAgent }, signal: AbortSignal.timeout(60_000) });
+    const loc = res.headers.get("location");
+    if (res.status >= 300 && res.status < 400 && loc) {
+      current = new URL(loc, current);
+      continue;
+    }
+    const buf = new Uint8Array(await res.arrayBuffer());
+    return { status: res.status, bytes: buf.slice(0, 512 * 1024) };
+  }
+  return { status: 599, bytes: new Uint8Array() };
+}
+
+const rank = (kind: string) => ({ session: 0, subject: 1, qualification: 2, home: 3 } as Record<string, number>)[kind] ?? 4;
+
 type ReviewEntry = { where: string; why: string; driveId: string; siteId: string; suggest?: string; by: "ai" | "rules" };
 const MAX_REVIEW = 200;
 
@@ -138,6 +165,10 @@ type Report = {
   stored: string[];
   skippedHave: number;
   skippedNotRequested: number;
+  /** Files of the run's years left out because they are not essential (another variant). */
+  skippedNotEssential?: number;
+  /** Sites with no start page for the subject: the pages the agent found by following the site's menus. */
+  found?: { site: string; subjectPages: string[]; sessionPages: number };
   failed: { name: string; reason: string }[];
   unmatched: string[];
   robotsBlocked: string[];
@@ -266,6 +297,7 @@ async function main() {
   const years = new Set(job.params.years);
   const sessions = new Set(job.params.sessions);
   const have = new Set(job.have);
+  const essential = job.params.essential && job.essential ? new Set(job.essential) : null;
   const decided = new Map((job.decisions ?? []).map((d) => [`${d.siteId}:${d.id}`, d]));
   const codes = (job.subjects ?? []).map((s) => s.code);
   if (!codes.includes(job.params.code)) codes.push(job.params.code);
@@ -299,7 +331,7 @@ async function main() {
     let allowed: (path: string) => boolean = () => false;
     await progress(2, `Reading ${base.host}/robots.txt`);
     try {
-      const r = await politeFetch(`${base.origin}/robots.txt`, 512 * 1024);
+      const r = await robotsFetch(`${base.origin}/robots.txt`);
       if (r.status >= 200 && r.status < 300) allowed = parseRobots(new TextDecoder().decode(r.bytes), job.limits.userAgentToken);
       else if (r.status >= 400 && r.status < 500) allowed = () => true;
       else report.pageErrors.push({ url: `${base.origin}/robots.txt`, status: String(r.status) });
@@ -312,38 +344,38 @@ async function main() {
       : `${site.name}: its robots.txt could not be read, so this source is skipped to be safe`);
     allowedBySite.set(site.siteId, allowed);
 
-    for (const page of site.pages) {
-      pagesDone++;
-      const pct = 3 + Math.round(((pagesDone - 1) / Math.max(totalPages, 1)) * (findShare - 3));
-      await progress(pct, `Reading start page ${pagesDone} of ${totalPages}`);
+    /** One page fetched politely (robots.txt first); its HTML, or null with the reason in the report. */
+    const fetchPage = async (page: string, pct: number, step: string, label: string): Promise<string | null> => {
       if (!allowed(new URL(page).pathname)) {
         report.robotsBlocked.push(page);
-        await progress(pct, `Reading start page ${pagesDone} of ${totalPages}`, `Start page ${pagesDone} skipped: the site's robots.txt does not allow it (${page})`);
-        continue;
+        await progress(pct, step, `${label} skipped: the site's robots.txt does not allow it (${page})`);
+        return null;
       }
-      let html = "";
       try {
         const r = await politeFetch(page, MAX_PAGE_BYTES);
         if (r.status !== 200) {
           report.pageErrors.push({ url: page, status: String(r.status) });
-          await progress(pct, `Reading start page ${pagesDone} of ${totalPages}`, `Start page ${pagesDone} could not be read: the website answered ${r.status} (${page})`);
-          continue;
+          await progress(pct, step, `${label} could not be read: the website answered ${r.status} (${page})`);
+          return null;
         }
-        html = new TextDecoder().decode(r.bytes);
+        report.pagesVisited++;
+        return new TextDecoder().decode(r.bytes);
       } catch (e) {
         if (e instanceof Cancelled) throw e;
         report.pageErrors.push({ url: page, status: "unreachable" });
-        await progress(pct, `Reading start page ${pagesDone} of ${totalPages}`, `Start page ${pagesDone} could not be reached (${page})`);
-        continue;
+        await progress(pct, step, `${label} could not be reached (${page})`);
+        return null;
       }
-      report.pagesVisited++;
-      const links = extractPdfLinks(html, page, site.baseUrl);
+    };
+    /** The files a page links to (direct, or inside a download link), each kept when this run wants it. */
+    const takeFiles = async (html: string, page: string, pct: number, step: string) => {
+      const links = [...new Set([...extractPdfLinks(html, page, site.baseUrl), ...pageLinks(html, page).map(pdfOf).filter((u): u is string => !!u && onSite(u, site.baseUrl))])];
       report.linksFound += links.length;
       const before = report.candidates.length;
       const haveBefore = report.skippedHave;
       const outsideBefore = report.skippedNotRequested;
+      const otherBefore = report.skippedNotEssential ?? 0;
       const unmatchedBefore = report.unmatched.length;
-      const title = pageTitle(html) ?? page;
       for (const link of links) {
         if (seen.has(link)) continue;
         seen.add(link);
@@ -355,6 +387,11 @@ async function main() {
         }
         if (!years.has(p.year) || !sessions.has(p.session)) {
           report.skippedNotRequested++;
+          continue;
+        }
+        // Essential files only (owner, 11 Nov 2026: variant 2): another variant is left out.
+        if (essential && !essential.has(name)) {
+          report.skippedNotEssential = (report.skippedNotEssential ?? 0) + 1;
           continue;
         }
         if (have.has(name) || report.candidates.some((c) => c.name === name)) {
@@ -372,10 +409,60 @@ async function main() {
         fresh.length ? `${fresh.length} new: ${summariseFiles(fresh)}` : "nothing new for this run",
         report.skippedHave - haveBefore ? `${report.skippedHave - haveBefore} already in the library` : "",
         report.skippedNotRequested - outsideBefore ? `${report.skippedNotRequested - outsideBefore} for years or sessions not in this run` : "",
+        (report.skippedNotEssential ?? 0) - otherBefore ? `${(report.skippedNotEssential ?? 0) - otherBefore} other variants left out` : "",
         report.unmatched.length - unmatchedBefore ? `${report.unmatched.length - unmatchedBefore} not recognised` : "",
       ].filter(Boolean);
-      await progress(pct, `Reading start page ${pagesDone} of ${totalPages}`, `Read "${title}": ${links.length} PDF links. ${parts.join("; ")}.`);
+      await progress(pct, step, `Read "${pageTitle(html) ?? page}": ${links.length} PDF links. ${parts.join("; ")}.`);
+    };
+
+    if (site.pages.length) {
+      for (const page of site.pages) {
+        pagesDone++;
+        const pct = 3 + Math.round(((pagesDone - 1) / Math.max(totalPages, 1)) * (findShare - 3));
+        const step = `Reading start page ${pagesDone} of ${totalPages}`;
+        await progress(pct, step);
+        const html = await fetchPage(page, pct, step, `Start page ${pagesDone}`);
+        if (html !== null) await takeFiles(html, page, pct, step);
+      }
+      continue;
     }
+    if (!robotsOk) continue;
+    // No start page for this subject: find it by following the site's own menus (owner, 11 Nov 2026).
+    const runSubject = (job.subjects ?? []).find((x) => x.code === job.params.code);
+    const scope: CrawlScope = { code: job.params.code, years: job.params.years, qualification: runSubject?.qualification ?? "" };
+    const step = `Finding ${runSubject ? `${runSubject.qualification} ${runSubject.name}` : job.params.code} on ${site.name}`;
+    await progress(3, step, `${site.name} has no start page for this subject: following the site's own pages to find it.`);
+    const queue: { url: string; kind: string }[] = [{ url: site.baseUrl, kind: "home" }];
+    const queued = new Set([site.baseUrl]);
+    const counts = { qualification: 0, subject: 0 };
+    const found = { site: site.name, subjectPages: [] as string[], sessionPages: 0 };
+    let read = 0;
+    while (queue.length && read < CRAWL.maxPages) {
+      // Session pages first (they hold the files), then subject pages, then menus.
+      queue.sort((x, y) => rank(x.kind) - rank(y.kind));
+      const next = queue.shift()!;
+      read++;
+      const pct = 3 + Math.round((read / CRAWL.maxPages) * (findShare - 3) * 0.5);
+      const html = await fetchPage(next.url, pct, step, next.kind === "home" ? "The site's front page" : "A page");
+      if (html === null) continue;
+      if (next.kind === "subject") found.subjectPages.push(next.url);
+      if (next.kind === "session") found.sessionPages++;
+      if (next.kind === "session" || next.kind === "subject") await takeFiles(html, next.url, pct, step);
+      for (const link of pageLinks(html, next.url)) {
+        if (queued.has(link) || !onSite(link, site.baseUrl) || pdfOf(link)) continue;
+        const kind = linkKind(link, scope);
+        if (kind === "session" || (kind === "subject" && counts.subject < CRAWL.maxSubjectPages) || (kind === "qualification" && next.kind === "home" && counts.qualification < CRAWL.maxQualificationPages)) {
+          if (kind === "subject") counts.subject++;
+          if (kind === "qualification") counts.qualification++;
+          queued.add(link);
+          queue.push({ url: link, kind });
+        }
+      }
+    }
+    report.found = found;
+    await progress(findShare, step, found.subjectPages.length
+      ? `Found the subject on ${site.name} (${found.subjectPages[0]}) and read ${found.sessionPages} session page${found.sessionPages === 1 ? "" : "s"} for this run's years.`
+      : `Could not find this subject on ${site.name} after reading ${read} page${read === 1 ? "" : "s"}.`);
   }
   // Google Drive folders: walk each tree, work out what every PDF is, keep what this run asks for.
   let drive: Drive | null = null;
@@ -588,6 +675,12 @@ async function main() {
     }
   }
 
+  // Essential files only, from every source (Drive too): other variants are left out.
+  if (essential) {
+    const keep = report.candidates.filter((c) => essential.has(c.name));
+    report.skippedNotEssential = (report.skippedNotEssential ?? 0) + report.candidates.length - keep.length;
+    report.candidates = keep;
+  }
   const found = report.candidates.map((c) => c.name);
   await progress(findShare, "Pages read", found.length
     ? `Found ${found.length} file${found.length === 1 ? "" : "s"} to ${job.params.mode === "dry" ? "list (not downloaded in a dry run)" : "download"}: ${summariseFiles(found, 6)}.`

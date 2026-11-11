@@ -219,6 +219,7 @@ export default async function RunPage({
             <li><strong>{p.mode === "dry" ? candidates.length : arr(rep.stored).length}</strong> {p.mode === "dry" ? "to fetch" : "stored"}</li>
             <li><strong>{rep.skippedHave ?? 0}</strong> already stored</li>
             <li><strong>{rep.skippedNotRequested ?? 0}</strong> outside this run</li>
+            {rep.skippedNotEssential ? <li><strong>{rep.skippedNotEssential}</strong> other variants left out (essential files only)</li> : null}
           </ul>
         ) : null}
         {done && p.mode === "dry" && run.status === "succeeded" && candidates.length > 0 ? (
@@ -227,6 +228,7 @@ export default async function RunPage({
             {p.years.map((y) => <input key={y} type="hidden" name="years" value={y} />)}
             {p.sessions.map((s) => <input key={s} type="hidden" name="sessions" value={s} />)}
             <input type="hidden" name="mode" value="download" />
+            {p.essential ? <input type="hidden" name="essential" value="1" /> : null}
             <button className="btn btn-primary" type="submit">Download these {candidates.length} files</button>
           </form>
         ) : null}
@@ -339,6 +341,7 @@ export default async function RunPage({
             {p.years.map((y) => <input key={y} type="hidden" name="years" value={y} />)}
             {p.sessions.map((s) => <input key={s} type="hidden" name="sessions" value={s} />)}
             <input type="hidden" name="mode" value="download" />
+            {p.essential ? <input type="hidden" name="essential" value="1" /> : null}
             <button className="btn btn-primary" type="submit">Download accepted files</button>
           </form>
         </section>

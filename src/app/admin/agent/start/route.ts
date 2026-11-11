@@ -11,7 +11,7 @@ export async function POST(request: Request) {
   // staffPost checks the session (owner, or a team member with the whole admin to edit) before anything else.
   return staffPost(request, "/admin/agent", ADMIN_EDIT, async ({ db, env, form, actorId }) => {
     const params = checkRunParams(
-      { code: form.get("code"), years: form.getAll("years"), sessions: form.getAll("sessions"), mode: form.get("mode") },
+      { code: form.get("code"), years: form.getAll("years"), sessions: form.getAll("sessions"), mode: form.get("mode"), essential: form.get("essential") },
       await getLibrarySettings(db),
       (await listSubjects(db)).map((s) => s.code),
     );

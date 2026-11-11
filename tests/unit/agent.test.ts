@@ -128,6 +128,9 @@ test("run choices are checked against the library years", () => {
   assert.deepEqual(checkRunParams({ code: "0625", years: ["2024", "2023"], sessions: ["s", "y"], mode: "dry" }, lib, CODES), {
     code: "0625", years: [2024, 2023], sessions: ["s", "y"], mode: "dry",
   });
+  // Essential files only: kept when ticked, never for a library check.
+  assert.equal(checkRunParams({ code: "0625", years: ["2024"], sessions: ["s"], mode: "dry", essential: "1" }, lib, CODES)?.essential, true);
+  assert.equal(checkRunParams({ code: "0625", years: ["2024"], sessions: ["s"], mode: "check", essential: "1" }, lib, CODES)?.essential, undefined);
   // Any subject in the library can be run, not only Physics.
   assert.equal(checkRunParams({ code: "0478", years: ["2024"], sessions: ["s"], mode: "dry" }, lib, CODES)?.code, "0478");
   // Nothing ticked means everything: every library year, every session.
