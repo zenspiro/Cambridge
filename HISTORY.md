@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-11: Edit any part; l_0 read as l₀; a figure shown once
+
+**What:** every part on the review screen has Edit this part, flagged or green: wording and marks (checked against the PDF, as before), and each of its figures with Take off this part or Delete this figure (inline confirm). Both are recorded as edits under Changes with Undo (a deleted figure comes back where it was, on the parts that had it). The flag box no longer has its own editor. The cleaner turns a lone letter's "l_0" into the subscript markup (names in code such as "total_marks" are left alone); stored readings are cleaned when loaded, so they show right at once. A figure listed under two parts is shown once, on the first; the later part says "Uses ... in 1(b)".
+
+**Why:** owner, 11 Nov 2026, Nov 2025 Paper 42 question 1: l₀ showed as "l_0", the graph grid of 1(b) showed again under 1(c) ("use your graph"), and there was no way to clean up a green part by hand.
+
+**Tested:** unit tests for the subscript, `figureHome`, and take off / delete / Undo on a stored reading; the browser test opens Edit this part on every part, takes a figure off its part (it still shows on its page) and undoes it.
+
 ## 2026-11-10: The agent test no longer fails by chance
 
 **What:** the library test uploads a valid file under a random name; it could pick a June 2024 Physics question paper (about one run in a hundred) that the agent test's fake website offers, so the agent test then found it already stored and its counts were off (CI runs 129 and 148: with 0625_s24_qp_21 stored, seven checks failed; with 0625_s24_qp_31, the robots.txt and second run checks). The random name now never uses June 2024, and the agent test clears every file its fake website offers before it starts.
