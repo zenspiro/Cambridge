@@ -13,7 +13,9 @@ const rnd = (n) => Math.floor(Math.random() * n);
 
 // Test files: a valid PDF with a random valid name, a bad name, and a fake PDF.
 const dir = mkdtempSync(join(tmpdir(), "lib-e2e-"));
-const good = `0625_${["m", "s", "w"][rnd(3)]}${22 + rnd(4)}_qp_${1 + rnd(6)}${1 + rnd(3)}.pdf`;
+// Never June 2024: the agent test's fake website offers June 2024 papers, and a random name landing on one of them
+// (about one run in a hundred) made that test fail by chance (CI, 10 Nov 2026).
+const good = `0625_${["m", "s", "w"][rnd(3)]}${[22, 23, 25][rnd(3)]}_qp_${1 + rnd(6)}${1 + rnd(3)}.pdf`;
 writeFileSync(join(dir, good), `%PDF-1.4\n% e2e ${Date.now()} ${Math.random()}\n%%EOF`);
 writeFileSync(join(dir, "holiday-photo.pdf"), "%PDF-1.4\n%%EOF");
 writeFileSync(join(dir, "0625_s24_ms_21.pdf"), "<html>not a pdf</html>");

@@ -29,7 +29,8 @@ const id = () => `e2e${Date.now()}${Math.floor(Math.random() * 1e6)}`;
 
 const fake = await startFakeSource();
 sql(`UPDATE source_site SET enabled = 0 WHERE id = 'cambridge-official'`);
-sql(`DELETE FROM source_document WHERE source_site_id = 'local-test' OR file_name IN ('0625_s24_qp_11.pdf','0625_s24_ms_11.pdf','0625_s24_er.pdf','0625_y23_sp_1.pdf')`);
+// Every file the fake website offers starts missing, whatever earlier tests stored.
+sql(`DELETE FROM source_document WHERE source_site_id = 'local-test' OR file_name IN ('0625_s24_qp_11.pdf','0625_s24_ms_11.pdf','0625_s24_er.pdf','0625_y23_sp_1.pdf','0625_s24_qp_21.pdf','0625_s24_ms_21.pdf','0625_s24_qp_31.pdf')`);
 sql(`INSERT OR REPLACE INTO source_site (id, name, base_url, enabled, notes, created_at) VALUES ('local-test', 'Local test site', '${fake.base}', 1, '', 1)`);
 sql(`INSERT OR REPLACE INTO source_page (id, site_id, syllabus_code, url, created_at) VALUES ('local-test-page', 'local-test', '0625', '${fake.base}papers/0625/', 1)`);
 sql(`UPDATE job SET status = 'failed' WHERE type = 'agent' AND status IN ('queued', 'running')`);
