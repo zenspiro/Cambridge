@@ -1,0 +1,166 @@
+{
+ "file": "0610_m25_ms_42",
+ "kind": "ms",
+ "total": 80,
+ "mcq": false,
+ "parts": [
+  {
+   "n": "1(a)(i)",
+   "marks": 2
+  },
+  {
+   "n": "1(a)(ii)",
+   "marks": 1
+  },
+  {
+   "n": "1(b)(i)",
+   "marks": 1
+  },
+  {
+   "n": "1(b)(ii)",
+   "marks": 1
+  },
+  {
+   "n": "1(c)",
+   "marks": 3
+  },
+  {
+   "n": "1(d)",
+   "marks": 2
+  },
+  {
+   "n": "1(e)",
+   "marks": 6
+  },
+  {
+   "n": "2(a)(i)",
+   "marks": 1
+  },
+  {
+   "n": "2(a)(ii)",
+   "marks": 1
+  },
+  {
+   "n": "2(a)(iii)",
+   "marks": 1
+  },
+  {
+   "n": "2(a)(iv)",
+   "marks": 5
+  },
+  {
+   "n": "2(b)(i)",
+   "marks": 1
+  },
+  {
+   "n": "2(b)(ii)",
+   "marks": 2
+  },
+  {
+   "n": "3(a)(i)",
+   "marks": 2
+  },
+  {
+   "n": "3(a)(ii)",
+   "marks": 3
+  },
+  {
+   "n": "3(b)(i)",
+   "marks": 2
+  },
+  {
+   "n": "3(b)(ii)",
+   "marks": 2
+  },
+  {
+   "n": "3(b)(iii)",
+   "marks": 1
+  },
+  {
+   "n": "3(b)(iv)",
+   "marks": 1
+  },
+  {
+   "n": "3(b)(v)",
+   "marks": 3
+  },
+  {
+   "n": "3(b)(vi)",
+   "marks": 3
+  },
+  {
+   "n": "4(a)(i)",
+   "marks": 4
+  },
+  {
+   "n": "4(a)(ii)",
+   "marks": 3
+  },
+  {
+   "n": "4(b)(i)",
+   "marks": 1
+  },
+  {
+   "n": "4(b)(ii)",
+   "marks": 2
+  },
+  {
+   "n": "5(a)(i)",
+   "marks": 1
+  },
+  {
+   "n": "5(a)(ii)",
+   "marks": 1
+  },
+  {
+   "n": "5(a)(iii)",
+   "marks": 1
+  },
+  {
+   "n": "5(a)(iv)",
+   "marks": 4
+  },
+  {
+   "n": "5(b)(i)",
+   "marks": 1
+  },
+  {
+   "n": "5(b)(ii)",
+   "marks": 2
+  },
+  {
+   "n": "5(b)(iii)",
+   "marks": 2
+  },
+  {
+   "n": "6(a)(i)",
+   "marks": 2
+  },
+  {
+   "n": "6(a)(ii)",
+   "marks": 2
+  },
+  {
+   "n": "6(b)(i)",
+   "marks": 2
+  },
+  {
+   "n": "6(b)(ii)",
+   "marks": 2
+  },
+  {
+   "n": "6(b)(iii)",
+   "marks": 3
+  },
+  {
+   "n": "6(b)(iv)",
+   "marks": 3
+  }
+ ],
+ "leads": [],
+ "figures": [],
+ "tables": [],
+ "notation": [],
+ "unsure": [],
+ "status": "checked"
+}

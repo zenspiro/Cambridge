@@ -388,3 +388,12 @@ test("opening text is put right without a click only when every check agrees, an
   // A mark scheme, or a paper without an outline, is never touched.
   assert.equal(autoFixLeads({ content, pages, gemini: content, outline: [] }, none).fixes.length, 0);
 });
+
+test("page furniture's invisible comma over the margin is never a superscript, so the question number stays (Jun 2024 0620 Paper 42)", () => {
+  const p5: W[][] = [
+    [[37.1, 63.3, 93.4, 69.8, ",\u0001\u0001\u0002"]],
+    [[49.6, 69.4, 55.7, 83.7, "3"], [70.8, 69.4, 89.8, 83.7, "The"], [92.9, 69.4, 127.7, 83.7, "symbol"], [130.8, 69.4, 173, 83.7, "equation."]],
+  ];
+  const words = bboxWords(xml([[], p5])).map((p) => notate(p).words);
+  assert.deepEqual(pdfOutline(words).map((p) => p.number), ["3"]);
+});

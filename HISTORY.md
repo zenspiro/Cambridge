@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-11: The reading benchmark
+
+**What:** a fixed set of 54 real papers (48 question papers, 6 mark schemes; Biology, Chemistry, Physics, Maths, Computer Science and Geography, variant 2, 2023 to 2026) with answer keys, and a score script, so every change to the reading rules is measured on all of them (`docs/benchmark.md`). 16 papers are locked: never tuned on, only their totals shown. Keys hold structure only (parts and printed marks, opening text, where each figure and table sits, notation), drafted from the PDFs by `scripts/benchmark/keys.ts` and checked: on every question paper the marks add up to the cover's total. `scripts/benchmark/score.ts` reads the stored readings (read only), scores each paper, and fails when anything that passed before fails now. Each subject's Read all card has "Benchmark papers" with "Read the N benchmark papers" and its rough cost. Checking the keys found five outline faults, now fixed (checks version 6): a part's last mark beside the footer, a mark joined to answer dots, a trace table's "[1] [2]" heading counted as marks, a table's row number taken for a question, and page furniture's invisible comma hiding Jun 2024 Chemistry P42's question 3.
+
+**Why:** owner, 11 Nov 2026 (option A, with Computer Science, Maths and the smallest Geography files added): measure reading changes on many papers instead of one at a time.
+
+**Tested:** unit tests for the set (pairs, keys present, no wording in keys), scoring (each kind of check, multiple choice options, mark scheme rows, regressions, totals), the outline's marks and the invisible comma (fails without the fix), and the benchmark plan on a test library. Live, read only: all 245 candidate papers measured, keys drafted for 54, and the 6 Physics documents read before scored: 97.6% of 531 checks, Nov 2025 P42 fully right.
+
 ## 2026-11-11: Agent uploads stay inside the free plan's limit
 
 **What:** the agent sends each file's SHA-256 with it; the signature covers that value and R2 checks the bytes against it when storing, so the Worker no longer hashes uploads at all (it hashed every file twice: for the signature and for duplicates). When Cloudflare turns the Worker away (503) or the connection drops, the agent waits 30 s, 1 minute and 2 minutes and tries again, for each upload and for the run's final report, and says so in the activity list.

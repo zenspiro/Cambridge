@@ -1,0 +1,141 @@
+{
+ "file": "0610_s26_qp_52",
+ "kind": "qp",
+ "total": 40,
+ "mcq": false,
+ "parts": [
+  {
+   "n": "1(a)(i)",
+   "marks": 1
+  },
+  {
+   "n": "1(a)(ii)",
+   "marks": 4
+  },
+  {
+   "n": "1(a)(iii)",
+   "marks": 1
+  },
+  {
+   "n": "1(a)(iv)",
+   "marks": 1
+  },
+  {
+   "n": "1(a)(v)",
+   "marks": 1
+  },
+  {
+   "n": "1(a)(vi)",
+   "marks": 2
+  },
+  {
+   "n": "1(b)(i)",
+   "marks": 2
+  },
+  {
+   "n": "1(b)(ii)",
+   "marks": 1
+  },
+  {
+   "n": "1(b)(iii)",
+   "marks": 2
+  },
+  {
+   "n": "1(c)(i)",
+   "marks": 4
+  },
+  {
+   "n": "1(c)(ii)",
+   "marks": 2
+  },
+  {
+   "n": "1(c)(iii)",
+   "marks": 2
+  },
+  {
+   "n": "2(a)(i)",
+   "marks": 4
+  },
+  {
+   "n": "2(a)(ii)",
+   "marks": 3
+  },
+  {
+   "n": "2(b)(i)",
+   "marks": 1
+  },
+  {
+   "n": "2(b)(ii)",
+   "marks": 1
+  },
+  {
+   "n": "2(b)(iii)",
+   "marks": 1
+  },
+  {
+   "n": "2(b)(iv)",
+   "marks": 1
+  },
+  {
+   "n": "2(c)",
+   "marks": 6
+  }
+ ],
+ "leads": [
+  "1",
+  "1(a)",
+  "1(b)",
+  "1(c)",
+  "2(a)",
+  "2(b)"
+ ],
+ "figures": [],
+ "tables": [
+  {
+   "label": "Table 1.1",
+   "part": "1(a)",
+   "also": [
+    "1(a)(i)"
+   ]
+  },
+  {
+   "label": "Table 1.2",
+   "part": "1(c)",
+   "also": [
+    "1(c)(i)"
+   ]
+  }
+ ],
+ "notation": [
+  {
+   "part": "1(a)(i)",
+   "token": "cm^{3}"
+  },
+  {
+   "part": "1(a)(ii)",
+   "token": "cm^{3}"
+  },
+  {
+   "part": "1(a)(iii)",
+   "token": "cm^{3}"
+  },
+  {
+   "part": "1(b)",
+   "token": "cm^{3}"
+  },
+  {
+   "part": "1(b)(i)",
+   "token": "cm^{3}"
+  },
+  {
+   "part": "2(b)",
+   "token": "cm^{3}"
+  },
+  {
+   "part": "2(b)(iv)",
+   "token": "cm^{3}"
+  }
+ ],
+ "unsure": [],
+ "status": "checked"
+}

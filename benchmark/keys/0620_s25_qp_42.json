@@ -1,0 +1,383 @@
+{
+ "file": "0620_s25_qp_42",
+ "kind": "qp",
+ "total": 80,
+ "mcq": false,
+ "parts": [
+  {
+   "n": "1(a)",
+   "marks": 1
+  },
+  {
+   "n": "1(b)",
+   "marks": 1
+  },
+  {
+   "n": "1(c)",
+   "marks": 1
+  },
+  {
+   "n": "1(d)",
+   "marks": 1
+  },
+  {
+   "n": "1(e)",
+   "marks": 1
+  },
+  {
+   "n": "1(f)",
+   "marks": 1
+  },
+  {
+   "n": "1(g)",
+   "marks": 1
+  },
+  {
+   "n": "1(h)",
+   "marks": 1
+  },
+  {
+   "n": "2(a)",
+   "marks": 2
+  },
+  {
+   "n": "2(b)(i)",
+   "marks": 2
+  },
+  {
+   "n": "2(b)(ii)",
+   "marks": 3
+  },
+  {
+   "n": "2(b)(iii)",
+   "marks": 3
+  },
+  {
+   "n": "2(b)(iv)",
+   "marks": 2
+  },
+  {
+   "n": "2(c)(i)",
+   "marks": 1
+  },
+  {
+   "n": "2(c)(ii)",
+   "marks": 1
+  },
+  {
+   "n": "2(c)(iii)",
+   "marks": 2
+  },
+  {
+   "n": "3(a)",
+   "marks": 3
+  },
+  {
+   "n": "3(b)(i)",
+   "marks": 1
+  },
+  {
+   "n": "3(b)(ii)",
+   "marks": 1
+  },
+  {
+   "n": "3(b)(iii)",
+   "marks": 1
+  },
+  {
+   "n": "3(b)(iv)",
+   "marks": 3
+  },
+  {
+   "n": "3(c)(i)",
+   "marks": 1
+  },
+  {
+   "n": "3(c)(ii)",
+   "marks": 1
+  },
+  {
+   "n": "3(d)(i)",
+   "marks": 1
+  },
+  {
+   "n": "3(d)(ii)",
+   "marks": 1
+  },
+  {
+   "n": "3(d)(iii)",
+   "marks": 2
+  },
+  {
+   "n": "4(a)(i)",
+   "marks": 1
+  },
+  {
+   "n": "4(a)(ii)",
+   "marks": 1
+  },
+  {
+   "n": "4(b)",
+   "marks": 1
+  },
+  {
+   "n": "4(c)(i)",
+   "marks": 1
+  },
+  {
+   "n": "4(c)(ii)",
+   "marks": 2
+  },
+  {
+   "n": "4(c)(iii)",
+   "marks": 3
+  },
+  {
+   "n": "5(a)",
+   "marks": 1
+  },
+  {
+   "n": "5(b)(i)",
+   "marks": 1
+  },
+  {
+   "n": "5(b)(ii)",
+   "marks": 1
+  },
+  {
+   "n": "5(b)(iii)",
+   "marks": 1
+  },
+  {
+   "n": "5(b)(iv)",
+   "marks": 1
+  },
+  {
+   "n": "5(b)(v)",
+   "marks": 1
+  },
+  {
+   "n": "5(c)",
+   "marks": 3
+  },
+  {
+   "n": "5(d)(i)",
+   "marks": 1
+  },
+  {
+   "n": "5(d)(ii)",
+   "marks": 3
+  },
+  {
+   "n": "5(d)(iii)",
+   "marks": 1
+  },
+  {
+   "n": "6(a)",
+   "marks": 1
+  },
+  {
+   "n": "6(b)",
+   "marks": 1
+  },
+  {
+   "n": "6(c)",
+   "marks": 2
+  },
+  {
+   "n": "6(d)(i)",
+   "marks": 4
+  },
+  {
+   "n": "6(d)(ii)",
+   "marks": 3
+  },
+  {
+   "n": "6(e)(i)",
+   "marks": 1
+  },
+  {
+   "n": "6(e)(ii)",
+   "marks": 1
+  },
+  {
+   "n": "6(e)(iii)",
+   "marks": 2
+  },
+  {
+   "n": "6(e)(iv)",
+   "marks": 1
+  },
+  {
+   "n": "6(e)(v)",
+   "marks": 2
+  }
+ ],
+ "leads": [
+  "1",
+  "2",
+  "2(b)",
+  "2(c)",
+  "3",
+  "3(b)",
+  "3(c)",
+  "3(d)",
+  "4",
+  "4(a)",
+  "4(c)",
+  "5",
+  "5(b)",
+  "5(d)",
+  "6",
+  "6(d)",
+  "6(e)"
+ ],
+ "figures": [
+  {
+   "label": "Fig. 2.1",
+   "part": "2(b)(ii)"
+  },
+  {
+   "label": "Fig. 2.2",
+   "part": "2(c)(iii)"
+  },
+  {
+   "label": "Fig. 3.1",
+   "part": "3(b)"
+  },
+  {
+   "label": "Fig. 5.1",
+   "part": "5(c)"
+  },
+  {
+   "label": "Fig. 6.1",
+   "part": "6(e)"
+  }
+ ],
+ "tables": [
+  {
+   "label": "Table 5.1",
+   "part": "5(d)(ii)"
+  },
+  {
+   "label": "Table 6.1",
+   "part": "6(d)(i)"
+  }
+ ],
+ "notation": [
+  {
+   "part": "2(b)(iii)",
+   "token": "Cl_{2}"
+  },
+  {
+   "part": "4(a)",
+   "token": "FeCr_{2}"
+  },
+  {
+   "part": "4(a)",
+   "token": "O_{4}"
+  },
+  {
+   "part": "4(a)(i)",
+   "token": "FeCr_{2}"
+  },
+  {
+   "part": "4(c)",
+   "token": "NH_{4}"
+  },
+  {
+   "part": "4(c)",
+   "token": "Cr_{2}"
+  },
+  {
+   "part": "4(c)",
+   "token": "O_{7}"
+  },
+  {
+   "part": "4(c)(i)",
+   "token": "Cr_{2}"
+  },
+  {
+   "part": "4(c)(ii)",
+   "token": "Cr_{2}"
+  },
+  {
+   "part": "4(c)(iii)",
+   "token": "NH_{4}"
+  },
+  {
+   "part": "4(c)(iii)",
+   "token": "Cr_{2}"
+  },
+  {
+   "part": "4(c)(iii)",
+   "token": "O_{7}"
+  },
+  {
+   "part": "4(c)(iii)",
+   "token": "4H_{2}"
+  },
+  {
+   "part": "4(c)(iii)",
+   "token": "N_{2}"
+  },
+  {
+   "part": "4(c)(iii)",
+   "token": "cm^{3}"
+  },
+  {
+   "part": "5(c)",
+   "token": "Na_{2}"
+  },
+  {
+   "part": "5(d)",
+   "token": "^{85}Rb"
+  },
+  {
+   "part": "5(d)",
+   "token": "^{87}Rb"
+  },
+  {
+   "part": "5(d)(ii)",
+   "token": "^{85}Rb"
+  },
+  {
+   "part": "5(d)(ii)",
+   "token": "^{87}Rb"
+  },
+  {
+   "part": "5(d)(ii)",
+   "token": "Rb^{+}"
+  },
+  {
+   "part": "5(d)(iii)",
+   "token": "^{85}Rb"
+  },
+  {
+   "part": "6(d)",
+   "token": "C_{2}"
+  },
+  {
+   "part": "6(d)",
+   "token": "H_{4}"
+  },
+  {
+   "part": "6(d)",
+   "token": "PO_{4}"
+  },
+  {
+   "part": "6(d)(i)",
+   "token": "C_{2}"
+  },
+  {
+   "part": "6(d)(i)",
+   "token": "H_{4}"
+  },
+  {
+   "part": "6(e)(v)",
+   "token": "cm^{3}"
+  }
+ ],
+ "unsure": [],
+ "status": "checked"
+}

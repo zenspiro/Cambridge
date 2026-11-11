@@ -1,0 +1,278 @@
+{
+ "file": "0460_s25_qp_12",
+ "kind": "qp",
+ "total": null,
+ "mcq": false,
+ "parts": [
+  {
+   "n": "1(a)(i)",
+   "marks": 1
+  },
+  {
+   "n": "1(a)(ii)",
+   "marks": 2
+  },
+  {
+   "n": "1(a)(iii)",
+   "marks": 3
+  },
+  {
+   "n": "1(a)(iv)",
+   "marks": 4
+  },
+  {
+   "n": "1(b)(i)",
+   "marks": 3
+  },
+  {
+   "n": "1(b)(ii)",
+   "marks": 5
+  },
+  {
+   "n": "1(c)",
+   "marks": 7
+  },
+  {
+   "n": "2(a)(i)",
+   "marks": 1
+  },
+  {
+   "n": "2(a)(ii)",
+   "marks": 2
+  },
+  {
+   "n": "2(a)(iii)",
+   "marks": 3
+  },
+  {
+   "n": "2(a)(iv)",
+   "marks": 4
+  },
+  {
+   "n": "2(b)(i)",
+   "marks": 3
+  },
+  {
+   "n": "2(b)(ii)",
+   "marks": 5
+  },
+  {
+   "n": "2(c)",
+   "marks": 7
+  },
+  {
+   "n": "3(a)(i)",
+   "marks": 1
+  },
+  {
+   "n": "3(a)(ii)",
+   "marks": 2
+  },
+  {
+   "n": "3(a)(iii)",
+   "marks": 3
+  },
+  {
+   "n": "3(a)(iv)",
+   "marks": 4
+  },
+  {
+   "n": "3(b)(i)",
+   "marks": 3
+  },
+  {
+   "n": "3(b)(ii)",
+   "marks": 5
+  },
+  {
+   "n": "3(c)",
+   "marks": 7
+  },
+  {
+   "n": "4(a)(i)",
+   "marks": 1
+  },
+  {
+   "n": "4(a)(ii)",
+   "marks": 2
+  },
+  {
+   "n": "4(a)(iii)",
+   "marks": 3
+  },
+  {
+   "n": "4(a)(iv)",
+   "marks": 4
+  },
+  {
+   "n": "4(b)(i)",
+   "marks": 3
+  },
+  {
+   "n": "4(b)(ii)",
+   "marks": 5
+  },
+  {
+   "n": "4(c)",
+   "marks": 7
+  },
+  {
+   "n": "5(a)(i)",
+   "marks": 1
+  },
+  {
+   "n": "5(a)(ii)",
+   "marks": 2
+  },
+  {
+   "n": "5(a)(iii)",
+   "marks": 3
+  },
+  {
+   "n": "5(a)(iv)",
+   "marks": 4
+  },
+  {
+   "n": "5(b)(i)",
+   "marks": 3
+  },
+  {
+   "n": "5(b)(ii)",
+   "marks": 5
+  },
+  {
+   "n": "5(c)",
+   "marks": 7
+  },
+  {
+   "n": "6(a)(i)",
+   "marks": 1
+  },
+  {
+   "n": "6(a)(ii)",
+   "marks": 2
+  },
+  {
+   "n": "6(a)(iii)",
+   "marks": 3
+  },
+  {
+   "n": "6(a)(iv)",
+   "marks": 4
+  },
+  {
+   "n": "6(b)(i)",
+   "marks": 3
+  },
+  {
+   "n": "6(b)(ii)",
+   "marks": 5
+  },
+  {
+   "n": "6(c)",
+   "marks": 7
+  }
+ ],
+ "leads": [
+  "1(a)",
+  "1(b)",
+  "2(a)",
+  "2(b)",
+  "3(a)",
+  "3(b)",
+  "4(a)",
+  "4(b)",
+  "5(a)",
+  "5(b)",
+  "6(a)",
+  "6(b)"
+ ],
+ "figures": [
+  {
+   "label": "Fig. 1.1",
+   "part": "1(a)",
+   "also": [
+    "1(a)(ii)"
+   ]
+  },
+  {
+   "label": "Fig. 1.2",
+   "part": "1(b)",
+   "also": [
+    "1(b)(i)"
+   ]
+  },
+  {
+   "label": "Fig. 2.1",
+   "part": "2(a)",
+   "also": [
+    "2(a)(ii)"
+   ]
+  },
+  {
+   "label": "Fig. 2.2",
+   "part": "2(b)",
+   "also": [
+    "2(b)(i)"
+   ]
+  },
+  {
+   "label": "Fig. 3.1",
+   "part": "3(a)",
+   "also": [
+    "3(a)(iv)"
+   ]
+  },
+  {
+   "label": "Fig. 3.2",
+   "part": "3(a)",
+   "also": [
+    "3(a)(iii)"
+   ]
+  },
+  {
+   "label": "Fig. 3.3",
+   "part": "3(b)",
+   "also": [
+    "3(b)(i)"
+   ]
+  },
+  {
+   "label": "Fig. 4.1",
+   "part": "4(a)",
+   "also": [
+    "4(a)(i)"
+   ]
+  },
+  {
+   "label": "Fig. 4.2",
+   "part": "4(b)",
+   "also": [
+    "4(b)(i)"
+   ]
+  },
+  {
+   "label": "Fig. 5.1",
+   "part": "5(a)"
+  },
+  {
+   "label": "Fig. 6.1",
+   "part": "6(a)",
+   "also": [
+    "6(a)(iii)"
+   ]
+  },
+  {
+   "label": "Fig. 6.2",
+   "part": "6(b)",
+   "also": [
+    "6(b)(i)"
+   ]
+  }
+ ],
+ "tables": [],
+ "notation": [],
+ "unsure": [],
+ "status": "checked",
+ "note": "Candidates answer three of the six questions, so the parts add up to 150 and the cover says 75: no total."
+}

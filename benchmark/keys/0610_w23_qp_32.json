@@ -1,0 +1,271 @@
+{
+ "file": "0610_w23_qp_32",
+ "kind": "qp",
+ "total": 80,
+ "mcq": false,
+ "parts": [
+  {
+   "n": "1(a)(i)",
+   "marks": 4
+  },
+  {
+   "n": "1(a)(ii)",
+   "marks": 1
+  },
+  {
+   "n": "1(b)(i)",
+   "marks": 2
+  },
+  {
+   "n": "1(b)(ii)",
+   "marks": 2
+  },
+  {
+   "n": "2(a)",
+   "marks": 1
+  },
+  {
+   "n": "2(b)",
+   "marks": 3
+  },
+  {
+   "n": "2(c)",
+   "marks": 2
+  },
+  {
+   "n": "2(d)(i)",
+   "marks": 3
+  },
+  {
+   "n": "2(d)(ii)",
+   "marks": 1
+  },
+  {
+   "n": "3(a)(i)",
+   "marks": 1
+  },
+  {
+   "n": "3(a)(ii)",
+   "marks": 2
+  },
+  {
+   "n": "3(a)(iii)",
+   "marks": 1
+  },
+  {
+   "n": "3(a)(iv)",
+   "marks": 1
+  },
+  {
+   "n": "3(a)(v)",
+   "marks": 1
+  },
+  {
+   "n": "3(b)(i)",
+   "marks": 3
+  },
+  {
+   "n": "3(b)(ii)",
+   "marks": 3
+  },
+  {
+   "n": "4(a)(i)",
+   "marks": 3
+  },
+  {
+   "n": "4(a)(ii)",
+   "marks": 2
+  },
+  {
+   "n": "4(a)(iii)",
+   "marks": 1
+  },
+  {
+   "n": "4(b)",
+   "marks": 1
+  },
+  {
+   "n": "4(c)",
+   "marks": 1
+  },
+  {
+   "n": "4(d)",
+   "marks": 3
+  },
+  {
+   "n": "5(a)",
+   "marks": 3
+  },
+  {
+   "n": "5(b)(i)",
+   "marks": 2
+  },
+  {
+   "n": "5(b)(ii)",
+   "marks": 1
+  },
+  {
+   "n": "6(a)(i)",
+   "marks": 1
+  },
+  {
+   "n": "6(a)(ii)",
+   "marks": 2
+  },
+  {
+   "n": "6(a)(iii)",
+   "marks": 1
+  },
+  {
+   "n": "6(b)",
+   "marks": 2
+  },
+  {
+   "n": "6(c)",
+   "marks": 2
+  },
+  {
+   "n": "7(a)",
+   "marks": 5
+  },
+  {
+   "n": "7(b)",
+   "marks": 4
+  },
+  {
+   "n": "7(c)",
+   "marks": 1
+  },
+  {
+   "n": "7(d)(i)",
+   "marks": 3
+  },
+  {
+   "n": "7(d)(ii)",
+   "marks": 1
+  },
+  {
+   "n": "8(a)(i)",
+   "marks": 5
+  },
+  {
+   "n": "8(a)(ii)",
+   "marks": 1
+  },
+  {
+   "n": "8(b)(i)",
+   "marks": 1
+  },
+  {
+   "n": "8(b)(ii)",
+   "marks": 1
+  },
+  {
+   "n": "8(b)(iii)",
+   "marks": 1
+  },
+  {
+   "n": "8(c)",
+   "marks": 1
+  }
+ ],
+ "leads": [
+  "1(a)",
+  "2",
+  "3(a)",
+  "3(b)",
+  "4(a)",
+  "5(b)",
+  "6(a)",
+  "7(d)",
+  "8(a)",
+  "8(b)"
+ ],
+ "figures": [
+  {
+   "label": "Fig. 1.1",
+   "part": "1(a)",
+   "also": [
+    "1(a)(i)"
+   ]
+  },
+  {
+   "label": "Fig. 2.1",
+   "part": "2"
+  },
+  {
+   "label": "Fig. 3.1",
+   "part": "3(a)",
+   "also": [
+    "3(a)(i)"
+   ]
+  },
+  {
+   "label": "Fig. 3.2",
+   "part": "3(b)",
+   "also": [
+    "3(b)(i)"
+   ]
+  },
+  {
+   "label": "Fig. 4.1",
+   "part": "4(a)",
+   "also": [
+    "4(a)(ii)"
+   ]
+  },
+  {
+   "label": "Fig. 5.1",
+   "part": "5(b)",
+   "also": [
+    "5(b)(i)"
+   ]
+  },
+  {
+   "label": "Fig. 6.1",
+   "part": "6(a)",
+   "also": [
+    "6(a)(i)"
+   ]
+  },
+  {
+   "label": "Fig. 7.1",
+   "part": "7(a)"
+  },
+  {
+   "label": "Fig. 7.2",
+   "part": "7(d)",
+   "also": [
+    "7(d)(i)"
+   ]
+  },
+  {
+   "label": "Fig. 8.1",
+   "part": "8(b)"
+  }
+ ],
+ "tables": [
+  {
+   "label": "Table 2.1",
+   "part": "2(b)"
+  },
+  {
+   "label": "Table 2.2",
+   "part": "2(c)"
+  },
+  {
+   "label": "Table 7.1",
+   "part": "7(a)"
+  },
+  {
+   "label": "Table 8.1",
+   "part": "8(b)",
+   "also": [
+    "8(b)(i)"
+   ]
+  }
+ ],
+ "notation": [],
+ "unsure": [],
+ "status": "checked"
+}

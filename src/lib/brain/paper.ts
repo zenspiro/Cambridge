@@ -71,9 +71,10 @@ export type Flag = {
 /**
  * Bump when a check changes what it finds or the text a fix copies (owner, 9 Nov 2026: a flag kept from older checks,
  * for example one Undo put back, must not be fixed with its old text). 2: the outline read as printed. 3: figures left out of lead-ins, figures on their lead-in. 4: Gemini's part with our
- * opening text still joined on agrees. 5: a mark scheme's rows are compared per part.
+ * opening text still joined on agrees. 5: a mark scheme's rows are compared per part. 6: the outline takes question
+ * numbers only at the margin and skips page furniture's invisible marks (benchmark keys, 11 Nov 2026).
  */
-export const CHECKS_VERSION = 5;
+export const CHECKS_VERSION = 6;
 
 /** Raised by older checks: shown with a note, and its "Use the PDF's version" / "Give it its own part" is off. */
 export const isStale = (f: Pick<Flag, "v">) => (f.v ?? 1) < CHECKS_VERSION;

@@ -1,0 +1,180 @@
+{
+ "file": "0620_w23_qp_62",
+ "kind": "qp",
+ "total": 40,
+ "mcq": false,
+ "parts": [
+  {
+   "n": "1(a)",
+   "marks": 1
+  },
+  {
+   "n": "1(b)",
+   "marks": 1
+  },
+  {
+   "n": "1(c)",
+   "marks": 2
+  },
+  {
+   "n": "1(d)(i)",
+   "marks": 1
+  },
+  {
+   "n": "1(d)(ii)",
+   "marks": 2
+  },
+  {
+   "n": "2(a)",
+   "marks": 4
+  },
+  {
+   "n": "2(b)",
+   "marks": 5
+  },
+  {
+   "n": "2(c)(i)",
+   "marks": 3
+  },
+  {
+   "n": "2(c)(ii)",
+   "marks": 1
+  },
+  {
+   "n": "2(c)(iii)",
+   "marks": 1
+  },
+  {
+   "n": "2(d)",
+   "marks": 3
+  },
+  {
+   "n": "2(e)",
+   "marks": 1
+  },
+  {
+   "n": "3(a)(i)",
+   "marks": 2
+  },
+  {
+   "n": "3(a)(ii)",
+   "marks": 2
+  },
+  {
+   "n": "3(b)",
+   "marks": 1
+  },
+  {
+   "n": "3(c)",
+   "marks": 1
+  },
+  {
+   "n": "3(d)",
+   "marks": 1
+  },
+  {
+   "n": "3(e)",
+   "marks": 1
+  },
+  {
+   "n": "3(f)",
+   "marks": 1
+  },
+  {
+   "n": "4",
+   "marks": 6
+  }
+ ],
+ "leads": [
+  "1",
+  "1(d)",
+  "2",
+  "2(c)",
+  "3"
+ ],
+ "figures": [
+  {
+   "label": "Fig. 1.1",
+   "part": "1"
+  },
+  {
+   "label": "Fig. 1.2",
+   "part": "1",
+   "also": [
+    "1(c)"
+   ]
+  },
+  {
+   "label": "Fig. 2.1",
+   "part": "2(b)",
+   "also": [
+    "2(c)(i)"
+   ]
+  }
+ ],
+ "tables": [
+  {
+   "label": "Table 2.1",
+   "part": "2(a)",
+   "also": [
+    "2(b)"
+   ]
+  },
+  {
+   "label": "Table 3.1",
+   "part": "3"
+  }
+ ],
+ "notation": [
+  {
+   "part": "2",
+   "token": "cm^{3}"
+  },
+  {
+   "part": "2(c)(i)",
+   "token": "cm^{3}"
+  },
+  {
+   "part": "3",
+   "token": "cm^{3}"
+  },
+  {
+   "part": "3(d)",
+   "token": "cm^{3}"
+  },
+  {
+   "part": "3(e)",
+   "token": "cm^{3}"
+  },
+  {
+   "part": "3(f)",
+   "token": "cm^{3}"
+  },
+  {
+   "part": "4",
+   "token": "Cl^{−}"
+  },
+  {
+   "part": "4",
+   "token": "Br^{−}"
+  },
+  {
+   "part": "4",
+   "token": "I^{−}"
+  },
+  {
+   "part": "4",
+   "token": "Al^{3+}"
+  },
+  {
+   "part": "4",
+   "token": "Ca^{2+}"
+  },
+  {
+   "part": "4",
+   "token": "Cr^{3+}"
+  }
+ ],
+ "unsure": [],
+ "status": "checked"
+}

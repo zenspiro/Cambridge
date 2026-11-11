@@ -795,6 +795,9 @@ try {
   check(plan.includes("Extended papers, Jun 2024") && plan.includes("Jun 2024, Paper 2") && plan.includes("Jun 2024, Paper 6") && !plan.includes("Jun 2024, Paper 4"), `Read all lists the Extended papers not read yet, skipping the one read (${plan.slice(0, 200)})`);
   check(/1 read already/.test(plan) && /not in the library/.test(plan) && plan.includes("Rough cost for 2"), "it counts what it skips and what is missing, with the cost of the whole batch");
   check((await page.locator("#read-all select[name=ras]").inputValue()) === "s" && (await page.locator("#read-all select[name=ray]").inputValue()) === "2024", "the month and year stay picked");
+  // The benchmark papers (owner, 11 Nov 2026): the subject's set, none of it in this test library.
+  const bench = (await page.locator("#read-benchmark").textContent()) ?? "";
+  check(bench.includes("10 papers of this subject are in the reading benchmark") && bench.includes("None of them is in the library yet"), `Read all shows the subject's benchmark papers (${bench.slice(0, 160)})`);
   await page.locator("#read-all button", { hasText: "Read these 2 papers" }).click();
   check((await page.locator("#read-all .confirm").textContent())?.includes("Read 2 papers? This uses AI tokens"), "Read all asks first, with the cost");
   await page.locator("#read-all button", { hasText: "Yes, proceed" }).click();

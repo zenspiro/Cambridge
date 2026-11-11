@@ -1,0 +1,395 @@
+{
+ "file": "0620_s26_qp_22",
+ "kind": "qp",
+ "total": 40,
+ "mcq": true,
+ "parts": [
+  {
+   "n": "1",
+   "marks": null
+  },
+  {
+   "n": "2",
+   "marks": null
+  },
+  {
+   "n": "3",
+   "marks": null
+  },
+  {
+   "n": "4",
+   "marks": null
+  },
+  {
+   "n": "5",
+   "marks": null
+  },
+  {
+   "n": "6",
+   "marks": null
+  },
+  {
+   "n": "7",
+   "marks": null
+  },
+  {
+   "n": "8",
+   "marks": null
+  },
+  {
+   "n": "9",
+   "marks": null
+  },
+  {
+   "n": "10",
+   "marks": null
+  },
+  {
+   "n": "11",
+   "marks": null
+  },
+  {
+   "n": "12",
+   "marks": null
+  },
+  {
+   "n": "13",
+   "marks": null
+  },
+  {
+   "n": "14",
+   "marks": null
+  },
+  {
+   "n": "15",
+   "marks": null
+  },
+  {
+   "n": "16",
+   "marks": null
+  },
+  {
+   "n": "17",
+   "marks": null
+  },
+  {
+   "n": "18",
+   "marks": null
+  },
+  {
+   "n": "19",
+   "marks": null
+  },
+  {
+   "n": "20",
+   "marks": null
+  },
+  {
+   "n": "21",
+   "marks": null
+  },
+  {
+   "n": "22",
+   "marks": null
+  },
+  {
+   "n": "23",
+   "marks": null
+  },
+  {
+   "n": "24",
+   "marks": null
+  },
+  {
+   "n": "25",
+   "marks": null
+  },
+  {
+   "n": "26",
+   "marks": null
+  },
+  {
+   "n": "27",
+   "marks": null
+  },
+  {
+   "n": "28",
+   "marks": null
+  },
+  {
+   "n": "29",
+   "marks": null
+  },
+  {
+   "n": "30",
+   "marks": null
+  },
+  {
+   "n": "31",
+   "marks": null
+  },
+  {
+   "n": "32",
+   "marks": null
+  },
+  {
+   "n": "33",
+   "marks": null
+  },
+  {
+   "n": "34",
+   "marks": null
+  },
+  {
+   "n": "35",
+   "marks": null
+  },
+  {
+   "n": "36",
+   "marks": null
+  },
+  {
+   "n": "37",
+   "marks": null
+  },
+  {
+   "n": "38",
+   "marks": null
+  },
+  {
+   "n": "39",
+   "marks": null
+  },
+  {
+   "n": "40",
+   "marks": null
+  }
+ ],
+ "leads": [],
+ "figures": [],
+ "tables": [],
+ "notation": [
+  {
+   "part": "1",
+   "token": "H_{2}"
+  },
+  {
+   "part": "2",
+   "token": "cm^{3}"
+  },
+  {
+   "part": "8",
+   "token": "FeBr_{2}"
+  },
+  {
+   "part": "8",
+   "token": "ZnNO_{3}"
+  },
+  {
+   "part": "8",
+   "token": "Zn(NO_{3}"
+  },
+  {
+   "part": "8",
+   "token": "Fe_{2}"
+  },
+  {
+   "part": "9",
+   "token": "^{12}C"
+  },
+  {
+   "part": "10",
+   "token": "cm^{3}"
+  },
+  {
+   "part": "10",
+   "token": "dm^{3}"
+  },
+  {
+   "part": "14",
+   "token": "NF_{3}"
+  },
+  {
+   "part": "14",
+   "token": "3F_{2}"
+  },
+  {
+   "part": "14",
+   "token": "2NF_{3}"
+  },
+  {
+   "part": "15",
+   "token": "CH_{3}"
+  },
+  {
+   "part": "15",
+   "token": "CH_{2}"
+  },
+  {
+   "part": "15",
+   "token": "CO_{2}"
+  },
+  {
+   "part": "15",
+   "token": "H_{2}"
+  },
+  {
+   "part": "17",
+   "token": "3H_{2}"
+  },
+  {
+   "part": "17",
+   "token": "2NH_{3}"
+  },
+  {
+   "part": "18",
+   "token": "2H^{+}"
+  },
+  {
+   "part": "18",
+   "token": "2Cr^{3+}"
+  },
+  {
+   "part": "18",
+   "token": "3SO_{2}"
+  },
+  {
+   "part": "18",
+   "token": "Cr_{2}"
+  },
+  {
+   "part": "18",
+   "token": "O_{7}"
+  },
+  {
+   "part": "18",
+   "token": "3SO_{4}"
+  },
+  {
+   "part": "19",
+   "token": "cm^{3}"
+  },
+  {
+   "part": "21",
+   "token": "cm^{3}"
+  },
+  {
+   "part": "27",
+   "token": "Fe_{2}"
+  },
+  {
+   "part": "27",
+   "token": "O_{3}"
+  },
+  {
+   "part": "27",
+   "token": "3CO_{2}"
+  },
+  {
+   "part": "27",
+   "token": "CO_{2}"
+  },
+  {
+   "part": "27",
+   "token": "2Fe_{2}"
+  },
+  {
+   "part": "27",
+   "token": "3O_{2}"
+  },
+  {
+   "part": "29",
+   "token": "CO_{2}"
+  },
+  {
+   "part": "29",
+   "token": "3H_{2}"
+  },
+  {
+   "part": "29",
+   "token": "CH_{3}"
+  },
+  {
+   "part": "29",
+   "token": "H_{2}"
+  },
+  {
+   "part": "29",
+   "token": "6CO_{2}"
+  },
+  {
+   "part": "29",
+   "token": "6H_{2}"
+  },
+  {
+   "part": "32",
+   "token": "CH_{3}"
+  },
+  {
+   "part": "33",
+   "token": "CH_{3}"
+  },
+  {
+   "part": "33",
+   "token": "CH_{2}"
+  },
+  {
+   "part": "33",
+   "token": "CH(OH)_{2}"
+  },
+  {
+   "part": "34",
+   "token": "CH_{3}"
+  },
+  {
+   "part": "34",
+   "token": "CH_{2}"
+  },
+  {
+   "part": "34",
+   "token": "H_{2}"
+  },
+  {
+   "part": "34",
+   "token": "3O_{2}"
+  },
+  {
+   "part": "34",
+   "token": "2CO_{2}"
+  },
+  {
+   "part": "34",
+   "token": "3H_{2}"
+  },
+  {
+   "part": "35",
+   "token": "CH_{3}"
+  },
+  {
+   "part": "35",
+   "token": "CHBrCHBrCH_{3}"
+  },
+  {
+   "part": "35",
+   "token": "CH_{2}"
+  },
+  {
+   "part": "40",
+   "token": "Li^{+}"
+  },
+  {
+   "part": "40",
+   "token": "Cu^{2+}"
+  },
+  {
+   "part": "40",
+   "token": "K^{+}"
+  },
+  {
+   "part": "40",
+   "token": "Ca^{2+}"
+  }
+ ],
+ "unsure": [],
+ "status": "checked"
+}
