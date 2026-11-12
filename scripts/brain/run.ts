@@ -83,7 +83,34 @@ class Stop extends Error {
   }
 }
 
-async function api(path: string, payload: Record<string, unknown>): Promise<{ status: number; data: Record<string, unknown> | null; bytes?: Uint8Array }> {
+type ApiAnswer = { status: number; data: Record<string, unknown> | null; bytes?: Uint8Array };
+
+/**
+ * Waits before asking our site again when it answers busy (502, 503, 504) or not at all: Cloudflare's free plan
+ * sometimes refuses one request (a Biology benchmark run stopped on one 503 while saving a figure page, 12 Nov 2026).
+ */
+const API_RETRY_WAITS = TEST_MODE ? [1, 2, 3].map((n) => n * Number(process.env.BRAIN_RETRY_MS ?? 50)) : [30_000, 60_000, 120_000];
+const isBusy = (status: number) => status === 0 || status === 502 || status === 503 || status === 504;
+
+/** A signed request to our site, asked again after each wait in API_RETRY_WAITS while the site is busy. */
+async function api(path: string, payload: Record<string, unknown>, patient = true): Promise<ApiAnswer> {
+  for (let i = 0; ; i++) {
+    let r: ApiAnswer;
+    try {
+      r = await apiOnce(path, payload);
+    } catch (err) {
+      if (!patient || i >= API_RETRY_WAITS.length) throw err;
+      r = { status: 0, data: null };
+    }
+    if (!patient || !isBusy(r.status) || i >= API_RETRY_WAITS.length) return r;
+    const wait = API_RETRY_WAITS[i]!;
+    log(`our site was busy (${r.status ? `error ${r.status}` : "no answer"}) on ${path}: trying again in ${Math.round(wait / 1000)} s`);
+    await new Promise((res) => setTimeout(res, wait));
+  }
+}
+
+/** One signed request (a fresh signature and nonce each time). */
+async function apiOnce(path: string, payload: Record<string, unknown>): Promise<ApiAnswer> {
   const body = enc.encode(JSON.stringify({ jobId: JOB_ID, ...payload }));
   const headers = { ...(await signRequest(SECRET, "POST", path, body)), "Content-Type": "application/json" };
   const res = await fetch(APP_URL + path, { method: "POST", headers, body: body as BodyInit, signal: AbortSignal.timeout(120_000) });
@@ -107,7 +134,7 @@ async function step(text: string, event?: StepEvent) {
 async function note(text: string, event: StepEvent) {
   log(text);
   try {
-    await api("/api/brain/step", { step: text, event: { ...event, text } });
+    await api("/api/brain/step", { step: text, event: { ...event, text } }, false);
   } catch {
     // the next step will report
   }

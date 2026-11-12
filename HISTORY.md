@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-12: AI runs wait out a busy site
+
+**What:** when our site answers busy (502, 503, 504) or not at all, the AI run script waits 30, 60, then 120 seconds and asks again before giving up, the same as the library agent. It covers every save, the next paper of a Read all, and the message that a run stopped (so a stopped run no longer shows as going until it times out). Progress notes while an AI writes are not retried, so they never hold up a reading. Each wait is in the GitHub log.
+
+**Why:** owner, 12 Nov 2026: the Biology benchmark run stopped on paper 4 of 10 when one figure page save got a 503 from Cloudflare's free plan, and showed as running for half an hour.
+
+**Tested:** browser: our site answers 503 once while a figure page is saved; the run waits, asks again and finishes (636 checks).
+
 ## 2026-11-12: Claude reads alone when Gemini cannot help; Check with Gemini later
 
 **What:** a paper reading no longer stops for Gemini. When Gemini is busy, out of its free limit, down, has no key, or answers badly, Claude reads the paper alone and the run finishes. All the PDF checks run (wording, marks, outline, notation, tables); only the Claude and Gemini comparison is missing. The rest of that run does not ask Gemini again, so it never waits on it twice. The reading is marked "alone (Gemini could not help)" in its score list. "Check with Gemini" (review screen) and "Check them with Gemini" (each subject's Read all card, under "Read by Claude alone") later run Gemini only on those papers, free: the checks compare the two readings and the reading is marked as checked. A Gemini reading left from before is dropped when Claude reads alone, so nothing compares against an old copy. Gemini alone ("Read with") and topic trees still need Gemini. A queued run held after Gemini ran out of its limit tries again after 30 minutes.
