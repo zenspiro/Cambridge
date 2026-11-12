@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-12: Opening texts get their "Fig. N.N shows ..." sentences back
+
+**What:** an opening text that is empty, or that leaves out the paper's sentences introducing a figure, is flagged red and put right automatically: only those whole sentences are added, before or after the reading's own words. Table cells, diagram labels and anything inside the text are never touched.
+
+**Why:** owner, 12 Nov 2026 (reading the weakest benchmark papers): Haiku read Biology Nov 2023 P32 with five empty opening texts and three missing their figure sentence, with no flag.
+
+**Tested:** unit tests; every benchmark paper's stored reading through the loader: 20 fixes, each checked by eye (a first wider rule copied tables, flowchart words and a duplicated equation, so it was narrowed). Biology Nov 2023 P32 loaded from this session: 2(d)(i) and (ii) added (the matching question as two lists), 0 flags, 100% on its key.
+
 ## 2026-11-12: Column vectors, and no false flat power from a base
 
 **What:** column vectors are one markup, \binom{8}{−5}, shown on the review screen as two numbers stacked in brackets; Gemini's LaTeX (pmatrix, \mathbf, \quad) becomes the same markup, and the word check ignores markup names. The flat-notation check no longer flags "2x^{3}" because the page also prints 2^{x}.

@@ -8,7 +8,7 @@ import {
   applyNotation, bboxWords, leadInProblems, lostNotation, normaliseNotation, notate, notatedPages, notationOn, notationParts, notationPlain,
   isCaptionLine, leadExtra, pdfOutline, stripLead, withoutLead, wordsText, type Word,
 } from "../../src/lib/brain/notation.ts";
-import { autoFixLeads, cleanPaper, figuresToLeads, isSplitFlag, mergeReading, missingFromOutline, paperFlags, recheckItem, splitLeadIn, structureFlags } from "../../src/lib/brain/paper.ts";
+import { autoFixLeads, cleanPaper, figuresToLeads, fillLead, isSplitFlag, mergeReading, missingFromOutline, paperFlags, recheckItem, splitLeadIn, structureFlags } from "../../src/lib/brain/paper.ts";
 
 type W = [number, number, number, number, string];
 /** Poppler's -bbox-layout shape: pages of lines of words. */
@@ -503,4 +503,15 @@ test("column vectors: one markup, a tree node, and no false flat power from a ba
   // A page printing h(x) = 2^{x} does not make "2x^{3}" a flat power: there "2x" is the base of x^{3}.
   assert.equal(lostNotation("y = 2x^{3} + 6x^{2} − 2.5", ["h(x) = 2^{x}"]), null);
   assert.equal(lostNotation("h(x) = 2x", ["h(x) = 2^{x}"])?.marked, "2^{x}");
+});
+
+test("an opening text without the paper's figure sentences gets them back, nothing else", () => {
+  // Biology Nov 2023 P32: Haiku left 1(a) empty and dropped "Fig. 6.1 is a diagram ..." from 6(a).
+  assert.equal(fillLead("", "Fig. 1.1 is a diagram of the digestive system."), "Fig. 1.1 is a diagram of the digestive system.");
+  assert.equal(fillLead("The arrows show the direction of water movement.", "Fig. 6.1 is a diagram showing the pathway of water into a plant. The arrows show the direction of water movement."),
+    "Fig. 6.1 is a diagram showing the pathway of water into a plant. The arrows show the direction of water movement.");
+  // A table's or diagram's words are never copied in, nor a sentence that does not start with the figure.
+  assert.equal(fillLead("This flowchart represents an algorithm.", "This flowchart represents an algorithm. START INPUT Code OUTPUT"), null);
+  assert.equal(fillLead("H_{2}S is formed.", "H_{2}S is formed. 2HCl(aq) + Na_{2}S(aq) 2NaCl(aq) Fig. 8.1 shows the volume."), null);
+  assert.equal(fillLead("Fig. 1.1 shows a cell.", "Fig. 1.1 shows a cell."), null);
 });
