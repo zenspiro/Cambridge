@@ -8,7 +8,7 @@ import {
   applyNotation, bboxWords, leadInProblems, lostNotation, normaliseNotation, notate, notatedPages, notationOn, notationParts, notationPlain,
   isCaptionLine, leadExtra, pdfOutline, stripLead, withoutLead, wordsText, type Word,
 } from "../../src/lib/brain/notation.ts";
-import { autoFixLeads, cleanPaper, figuresToLeads, isSplitFlag, mergeReading, paperFlags, recheckItem, splitLeadIn, structureFlags } from "../../src/lib/brain/paper.ts";
+import { autoFixLeads, cleanPaper, figuresToLeads, isSplitFlag, mergeReading, missingFromOutline, paperFlags, recheckItem, splitLeadIn, structureFlags } from "../../src/lib/brain/paper.ts";
 
 type W = [number, number, number, number, string];
 /** Poppler's -bbox-layout shape: pages of lines of words. */
@@ -461,4 +461,20 @@ test("the outline reads letters set under a numeral as a third level, and the ne
   assert.deepEqual(o.map((p) => [p.number, p.marks ?? null]), [
     ["5", null], ["5(a)", null], ["5(a)(i)", null], ["5(a)(i)(a)", 1], ["5(a)(i)(b)", 2], ["5(a)(ii)", 2], ["5(b)", 3],
   ]);
+});
+
+test("a printed part the reading leaves out is flagged, only when the printed marks add up to the total", () => {
+  const item = (number: string, marks: number | null) => ({ number, page: 2, text: "x", marks, options: [], answerLines: 1, figures: [], guidance: "", tables: [] });
+  const outline = [
+    { number: "1", page: 2, text: "Gases." },
+    { number: "1(a)", page: 2, text: "Name a gas.", marks: 1 },
+    { number: "1(b)", page: 2, text: "Write the equation.", marks: 2 },
+  ];
+  const content = { kind: "qp" as const, totalMarks: null, items: [item("1", null), item("1(a)", 1)] };
+  const cover = ["The total mark for this paper is 3."];
+  assert.deepEqual(missingFromOutline(content, outline, cover).map((f) => [f.key, f.colour]), [["missing:1(b)", "red"]]);
+  // The outline misread (its marks do not make the total): nothing raised.
+  assert.deepEqual(missingFromOutline(content, outline, ["The total mark for this paper is 40."]), []);
+  assert.deepEqual(missingFromOutline({ ...content, items: [...content.items, item("1(b)", 2)] }, outline, cover), []);
+  assert.deepEqual(missingFromOutline({ ...content, kind: "ms" }, outline, cover), []);
 });

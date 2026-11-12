@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-12: A flag for parts the reading leaves out
+
+**What:** a red flag for every part the paper prints with its [marks] that the reading does not have, worked out from the printed page (not only when Gemini found it). Raised only when the printed marks add up to the paper's total, so a misread page raises nothing. The dev-session loader takes the paper's total from its cover. Benchmark keys no longer count the reference notes at the back of Chemistry Paper 6 as question 4.
+
+**Why:** owner, 12 Nov 2026 (reading the weakest benchmark papers): Haiku read Chemistry Jun 2024 P42 alone, left out 22 parts and the paper showed 3 flags. Both Nov P62 papers scored 90% only because their keys held the notes' ion charges.
+
+**Tested:** unit test; on every benchmark paper's stored reading the flag names only parts really missing (Chemistry Jun 2024 P42, Maths Mar 2024 P42 8(c), Biology Nov 2023 P32 2(d) and three Computer Science papers). Benchmark tuning 96.2% to 96.6%. Chemistry Jun 2024 P42 read in this session and loaded (69 parts, 0 flags, 100% on its key).
+
 ## 2026-11-12: Multiple-choice choices in tables and pictures
 
 **What:** "Which row ..." questions print their choices A to D as table rows; a reading that kept the table but listed no options now gets one option per row (the table stays). Questions whose choices are diagrams lettered A to D get their letters, with the figure showing them, in a multiple-choice paper. Both in `cleanPaper`, so stored readings show it without a new reading.

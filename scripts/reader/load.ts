@@ -92,7 +92,10 @@ const outline: OutlinePart[] = pdfOutline(n.words, figs);
 const readJson = (p: string | undefined) => (p ? (JSON.parse(readFileSync(p, "utf8")) as unknown) : null);
 const mine = readJson(readingPath) as { kind?: unknown } | null;
 const kind: PaperKind = mine?.kind === "ms" ? "ms" : "qp";
-const reading = placeOnPages(cleanPaper(mine, kind), pages);
+const read = cleanPaper(mine, kind);
+// The paper's total from its cover when the reading leaves it out, so the "parts add up" check runs.
+const coverTotal = Number(/total mark for this paper is\s*(\d+)/i.exec((pages[0] ?? "").replace(/\s+/g, " "))?.[1] ?? NaN);
+const reading = placeOnPages(read.totalMarks === null && kind === "qp" && Number.isFinite(coverTotal) ? { ...read, totalMarks: coverTotal } : read, pages);
 if (!reading.items.length) throw new Error("the reading has no items");
 const g = readJson(opt("--gemini"));
 const gemini = g ? cleanPaper(g, kind) : null;
