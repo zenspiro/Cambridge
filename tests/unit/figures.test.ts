@@ -337,3 +337,10 @@ test("question numbers put right by the checks are listed under Changes, and Und
   assert.equal(await savePaperReading(db, bucket, id2, "doc-qp-renum", { content, flags: [], pages: [], renumber: bad }, true, NOW + 25), "ok");
   assert.equal((await paperView(db, bucket, doc)).fixes.filter((f) => f.what.startsWith("Question numbers")).length, 1);
 });
+
+test("an unlabelled figure is not matched to another drawing by answer-space words (Nov 2023 0478 Paper 22, page 9)", () => {
+  const found = { captions: [], groups: [[84, 192, 556, 446], [101, 500, 492, 715]] as [number, number, number, number][] };
+  const lines = [{ text: "A B C Z", b: [84, 200, 556, 440] as [number, number, number, number], body: false }, { text: "A B C Working space Z", b: [101, 503, 480, 525] as [number, number, number, number], body: false }];
+  const got = assignBoxes([{ id: "F2", caption: "", description: "Space to draw the logic circuit, inputs A, B, C on the left and output Z on the right" }], found, lines as never);
+  assert.deepEqual(got.get("F2"), { box: [84, 192, 556, 446], cut: "order" }, "the first drawing on the page, by order");
+});

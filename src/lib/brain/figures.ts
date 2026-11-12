@@ -283,7 +283,9 @@ export function labelBoxes(lines: readonly TextLine[]): Box[] {
 /** The whole printed area of a page (inside the margins), for "Use whole page". */
 export const wholePage = (art: Pick<PageArt, "w" | "h">): Box => [30, TOP, r2(art.w - 30), r2(art.h - BOTTOM)];
 
-const wordsOf = (s: string) => new Set(s.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 3 && WORD_RE.test(w) || /^\d+(\.\d+)?$/.test(w)));
+/** Answer-space words printed beside many drawings and tables ("Working space"): no evidence of which drawing it is. */
+const ANSWER_WORDS = new Set(["working", "space", "answer", "show", "your"]);
+const wordsOf = (s: string) => new Set(s.toLowerCase().split(/[^a-z0-9]+/).filter((w) => (w.length >= 3 && WORD_RE.test(w) && !ANSWER_WORDS.has(w)) || /^\d+(\.\d+)?$/.test(w)));
 
 /**
  * Boxes for the reading's figures on one page, in their order. A figure whose caption names a printed label takes

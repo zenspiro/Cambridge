@@ -94,6 +94,11 @@ First change measured (12 Nov 2026): question numbers from the printed page (`au
 readings without a new AI run: tuning question papers 94.3% to 95.5% of checks, 9 fully right (was 7), no regression.
 Still open: 0478 Mar 2023 P12 and the 0580 P42s (their marks do not line up page by page).
 
+Keys corrected (12 Nov 2026): the outline did not read a third level of parts, so five Maths keys (0580 Mar 2023 P42,
+Mar 2024 P42, Jun 2023 P32, Jun 2025 P22, Nov 2024 P42 and its mark scheme) folded parts like 4(b)(ii)(a) and (b) into
+one, or made "(d)" under 6(c)(i) a question 6(d). Redrafted from the fixed outline, totals checked, baseline saved again:
+tuning 95.5% of 3,294 checks, Maths 97.1%.
+
 ## The rule for changes
 
 1. Score before the change (`score.ts`, baseline saved).

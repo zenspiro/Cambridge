@@ -444,3 +444,21 @@ test("a page's parts get the numbers printed beside them when they line up one t
   const back = unrename(r.content, 3, r.fixes[0]!.renames, r.fixes[0]!.before);
   assert.deepEqual(back?.items.map((i) => i.number), content.items.map((i) => i.number));
 });
+
+// A third level under a numeral (owner, 12 Nov 2026), placed like Nov 2024 0580 Paper 42 page 10: parts at 72 pt,
+// numerals at 92 to 95 pt, their letters at 118 pt.
+test("the outline reads letters set under a numeral as a third level, and the next part after them", () => {
+  const page: W[][] = [
+    [[291.5, 35.7, 303.8, 51.4, "10"]],
+    [[49.6, 61.7, 55.7, 77.4, "5"], [72.3, 61.7, 85.7, 77.4, "(a)"], [95.0, 61.7, 140.0, 77.4, "Distances"], [143.0, 61.7, 180.0, 77.4, "travelled."]],
+    [[95.5, 391.7, 106.3, 407.4, "(i)"], [117.6, 391.7, 140.0, 407.4, "Use"], [143.0, 391.7, 170.0, 407.4, "the"], [173.0, 391.7, 210.0, 407.4, "diagram."]],
+    [[117.7, 417.7, 131.0, 433.4, "(a)"], [140.0, 417.7, 160.0, 433.4, "the"], [163.0, 417.7, 200.0, 433.4, "median"], [533.4, 417.7, 545.7, 433.4, "[1]"]],
+    [[117.7, 469.7, 131.0, 485.4, "(b)"], [140.0, 469.7, 160.0, 485.4, "the"], [163.0, 469.7, 200.0, 485.4, "range"], [533.4, 469.7, 545.7, 485.4, "[2]"]],
+    [[92.3, 521.7, 106.3, 537.4, "(ii)"], [117.6, 521.7, 150.0, 537.4, "Find"], [153.0, 521.7, 190.0, 537.4, "it."], [533.4, 521.7, 545.7, 537.4, "[2]"]],
+    [[72.3, 612.7, 85.7, 628.4, "(b)"], [95.0, 612.7, 140.0, 628.4, "Calculate"], [143.0, 612.7, 180.0, 628.4, "speed."], [533.4, 612.7, 545.7, 628.4, "[3]"]],
+  ];
+  const o = pdfOutline(bboxWords(xml([[], page])));
+  assert.deepEqual(o.map((p) => [p.number, p.marks ?? null]), [
+    ["5", null], ["5(a)", null], ["5(a)(i)", null], ["5(a)(i)(a)", 1], ["5(a)(i)(b)", 2], ["5(a)(ii)", 2], ["5(b)", 3],
+  ]);
+});
