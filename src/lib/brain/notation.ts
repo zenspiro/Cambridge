@@ -616,6 +616,10 @@ export function pdfOutline(pages: readonly (readonly Word[])[], figures: readonl
   let letter = "";
   let letterX = -1;
   let roman = 0;
+  // A third level under a numeral (owner, 12 Nov 2026: Nov 2024 0580 Paper 42's 4(b)(ii)(a), 5(a)(i)(b), 6(c)(i)(d)):
+  // letters set further in than their numeral, from (a) in turn.
+  let romanX = -1;
+  let sub = "";
   let cur: Building | null = null;
   const start = (number: string, page: number) => {
     cur = { number, page, text: "", words: [], got: 0 };
@@ -657,6 +661,7 @@ export function pdfOutline(pages: readonly (readonly Word[])[], figures: readonl
         letter = "";
         letterX = -1;
         roman = 0;
+        sub = "";
         start(String(q), page);
         prevLabelLine = wi;
         return;
@@ -664,6 +669,12 @@ export function pdfOutline(pages: readonly (readonly Word[])[], figures: readonl
       const lab = /^\(([a-z]{1,4})\)$/.exec(t);
       if (q && lab && lineStart && w.b[0] < 160) {
         const l = lab[1]!;
+        if (letter && roman > 0 && w.b[0] > romanX + 10 && l === (sub ? String.fromCharCode(sub.charCodeAt(0) + 1) : "a")) {
+          sub = l;
+          start(`${q}(${letter})(${ROMAN[roman - 1]})(${l})`, page);
+          prevLabelLine = wi;
+          return;
+        }
         const nextLetter = letter ? String.fromCharCode(letter.charCodeAt(0) + 1) : "a";
         const nextRoman = ROMAN[roman] ?? "";
         const asLetter = l === nextLetter && (l !== "i" || letterX < 0 || Math.abs(w.b[0] - letterX) < 8);
@@ -671,12 +682,15 @@ export function pdfOutline(pages: readonly (readonly Word[])[], figures: readonl
           letter = l;
           letterX = w.b[0];
           roman = 0;
+          sub = "";
           start(`${q}(${l})`, page);
           prevLabelLine = wi;
           return;
         }
         if (l === nextRoman && letter) {
           roman++;
+          romanX = w.b[0];
+          sub = "";
           start(`${q}(${letter})(${l})`, page);
           prevLabelLine = wi;
           return;

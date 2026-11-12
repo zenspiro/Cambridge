@@ -244,7 +244,8 @@ function notationFlag(it: PaperItem, pages: readonly string[]): { reason: string
  * the word check cannot see (it compares letters and digits only). Returns the first one found, else "". Pure.
  */
 export function lostSuperscript(s: string): string {
-  const m = /×\s*10\s*[–\-−]?\s*\d+/.exec(s) ?? /\b(?:c?m|mm|km)[23]\b/.exec(s) ?? /\/\s*s2\b/.exec(s);
+  // A power of ten's lost exponent never starts with 0: "1000 × 1000" is two numbers (Mar 2023 0478 Paper 12, 4(b)).
+  const m = /×\s*10\s*(?:[–\-−]\s*\d+|[1-9]\d?)(?!\d)/.exec(s) ?? /\b(?:c?m|mm|km)[23]\b/.exec(s) ?? /\/\s*s2\b/.exec(s);
   return m ? m[0] : "";
 }
 
@@ -305,8 +306,9 @@ export function paperFlags({ content, pages, gemini, outline }: CheckInput): Fla
   const textOk = idx.chars >= BRAIN.minPaperTextChars;
   const nums = pdfNumbers(pages);
   const raw = pages.join(" ");
-  const add = (kind: FlagKind, item: string, reason: string, what: string, pdfText = "", keyExtra = "") =>
-    flags.push({ key: `${kind}:${item}${keyExtra}`, item, kind, colour: COLOUR[kind], reason, pdfText, fingerprint: fingerprint(kind, squash(what), reason), v: CHECKS_VERSION });
+  // `as`: the words the fingerprint was first made with, when the shown words change (so "It's fine" still holds).
+  const add = (kind: FlagKind, item: string, reason: string, what: string, pdfText = "", keyExtra = "", as = reason) =>
+    flags.push({ key: `${kind}:${item}${keyExtra}`, item, kind, colour: COLOUR[kind], reason, pdfText, fingerprint: fingerprint(kind, squash(what), as), v: CHECKS_VERSION });
   // Formulas reach the PDF's text layer scrambled ("(x + 7)(2x − 3)" can come out as "()() xx72 3"), so a wording
   // that fails the run check passes when its real words (four letters or more) are all printed; a part that is almost
   // all formula, with too few words to judge, is left to Gemini's reading of the page picture.
@@ -398,7 +400,8 @@ export function paperFlags({ content, pages, gemini, outline }: CheckInput): Fla
       const other = itemWording(g);
       if (similarity(mine, other) < BRAIN.sameText) {
         const settled = textOk && found(mine) && !found(other);
-        if (!settled) add("agree", it.number, "Claude and Gemini read this differently.", `${mine}|${other}`, textOk && found(other) ? g.text : "");
+        // "This reading": Claude's, or one made in a dev session (owner, 12 Nov 2026).
+        if (!settled) add("agree", it.number, "This reading and Gemini's differ here.", `${mine}|${other}`, textOk && found(other) ? g.text : "", "", "Claude and Gemini read this differently.");
       }
       if (it.marks !== null && g.marks !== null && it.marks !== g.marks) add("marks", it.number, `Gemini reads ${g.marks} marks here, we have ${it.marks}.`, `${it.marks}|${g.marks}|${mine}`, "", ":gemini");
     }
