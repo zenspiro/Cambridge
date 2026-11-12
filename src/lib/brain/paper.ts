@@ -94,6 +94,20 @@ const obj = (v: unknown) => (v && typeof v === "object" ? (v as Record<string, u
 /** "1 (a)(ii)" and "1(a) (ii)" both become "1(a)(ii)". */
 export const normNumber = (s: string) => s.replace(/\s+/g, "");
 
+/**
+ * "Which row ..." questions (owner, 12 Nov 2026: Mar 2024 0610 Paper 22): the choices are printed as table rows
+ * starting A, B, C, D. A reading that kept the table but gave no options (or empty ones) gets one option per row, its
+ * cells after the letter joined; the table stays as printed. Null when no table has rows lettered A, B, C, D in turn.
+ */
+export function rowOptions(tables: readonly PaperTable[]): PaperOption[] | null {
+  for (const t of tables) {
+    const rows = t.rows.filter((r) => /^[A-H]$/.test((r[0] ?? "").trim()));
+    if (rows.length < 3 || rows.some((r, k) => r[0]!.trim() !== "ABCDEFGH"[k])) continue;
+    return rows.map((r) => ({ letter: r[0]!.trim(), text: r.slice(1).map((c) => c.trim()).filter(Boolean).join("; ").slice(0, 600) }));
+  }
+  return null;
+}
+
 /** An AI's answer made safe: known fields only, capped, numbers in the printed shape. */
 export function cleanPaper(raw: unknown, kind: PaperKind): PaperContent {
   const o = obj(raw);
@@ -129,7 +143,7 @@ export function cleanPaper(raw: unknown, kind: PaperKind): PaperContent {
       page: int(r.page, 1, 500) ?? 1,
       text: normaliseNotation(str(r.text, BRAIN.maxItemText)),
       marks: int(r.marks, 0, 200),
-      options,
+      options: options.some((o) => o.text.trim()) ? options : rowOptions(tables) ?? options,
       answerLines: int(r.answerLines, 0, 40) ?? 0,
       figures: figs,
       guidance: normaliseNotation(str(r.guidance, 2_000)),
@@ -138,7 +152,19 @@ export function cleanPaper(raw: unknown, kind: PaperKind): PaperContent {
   });
   // Figures named by an item but not drawn still get an entry (flagged "not drawn yet").
   for (const it of items) for (const f of it.figures) if (!figures.some((x) => x.id === f)) figures.push({ id: f, page: it.page, caption: "", description: "", svg: "", box: null, cut: "" });
-  return { kind, totalMarks: int(o.totalMarks, 1, 1_000), items, figures: figures.slice(0, BRAIN.maxFigures) };
+  return { kind, totalMarks: int(o.totalMarks, 1, 1_000), items: pictureOptions(items), figures: figures.slice(0, BRAIN.maxFigures) };
+}
+
+/**
+ * Choices drawn as pictures (owner, 12 Nov 2026: Jun 2026 0620 Paper 22, "Which diagram ..."): in a multiple-choice
+ * paper (most questions with options), a question with a figure and no options gets the paper's usual letters with no
+ * words, so it still has its choices; the figure shows them. Pure.
+ */
+function pictureOptions(items: PaperItem[]): PaperItem[] {
+  const withOptions = items.filter((i) => i.options.length >= 3);
+  if (withOptions.length < Math.max(5, items.length / 2)) return items;
+  const letters = withOptions[0]!.options.map((o) => o.letter);
+  return items.map((i) => (!i.options.length && i.figures.length ? { ...i, options: letters.map((letter) => ({ letter, text: "" })) } : i));
 }
 
 // ---------- Figures: our own drawing, as safe SVG ----------

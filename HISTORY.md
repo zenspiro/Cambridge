@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-12: Multiple-choice choices in tables and pictures
+
+**What:** "Which row ..." questions print their choices A to D as table rows; a reading that kept the table but listed no options now gets one option per row (the table stays). Questions whose choices are diagrams lettered A to D get their letters, with the figure showing them, in a multiple-choice paper. Both in `cleanPaper`, so stored readings show it without a new reading.
+
+**Why:** owner, 12 Nov 2026: the benchmark counted options missing on Biology Mar 2024 P22 and Chemistry Jun 2026 P22; Haiku had read the tables right.
+
+**Tested:** unit tests for both rules and a structured paper left alone. Benchmark on the stored readings: Biology Mar 2024 P22 88% to 100%, Chemistry Jun 2026 P22 90% to 99%, tuning set 95.5% to 96.2%, no paper worse.
+
 ## 2026-11-12: Engine fixes found while reading papers by hand
 
 **What:** the outline reader now reads a third level of parts (4(b)(ii)(a), 5(a)(i)(b), 6(c)(i)(d)); five Maths answer keys that had folded these together, or turned them into new parts, are redrafted and checked, and the benchmark baseline saved again on them. The "differ" flag now says "This reading and Gemini's differ here." (your It's fine choices still hold). "1000 × 1000" no longer raises a lost-superscript flag. A figure with no printed label is no longer matched to another drawing by answer-space words such as "Working space". The reading instructions add third-level parts and matching questions ("link each ...") as two separate lists.

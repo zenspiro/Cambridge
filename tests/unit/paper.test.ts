@@ -537,3 +537,18 @@ test("a re-read that returns the lost opening text puts it back before its part,
   assert.deepEqual(merged.items.map((i) => i.number), ["9(a)", "9(b)", "9(b)(i)"]);
   assert.equal(merged.items[1]!.tables[0]!.rows[1]![1], "alpha");
 });
+
+test("'Which row' choices come from a table lettered A to D, and picture choices get their letters (0610 Mar 2024 P22, 0620 Jun 2026 P22)", () => {
+  const rows = [["", "uses energy", "needs a carrier"], ["A", "no", "no"], ["B", "no", "yes"], ["C", "yes", "no"], ["D", "yes", "yes"]];
+  const mcq = (n: number, extra: Record<string, unknown> = {}) => ({ number: String(n), page: 2, text: `Question ${n}?`, marks: 1, options: ["A", "B", "C", "D"].map((letter) => ({ letter, text: `choice ${letter}` })), answerLines: 0, figures: [], guidance: "", ...extra });
+  const c = cleanPaper({
+    items: [mcq(1), mcq(2), mcq(3), mcq(4), mcq(5), mcq(6, { options: [], tables: [{ label: "", rows }] }), mcq(7, { options: [], figures: ["F1"] })],
+    figures: [{ id: "F1", page: 2, caption: "" }],
+  }, "qp");
+  assert.deepEqual(c.items[5]!.options, [{ letter: "A", text: "no; no" }, { letter: "B", text: "no; yes" }, { letter: "C", text: "yes; no" }, { letter: "D", text: "yes; yes" }]);
+  assert.equal(c.items[5]!.tables.length, 1, "the table stays as printed");
+  assert.deepEqual(c.items[6]!.options.map((o) => [o.letter, o.text]), [["A", ""], ["B", ""], ["C", ""], ["D", ""]], "letters only; the figure shows the choices");
+  // Not a multiple-choice paper: a structured question with a figure gets no letters.
+  const structured = cleanPaper({ items: [{ number: "1(a)", page: 2, text: "Describe it.", marks: 2, figures: ["F1"] }], figures: [{ id: "F1", page: 2, caption: "" }] }, "qp");
+  assert.deepEqual(structured.items[0]!.options, []);
+});
