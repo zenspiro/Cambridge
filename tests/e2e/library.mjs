@@ -47,6 +47,35 @@ for (const width of [DESKTOP]) {
     check(rows.some((r) => r.includes("holiday-photo.pdf") && r.includes("Not a Cambridge file name")), "upload: bad name rejected");
     check(rows.some((r) => r.includes("0625_s24_ms_21.pdf") && r.includes("Not a PDF")), "upload: fake PDF rejected");
     await noOverflow("upload results");
+
+    // A file uploaded under the wrong month (owner, 12 Nov 2026): moved to the right session, then removed.
+    const wrong = join(dir, "0580_w24_er.pdf");
+    writeFileSync(wrong, `%PDF-1.4\n% 0580 Mathematics November 2023 ${Date.now()} ${Math.random()}\n%%EOF`);
+    await page.goto(BASE + "/admin/library/upload");
+    await page.setInputFiles("#files", [wrong]);
+    await page.click("form[action='/admin/library/upload/send'] button[type=submit]");
+    await page.waitForURL(/\/admin\/library\/upload\?job=/);
+    await page.goto(BASE + "/admin/library/0580?q=0580_w24_er.pdf");
+    await page.locator('a.cell-have[title^="0580_w24_er.pdf:"]').first().click();
+    await page.waitForURL(/\/admin\/library\/review\//);
+    const tools = page.locator("#file-tools");
+    await tools.locator("summary").click();
+    await tools.locator("select[name=session]").selectOption("w");
+    await tools.locator("select[name=year]").selectOption("2023");
+    await tools.locator("button", { hasText: "Move here" }).click();
+    check(((await tools.locator(".confirm").textContent()) ?? "").includes("Move this file"), "move asks first, inline");
+    await tools.locator(".confirm button", { hasText: /^Yes$/ }).click();
+    await tools.locator(".action-note", { hasText: "Moved" }).waitFor({ timeout: 10_000 }).then(() => check(true, "move: done in place"), () => check(false, "move: done in place"));
+    await page.reload();
+    check(((await page.locator(".facts").first().textContent()) ?? "").includes("0580_w23_er.pdf"), "move: the file is now Nov 2023's examiner report");
+    const tools2 = page.locator("#file-tools");
+    await tools2.locator("summary").click();
+    await tools2.locator("button", { hasText: "Remove from the library" }).click();
+    await tools2.locator(".confirm button", { hasText: "Yes, remove" }).click();
+    await page.waitForURL(/\/admin\/library\/0580\/documents\?e=ok_removed/);
+    check(((await page.locator("p.notice, .notice").first().textContent()) ?? "").includes("Removed"), "remove: back on the subject's Documents, saying so");
+    await page.goto(BASE + "/admin/library/0580?q=0580_w23_er.pdf");
+    check((await page.locator('a.cell-have[title^="0580_w23_er.pdf:"]').count()) === 0, "remove: the file is gone from the library");
   }
 
   // Library home: qualifications and subject cards with status.

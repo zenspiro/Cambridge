@@ -22,6 +22,8 @@ type Props = {
   counts?: boolean;
   /** Told the outcome once the answer is back, before the page's data is refreshed. */
   onDone?: (ok: boolean, code: string) => void;
+  /** On success, open where the answer landed instead of refreshing (the page's subject is gone, e.g. a removed file). */
+  follow?: boolean;
 };
 
 function folderCounts(q: URLSearchParams): string {
@@ -44,7 +46,7 @@ async function goingOn(): Promise<string> {
   }
 }
 
-export function ActionForm({ action, children, messages, confirm, className, counts, onDone, yes = "Yes", no = "Never mind" }: Props) {
+export function ActionForm({ action, children, messages, confirm, className, counts, onDone, follow, yes = "Yes", no = "Never mind" }: Props) {
   const router = useRouter();
   const form = useRef<HTMLFormElement>(null);
   const [asking, setAsking] = useState<FormData | null>(null);
@@ -63,6 +65,10 @@ export function ActionForm({ action, children, messages, confirm, className, cou
       setNote({ ok, text });
       window.dispatchEvent(new CustomEvent("admin-toast", { detail: { ok, text } })); // the corner toast (AdminEnhance)
       onDone?.(ok, code);
+      if (ok && follow) {
+        window.location.assign(r.url);
+        return;
+      }
       if (ok) {
         form.current?.reset();
         router.refresh(); // fresh data from the server, same scroll position

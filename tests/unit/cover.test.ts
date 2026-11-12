@@ -107,3 +107,28 @@ test("library check summary and run choices", async () => {
   assert.equal(checkRunParams({ code: "0625", years: [2024], sessions: ["s"], mode: "check" }, lib, ["0625"])?.mode, "check");
   assert.equal(checkRunParams({ code: "0625", years: [2024], sessions: ["s"], mode: "wipe" }, lib, ["0625"]), null);
 });
+
+test("move a file to another session (owner, 12 Nov 2026: an examiner report uploaded under the wrong month); remove forgets its readings", async () => {
+  const { testDb, testBucket } = await import("./helpers/d1.ts");
+  const { storeDocument, moveDocument, forgetReadings } = await import("../../src/lib/library/store.ts");
+  const { movedName } = await import("../../src/lib/library/names.ts");
+  assert.equal(movedName("0580_w24_er.pdf", "w", 2023), "0580_w23_er.pdf");
+  assert.equal(movedName("0625_s24_qp_42.pdf", "m", 2025), "0625_m25_qp_42.pdf", "paper and variant kept");
+  assert.equal(movedName("0625_y23_sp_1.pdf", "s", 2023), null, "a specimen has no exam session");
+  const db = testDb();
+  const b = testBucket();
+  const s = await storeDocument(db, b, { fileName: "0580_w24_er.pdf", bytes: makePdf(["0580 Mathematics November 2023"]), actorId: "a", origin: "upload" });
+  const id = (s as { id: string }).id;
+  assert.equal(await moveDocument(db, b, id, "w", 2024, "a"), "same_place");
+  assert.equal(await moveDocument(db, b, id, "w", 2023, "a"), "ok_renamed");
+  const row = await db.prepare(`SELECT file_name, year, session, r2_key FROM source_document WHERE id = ?1`).bind(id).first<Record<string, unknown>>();
+  assert.deepEqual({ ...row }, { file_name: "0580_w23_er.pdf", year: 2023, session: "w", r2_key: "0580/2023/w/0580_w23_er.pdf" });
+  // The place it would move to is taken: refused.
+  const other = await storeDocument(db, b, { fileName: "0580_s23_er.pdf", bytes: makePdf(["0580 June 2023"]), actorId: "a", origin: "upload" });
+  assert.equal(await moveDocument(db, b, (other as { id: string }).id, "w", 2023, "a"), "same_name");
+  // A removed paper's readings go too.
+  for (const k of ["content", "pages", "ai", "art-3"]) await b.put(`papers/${id}/${k}.json`, new TextEncoder().encode("{}"));
+  await b.put("papers/someone-else/content.json", new TextEncoder().encode("{}"));
+  await forgetReadings(b, id);
+  assert.deepEqual([...b.objects.keys()].filter((k) => k.startsWith("papers/")), ["papers/someone-else/content.json"]);
+});
