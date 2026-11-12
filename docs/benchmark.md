@@ -81,6 +81,19 @@ First scores (11 Nov 2026, the 6 Physics documents read before): tuning set 97.6
 right. What is wrong: tables not found on readings made before tables were read (Mar 2025 P42, P52, P62), subscripts
 lost in multiple choice (R₄, V₂, A₁ in Mar 2025 P22), and the mark scheme's alternative-route part above.
 
+Baseline (12 Nov 2026, all six subjects, Haiku as the Reading AI, Gemini where it could help): tuning set 36 of 38
+read, 94.1% of 3,286 checks, 9 fully right; locked set 15 of 16, 91.6% of 1,487 checks, 5 fully right. Not scored
+until read again for the score: 0625 Mar 2023 P12, Mar 2025 P42, Nov 2025 P42 (fixed by hand before the AI copy). By
+subject: 0610 94.4%, 0620 95.3%, 0625 96.7%, 0580 91.8%, 0478 92.3%, 0460 96.0%. What is wrong, largest first: whole
+parts left out (0478 Nov 2023 P22 at 67%, 0580 P42s, 0610 Jun 2024 P42, 0620 Jun 2025 P42; the review screen flags
+each as missing), multiple choice options not taken (0610 Mar 2024 P22, 0620 Jun 2026 P22), superscripts and
+subscripts lost (ion charges in 0620 P6, R₄ and V₂ in 0625 P22, cm² and cm³ in 0580), tables in 0625 P5 and P6, lead-ins
+joined, a few marks.
+
+First change measured (12 Nov 2026): question numbers from the printed page (`autoRenumber`), scored on the stored
+readings without a new AI run: tuning question papers 94.3% to 95.5% of checks, 9 fully right (was 7), no regression.
+Still open: 0478 Mar 2023 P12 and the 0580 P42s (their marks do not line up page by page).
+
 ## The rule for changes
 
 1. Score before the change (`score.ts`, baseline saved).

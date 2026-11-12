@@ -308,3 +308,32 @@ ${block(line(118, 524, 362, 538, word("Name", 118, 524, 150, 538) + word("the wa
   const boxes = labelBoxes(textLines(xml));
   assert.deepEqual(boxes, [[150, 110, 291, 126], [165, 187, 219, 201]], "the labels, not the question, a sentence or the text after the label");
 });
+
+test("question numbers put right by the checks are listed under Changes, and Undo gives each part its old number", async () => {
+  const db = testDb();
+  const bucket = testBucket();
+  db.raw.exec(`INSERT INTO source_document (id, syllabus_id, session, year, paper, variant, doc_type, file_name, r2_key, sha256, size_bytes, origin, status, acquired_at)
+               VALUES ('doc-qp-renum', '0625-2023', 's', 2024, 4, 2, 'qp', '0625_s24_qp_42.pdf', 'k', 'sha', 100000, 'upload', 'stored', ${NOW})`);
+  const id = (await startPaperRun(db, "doc-qp-renum", { items: [], figures: [] }, "platform-admin", NOW))!;
+  await claimBrainRun(db, id, null, NOW + 1);
+  const part = (number: string, marks: number | null) => ({ number, page: 8, text: `Words of ${number}.`, marks, options: [], answerLines: 0, figures: [], guidance: "" });
+  const content = cleanPaper({ items: [part("2(d)", null), part("2(d)(i)", 2)], figures: [] }, "qp");
+  const was = [{ ...part("7(d)", null), text: "Words of 2(d)." }, { ...part("7(d)(i)", 2), text: "Words of 2(d)(i)." }];
+  const renumber = [{ key: "structure:p8:numbers", page: 8, renames: [{ from: "7(d)", to: "2(d)" }, { from: "7(d)(i)", to: "2(d)(i)" }], before: was, flags: [] }];
+  assert.equal(await savePaperReading(db, bucket, id, "doc-qp-renum", { content, flags: [], pages: [], renumber }, true, NOW + 5), "ok");
+  const doc = (await paperDoc(db, "doc-qp-renum"))!;
+  const view = await paperView(db, bucket, doc);
+  const fix = view.fixes[0]!;
+  assert.equal(fix.what, "Question numbers put right from the printed page (page 8)");
+  assert.equal(fix.who, "Automatic fix");
+  assert.deepEqual([fix.before, fix.after], ["7(d), 7(d)(i)", "2(d), 2(d)(i)"]);
+  assert.equal(await handFixed(db, "doc-qp-renum"), false, "an automatic fix is not a hand fix (the AI's copy is still kept)");
+  assert.equal(await applyFix(db, bucket, doc, "undo", { fix: fix.id }, "platform-admin", NOW + 10), "ok_undone");
+  assert.deepEqual((await loadContent(bucket, "doc-qp-renum", "qp"))!.items.map((x) => x.number), ["7(d)", "7(d)(i)"]);
+  // A renumbering the script cannot back up (a part not on that page) is not recorded.
+  const id2 = (await startPaperRun(db, "doc-qp-renum", { items: [], figures: [] }, "platform-admin", NOW + 20))!;
+  await claimBrainRun(db, id2, null, NOW + 21);
+  const bad = [{ ...renumber[0]!, page: 9, key: "structure:p9:numbers" }];
+  assert.equal(await savePaperReading(db, bucket, id2, "doc-qp-renum", { content, flags: [], pages: [], renumber: bad }, true, NOW + 25), "ok");
+  assert.equal((await paperView(db, bucket, doc)).fixes.filter((f) => f.what.startsWith("Question numbers")).length, 1);
+});

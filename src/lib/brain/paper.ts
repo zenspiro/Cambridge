@@ -532,6 +532,96 @@ export function autoFixLeads(input: CheckInput, hold: AutoHold): { content: Pape
   return { content, gemini, fixes };
 }
 
+/** One page's question numbers put right from the paper's own labels (Undo puts every part back as it was). */
+export type Renumber = {
+  /** "structure:p<page>:numbers": one fix per page; an undone one is never made again. */
+  key: string; page: number;
+  /** Each part's number before and after, in the reading's order. */
+  renames: { from: string; to: string }[];
+  /** The parts as they were (ours), and Gemini's when its numbers were put right the same way. */
+  before: PaperItem[]; gemini?: PaperItem[];
+  flags: Flag[];
+};
+
+/**
+ * One page's renames for a reading, or null: the reading's parts with marks on that page against the paper's labels
+ * with printed marks on it, in order, the same count and the same marks one by one (so each part is the one printed
+ * there); the opening texts (no marks) likewise against the labels without marks. Null when nothing differs, the
+ * page does not line up, or a new number is taken elsewhere in the reading. Pure.
+ */
+function pageRenames(items: readonly PaperItem[], outline: readonly OutlinePart[], page: number): { from: string; to: string }[] | null {
+  const ours = items.filter((i) => i.page === page);
+  const printed = outline.filter((o) => o.page === page);
+  if (!ours.length || !printed.length) return null;
+  const leaves = ours.filter((i) => i.marks !== null);
+  const marked = printed.filter((o) => o.marks !== undefined);
+  // A label with no printed marks is opening text only when a part of it follows on the paper.
+  const leadLabels = printed.filter((o) => o.marks === undefined && outline.some((x) => x.number.startsWith(`${o.number}(`)));
+  const leads = ours.filter((i) => i.marks === null);
+  if (leaves.length !== marked.length || leads.length !== leadLabels.length || !leaves.length) return null;
+  if (leaves.some((it, k) => it.marks !== marked[k]!.marks)) return null;
+  const renames = [...leaves.map((it, k) => ({ from: it.number, to: marked[k]!.number })), ...leads.map((it, k) => ({ from: it.number, to: leadLabels[k]!.number }))]
+    .filter((r) => r.from !== r.to);
+  if (!renames.length) return null;
+  const moving = new Set(renames.map((r) => r.from));
+  const after = items.map((i) => (i.page === page ? renames.find((r) => r.from === i.number)?.to ?? i.number : i.number));
+  if (new Set(after).size !== after.length) return null;
+  // A part of a renamed question or part on another page would be left under the old number.
+  if (items.some((i) => i.page !== page && renames.some((r) => i.number.startsWith(`${r.from}(`)))) return null;
+  return renames;
+}
+
+const applyRenames = (c: PaperContent, page: number, renames: readonly { from: string; to: string }[]): PaperContent => {
+  const items = c.items.map((i) => {
+    const r = i.page === page ? renames.find((x) => x.from === i.number) : undefined;
+    return r ? { ...i, number: r.to } : i;
+  });
+  // In page order, the parts of each page as they were among themselves.
+  return { ...c, items: items.map((i, k) => ({ i, k })).sort((a, b) => a.i.page - b.i.page || a.k - b.k).map((x) => x.i) };
+};
+
+/**
+ * Question numbers put right from the printed page (owner, 12 Nov 2026: the benchmark found Claude reading a page's
+ * parts under the wrong question, "7(d)" for 2(d) and pseudocode line numbers taken for questions, while the paper's
+ * own labels were plain). Page by page, the parts are given the numbers printed beside them when they line up one to
+ * one with the printed labels and their marks; kept only when no kind of flag grows anywhere on the paper. Question
+ * papers with an outline only; a page with a part fixed by hand, or whose fix a person undid, is left alone. Pure.
+ */
+export function autoRenumber(input: CheckInput, hold: AutoHold): { content: PaperContent; gemini: PaperContent | null; fixes: Renumber[] } {
+  let content = input.content;
+  let gemini = input.gemini;
+  const fixes: Renumber[] = [];
+  const outline = input.outline ?? [];
+  if (content.kind !== "qp" || !outline.length) return { content, gemini, fixes };
+  const undone = new Set(hold.keys);
+  const hands = new Set(hold.items);
+  const byKind = (fl: readonly Flag[]) => fl.reduce((m, f) => m.set(f.kind, (m.get(f.kind) ?? 0) + 1), new Map<string, number>());
+  const pageList = [...new Set(content.items.map((i) => i.page))].sort((a, b) => a - b);
+  for (const page of pageList) {
+    const key = `structure:p${page}:numbers`;
+    if (undone.has(key)) continue;
+    const renames = pageRenames(content.items, outline, page);
+    if (!renames || renames.some((r) => hands.has(r.from) || hands.has(r.to))) continue;
+    const next = applyRenames(content, page, renames);
+    const gRenames = gemini ? pageRenames(gemini.items, outline, page) : null;
+    const gNext = gemini && gRenames ? applyRenames(gemini, page, gRenames) : gemini;
+    const flags = paperFlags({ ...input, content, gemini });
+    const after = paperFlags({ ...input, content: next, gemini: gNext });
+    const was = byKind(flags);
+    if ([...byKind(after)].some(([k, n]) => n > (was.get(k) ?? 0))) continue;
+    const moved = new Set(renames.map((r) => r.from));
+    const gMoved = new Set((gRenames ?? []).map((r) => r.from));
+    fixes.push({
+      key, page, renames, before: content.items.filter((i) => i.page === page && moved.has(i.number)),
+      ...(gRenames && gemini ? { gemini: gemini.items.filter((i) => i.page === page && gMoved.has(i.number)) } : {}),
+      flags: flags.filter((f) => !after.some((x) => x.key === f.key)),
+    });
+    content = next;
+    gemini = gNext;
+  }
+  return { content, gemini, fixes };
+}
+
 /**
  * The opening texts held as their own items just before a part, nearest last ("3" then "3(d)" before "3(d)(i)"):
  * consecutive items with no marks whose numbers the part's number starts with. Pure.
