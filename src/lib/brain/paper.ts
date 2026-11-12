@@ -435,7 +435,27 @@ export function paperFlags({ content, pages, gemini, outline }: CheckInput): Fla
       if (!ours.has(g.number)) add("missing", g.number, `Gemini found question ${g.number}; our reading does not have it.`, itemWording(g), textOk && found(itemWording(g)) ? g.text : "");
     }
   }
+  for (const f of missingFromOutline(content, outline, pages)) if (!flags.some((x) => x.key === f.key)) flags.push(f);
   return flags;
+}
+
+/**
+ * A part the paper prints with its [marks] that the reading does not have (owner, 12 Nov 2026: Haiku read Chemistry
+ * Jun 2024 P42 alone and left out 22 parts with only 3 flags, since only Gemini's reading raised "missing"). Trusted
+ * only when the printed parts' marks add up to the paper's total, so a misread outline raises nothing. Adds flags only,
+ * with no "PDF's version" to copy, so older flags stay current (CHECKS_VERSION unchanged). Question papers. Pure.
+ */
+export function missingFromOutline(content: Pick<PaperContent, "kind" | "items" | "totalMarks">, outline: readonly OutlinePart[] | undefined, pages: readonly string[] = []): Flag[] {
+  // The total the reading holds, else the cover's "The total mark for this paper is 80."
+  const total = content.totalMarks ?? Number(/total mark for this paper is\s*(\d+)/i.exec((pages[0] ?? "").replace(/\s+/g, " "))?.[1] ?? NaN);
+  if (content.kind !== "qp" || !outline?.length || !Number.isFinite(total)) return [];
+  const printed = outline.filter((o) => o.marks !== undefined);
+  if (!printed.length || printed.reduce((a, o) => a + (o.marks ?? 0), 0) !== total) return [];
+  const ours = new Set(content.items.map((i) => i.number));
+  return printed.filter((o) => !ours.has(o.number)).map((o) => {
+    const reason = `The paper prints ${o.number} [${o.marks}] on page ${o.page}; this reading does not have it.`;
+    return { key: `missing:${o.number}`, item: o.number, kind: "missing" as const, colour: COLOUR.missing, reason, pdfText: "", fingerprint: fingerprint("missing", squash(o.text), "printed"), v: CHECKS_VERSION };
+  });
 }
 
 /** Flags a mark scheme raises against its question paper: the marks per question must match. */
