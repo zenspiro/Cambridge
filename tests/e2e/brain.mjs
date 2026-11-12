@@ -219,6 +219,26 @@ const server = createServer((req, res) => {
 await new Promise((r) => server.listen(0, "127.0.0.1", r));
 const FAKE = `http://127.0.0.1:${server.address().port}`;
 
+// A door in front of our site that answers 503 once for one path (Cloudflare's free plan refusing a request),
+// then passes everything through.
+const busyOnce = new Set();
+const door = createServer(async (req, res) => {
+  const chunks = [];
+  for await (const c of req) chunks.push(c);
+  if (busyOnce.delete(req.url)) {
+    res.writeHead(503, { "content-type": "text/html" }).end("<h1>Error 1102</h1>");
+    return;
+  }
+  const headers = { ...req.headers };
+  delete headers.host;
+  delete headers["content-length"];
+  const r = await fetch(BASE + req.url, { method: req.method, headers, body: chunks.length ? Buffer.concat(chunks) : undefined });
+  const out = Buffer.from(await r.arrayBuffer());
+  res.writeHead(r.status, { "content-type": r.headers.get("content-type") ?? "application/octet-stream" }).end(out);
+});
+await new Promise((r) => door.listen(0, "127.0.0.1", r));
+const DOOR = `http://127.0.0.1:${door.address().port}`;
+
 const runBrain = (jobId, extra = {}) =>
   new Promise((resolve) => {
     const child = spawn("node", ["scripts/brain/run.ts"], {
@@ -649,8 +669,11 @@ try {
   sql(`INSERT INTO job (id, type, status, params, created_by, created_at) VALUES ('${cutRun}', 'brain', 'queued', '{"task":"paper","docId":"${paperId}","scope":{"items":[],"figures":["F1","F2"]}}', 'platform-admin', ${Date.now()})`);
   sql(`UPDATE paper_read SET job_id = '${cutRun}' WHERE doc_id = '${paperId}'`);
   ai.seq.length = 0;
-  const rc = await runBrain(cutRun);
+  // Our site answers busy once while a figure page is saved: the run waits, asks again and carries on (owner, 12 Nov 2026).
+  busyOnce.add("/api/brain/figpage");
+  const rc = await runBrain(cutRun, { APP_URL: DOOR });
   check(rc.status === 0 && rc.out.includes("Cut 2 of 2 figures"), `the figures are cut again${rc.status ? ": " + rc.out.slice(-600) : ""}`);
+  check(!busyOnce.size && rc.out.includes("our site was busy (error 503) on /api/brain/figpage: trying again"), "a busy answer from our site is waited out, not the end of the run");
   check(ai.seq.length === 0, `no AI is asked to cut figures (${ai.seq.join(",") || "none"})`);
   check(rows(`SELECT COUNT(*) AS n FROM ai_spend WHERE job_id = '${cutRun}'`)[0].n === 0, "cutting figures records no spend");
   await page.reload();
@@ -923,6 +946,7 @@ try {
 } finally {
   await browser.close();
   server.close();
+  door.close();
   sql(`UPDATE job SET status = 'failed' WHERE type = 'brain' AND status IN ('queued', 'running')`);
   sql(`DELETE FROM topic_tree WHERE syllabus_id = '0625-2023'`);
   sql(`DELETE FROM source_document WHERE file_name IN ('0625_y23_sy.pdf', '0625_s24_qp_42.pdf', '0625_s24_qp_22.pdf', '0625_s24_qp_62.pdf')`);

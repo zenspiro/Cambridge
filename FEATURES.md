@@ -59,6 +59,7 @@ A plain list of what the platform does today, for non-developers.
 - Reading benchmark: 54 real papers across six subjects with answer keys; each subject's Read all card reads its benchmark papers, and a score script measures every change to the reading rules on all of them. The score uses the AI's own copy of each reading, so hand fixes never count; "Read them again for the score" refreshes that copy only.
 - Run queue: Read all, the benchmark papers and Check all pressed during another AI run wait and start on their own when it ends; a paper Gemini cannot read is skipped and tried again at the end of its run.
 - Add a figure to any part from "Edit this part"; actions that use no AI are tagged Free.
+- AI runs wait out a busy site: a busy answer from our site (502, 503, 504, no answer) is asked again after 30, 60 and 120 seconds before a run stops.
 - Readings never stop for Gemini: Claude reads alone when Gemini is busy or out of its free limit, and "Check with Gemini" adds the second reader later, free.
 - Move or remove any stored file from its review screen (a file uploaded under the wrong month goes to the right session).
 
