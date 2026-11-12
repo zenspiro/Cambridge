@@ -17,7 +17,7 @@ import { PaperReview } from "@/components/PaperReview";
 import { ScoreBadge } from "@/components/ScoreBadge";
 import { RunProgress } from "@/components/RunProgress";
 import { BackLink } from "@/components/BackLink";
-import { loadPages, markedReviewed, PAPER_KINDS, paperDoc, paperView, type PaperView } from "@/lib/brain/paperRead";
+import { loadPages, markedReviewed, PAPER_KINDS, paperDoc, paperView, readByClaudeAlone, type PaperView } from "@/lib/brain/paperRead";
 import { personName } from "@/lib/library/documents";
 import { isActive, runState } from "@/lib/brain/runs";
 import { modelName } from "@/lib/brain/labels";
@@ -267,6 +267,14 @@ function ReadingCard({ docId, view, choices, run, busy, facts, canFix, canRead, 
             <button className="btn" type="submit">Run the checks again <FreeTag /></button>
           </ActionForm>
         ) : null}
+        {/* Check with Gemini (owner, 12 Nov 2026): the last reading was Claude's alone (Gemini could not help); Gemini
+            reads it now, free, and the checks compare the two. */}
+        {!busy && canRead && read && view.row && readByClaudeAlone(view.row.scores) ? (
+          <ActionForm action={`${base}/read`} messages={MESSAGES} yes="Yes" no="No" confirm="Check with Gemini? Free.">
+            <input type="hidden" name="second" value="1" />
+            <button className="btn" type="submit">Check with Gemini <FreeTag tip="Uses no paid AI credits: Gemini (free) reads the paper and our checks compare it with Claude's reading." /></button>
+          </ActionForm>
+        ) : null}
         {/* No AI (owner, 7 Nov 2026): cuts every figure again from the PDF with no AI; words, fixes and hand-drawn boxes stay. */}
         {!busy && canRead && cutAgain.length ? (
           <ActionForm action={`${base}/read`} messages={MESSAGES} yes="Yes" no="No"
@@ -316,7 +324,7 @@ function ReadingCard({ docId, view, choices, run, busy, facts, canFix, canRead, 
             {[...view.row.scores].reverse().map((s) => (
               <li key={s.at}>
                 <ScoreBadge score={s.score} />{" "}
-                <span>{s.claude ? `${modelName(s.claude)}${s.gemini ? `, checked by ${modelName(s.gemini)}` : ""}` : s.gemini ? `${modelName(s.gemini)} alone` : "Claude"}</span>{" "}
+                <span>{s.claude ? `${modelName(s.claude)}${s.gemini ? `, checked by ${modelName(s.gemini)}${s.checkedLater ? " later" : ""}` : " alone (Gemini could not help)"}` : s.gemini ? `${modelName(s.gemini)} alone` : "Claude"}</span>{" "}
                 <span className="muted">{dateFmt.format(s.at)}, {s.score.clean} of {s.score.items} parts with no flag</span>
               </li>
             ))}

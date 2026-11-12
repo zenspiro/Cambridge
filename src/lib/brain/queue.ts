@@ -21,14 +21,15 @@ import { batchCostCheck } from "./spend.ts";
 export type BatchAsk =
   | { kind: "read"; code: string; filter: ReadFilter }
   | { kind: "benchmark"; code: string; again?: boolean }
-  | { kind: "check"; code: string };
+  | { kind: "check"; code: string }
+  | { kind: "second"; code: string };
 export type QueueItem = BatchAsk & { id: string; actorId: string; at: number; held?: string; heldAt?: number };
 
 /** Why a queued run did not start when its turn came; it stays first in the queue until started or removed. */
 export type Hold = "over_cap" | "no_price" | "gemini_down" | "github" | "not_set_up";
 const HOLDS: readonly string[] = ["over_cap", "no_price", "gemini_down", "github", "not_set_up"];
 /** A run that stopped for one of these would stop the next one too: the queue waits for the owner. */
-const HOLD_AFTER: Readonly<Record<string, Hold>> = { gemini_down: "gemini_down", batch_cap: "over_cap", batch_price: "no_price", gemini_key: "gemini_down", claude_key: "not_set_up" };
+const HOLD_AFTER: Readonly<Record<string, Hold>> = { gemini_down: "gemini_down", gemini_busy: "gemini_down", batch_cap: "over_cap", batch_price: "no_price", gemini_key: "gemini_down", claude_key: "not_set_up" };
 
 const CODE_RE = /^[0-9]{4}$/;
 const KEY = "brain_queue";
@@ -37,6 +38,7 @@ const KEY = "brain_queue";
 export function askWords(a: BatchAsk): string {
   if (a.kind === "benchmark") return `${a.code} benchmark papers${a.again ? " again, for the score" : ""}`;
   if (a.kind === "check") return `${a.code} checks again`;
+  if (a.kind === "second") return `${a.code} checked with Gemini`;
   return `${a.code} ${filterWords(a.filter, SESSION_LABELS)}`;
 }
 
@@ -49,6 +51,7 @@ function cleanItem(v: unknown): QueueItem | null {
   const base = { id: o.id.slice(0, 40), code: o.code, actorId: o.actorId.slice(0, 80), at: o.at, ...(typeof o.held === "string" && HOLDS.includes(o.held) ? { held: o.held, heldAt: typeof o.heldAt === "number" ? o.heldAt : o.at } : {}) };
   if (o.kind === "benchmark") return { ...base, kind: "benchmark", ...(o.again === true ? { again: true } : {}) };
   if (o.kind === "check") return { ...base, kind: "check" };
+  if (o.kind === "second") return { ...base, kind: "second" };
   if (o.kind !== "read" || !o.filter || typeof o.filter !== "object") return null;
   const f = o.filter as Record<string, unknown>;
   const tier = f.tier === "core" || f.tier === "extended" || f.tier === "any" ? f.tier : null;
@@ -97,6 +100,18 @@ export async function unqueue(db: Db, id: string, actorId: string, now = Date.no
 
 /** The papers an ask reads now (worked out from the library, never from a form). */
 export async function planAsk(db: Db, ask: BatchAsk): Promise<{ docs: string[]; sizes: number[] } | null> {
+  if (ask.kind === "second") {
+    // Check with Gemini (owner, 12 Nov 2026): the papers whose last reading Claude made alone.
+    const { results } = await db
+      .prepare(`SELECT p.doc_id, d.size_bytes FROM paper_read p JOIN source_document d ON d.id = p.doc_id
+                WHERE p.read_at IS NOT NULL AND d.status = 'stored' AND d.syllabus_id LIKE ?1
+                  AND json_valid(p.scores) AND json_array_length(p.scores) > 0
+                  AND COALESCE(json_extract(p.scores, '$[#-1].claude'), '') <> '' AND COALESCE(json_extract(p.scores, '$[#-1].gemini'), '') = ''
+                ORDER BY d.file_name LIMIT ?2`)
+      .bind(`${ask.code}-%`, BRAIN.maxBatchPapers)
+      .all<{ doc_id: string; size_bytes: number }>();
+    return { docs: results.map((r) => r.doc_id), sizes: results.map((r) => r.size_bytes) };
+  }
   if (ask.kind === "check") {
     const { results } = await db
       .prepare(`SELECT p.doc_id, d.size_bytes FROM paper_read p JOIN source_document d ON d.id = p.doc_id
@@ -121,20 +136,21 @@ export async function planAsk(db: Db, ask: BatchAsk): Promise<{ docs: string[]; 
   return { docs: plan.toRead.map((d) => d.docId), sizes: plan.toRead.map((d) => d.bytes) };
 }
 
-export type Launch = "ok_batch" | "ok_check" | "ok_queued" | "queue_dupe" | "queue_full" | "batch_none" | "check_none" | "bad" | Hold;
+export type Launch = "ok_batch" | "ok_check" | "ok_second" | "ok_queued" | "queue_dupe" | "queue_full" | "batch_none" | "check_none" | "second_none" | "bad" | Hold;
 type Dispatch = (env: AppEnv, jobId: string) => Promise<DispatchResult>;
 
 /** Starts the run for an ask now. "running" when another brain run is going on (nothing changed). */
 async function startAsk(db: Db, env: AppEnv, ask: BatchAsk, actorId: string, dispatch: Dispatch, now: number): Promise<Launch | "running"> {
   const plan = await planAsk(db, ask);
   if (!plan) return "bad";
-  if (!plan.docs.length) return ask.kind === "check" ? "check_none" : "batch_none";
-  // A check asks no AI, so the cap does not apply.
-  if (ask.kind !== "check") {
+  if (!plan.docs.length) return ask.kind === "check" ? "check_none" : ask.kind === "second" ? "second_none" : "batch_none";
+  // A check asks no paid AI (Gemini is free), so the cap does not apply.
+  if (ask.kind !== "check" && ask.kind !== "second") {
     const cost = await batchCostCheck(db, env, plan.sizes, now);
     if (cost.verdict !== "ok") return cost.verdict;
   }
-  const jobId = await startBatchRun(db, plan.docs, askWords(ask), actorId, now, ask.kind === "check", ask.kind === "benchmark" && !!ask.again);
+  const isCheck = ask.kind === "check" || ask.kind === "second";
+  const jobId = await startBatchRun(db, plan.docs, askWords(ask), actorId, now, isCheck, ask.kind === "benchmark" && !!ask.again, ask.kind === "second");
   if (!jobId) return "running";
   let failure: string | null = null;
   try {
@@ -149,7 +165,7 @@ async function startAsk(db: Db, env: AppEnv, ask: BatchAsk, actorId: string, dis
     await failBrainRun(db, jobId, failure, now);
     return failure === "not_set_up" ? "not_set_up" : "github";
   }
-  return ask.kind === "check" ? "ok_check" : "ok_batch";
+  return ask.kind === "check" ? "ok_check" : ask.kind === "second" ? "ok_second" : "ok_batch";
 }
 
 /**
@@ -164,7 +180,7 @@ export async function launchAsk(db: Db, env: AppEnv, ask: BatchAsk, actorId: str
   // Only asks that will have papers to read wait (a plan with none is answered now).
   const plan = await planAsk(db, ask);
   if (!plan) return "bad";
-  if (!plan.docs.length) return ask.kind === "check" ? "check_none" : "batch_none";
+  if (!plan.docs.length) return ask.kind === "check" ? "check_none" : ask.kind === "second" ? "second_none" : "batch_none";
   const q = await queueAsk(db, ask, actorId, now);
   return q === "ok" ? "ok_queued" : q === "dupe" ? "queue_dupe" : "queue_full";
 }
@@ -197,7 +213,7 @@ export async function startQueued(db: Db, env: AppEnv, opts: { lastStop?: string
     const r = await startAsk(db, env, first, first.actorId, dispatch, now);
     if (r === "running") return r;
     const fresh = await readQueue(db);
-    if (r === "ok_batch" || r === "ok_check" || r === "batch_none" || r === "check_none" || r === "bad") {
+    if (r === "ok_batch" || r === "ok_check" || r === "ok_second" || r === "batch_none" || r === "check_none" || r === "second_none" || r === "bad") {
       await writeQueue(db, fresh.filter((x) => x.id !== first.id), "brain", now);
       await audit(db, { actorId: first.actorId, action: r.startsWith("ok") ? "brain.queue_start" : "brain.queue_drop", entity: "setting", entityId: KEY, detail: { ask: askWords(first) } }, now);
       if (r.startsWith("ok")) return r;

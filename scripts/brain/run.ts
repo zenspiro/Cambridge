@@ -51,6 +51,9 @@ type PaperJob = {
   readWith?: "claude" | "gemini";
   /** Run the checks again (owner, 9 Nov 2026): no AI; today's checks on the stored reading, figures with no box cut. */
   check?: boolean;
+  /** Check with Gemini (owner, 12 Nov 2026): with `check`, Gemini reads the paper so a reading Claude made alone gets
+   *  its second reader; Claude is not asked. */
+  second?: boolean;
 };
 type Stage = "pdf" | "gemini" | "claude" | "retry" | "figures" | "checks" | "save";
 type StepEvent = { stage: Stage; state: "start" | "wait" | "done" | "fail" | "skip"; model?: string; tokens?: number };
@@ -519,16 +522,32 @@ async function cutFigures(job: PaperJob, content: PaperContent, bytes: Uint8Arra
  * stored (confirmed items stay) and saved at once; then the figures are cut from the PDF by code and the reading is
  * saved again with them. A scope reads only some items again, or only cuts some figures again.
  */
+/**
+ * Gemini could not help in this run (owner, 12 Nov 2026: Google's free quota runs out and a card is refused): why, or
+ * null. Once set, the rest of the run reads with Claude alone and does not wait on Gemini again.
+ */
+let geminiOut: string | null = null;
+/** Gemini failures Claude reads on through; anything else (a broken answer from our side) still stops the run. */
+const GEMINI_SOFT = new Set(["gemini_busy", "gemini_down", "gemini_plan", "gemini_key", "gemini_model", "gemini_error", "gemini_too_long", "gemini_bad_answer"]);
+const GEMINI_OUT_WORDS: Record<string, string> = {
+  gemini_busy: "its free limit is used up", gemini_down: "Google's service is down", gemini_plan: "the model is not on the key's plan",
+  gemini_key: "the key was refused or is not set", gemini_model: "the model name is not known", gemini_error: "it answered with an error",
+  gemini_too_long: "its answer was cut off", gemini_bad_answer: "its answer could not be read",
+};
+
 async function runPaper(job: PaperJob) {
   // The Reading AI reads papers (owner, 8 Nov 2026); without one the main AI does.
   const reader = job.models.reading || job.models.claude;
   const alone = job.readWith === "gemini";
-  // A check asks no AI, so it needs no keys or models.
+  const second = !!job.check && !!job.second;
+  // A check asks no AI, so it needs no keys or models. Gemini is optional for a Claude reading (owner, 12 Nov 2026).
   if (!job.check) {
     if (!CLAUDE_KEY && !alone) throw new Stop("claude_key", "the GitHub secret CLAUDE_API_KEY is not set");
-    if (!GEMINI_KEY) throw new Stop("gemini_key", "the GitHub secret GEMINI_API_KEY is not set");
-    if ((!reader && !alone) || !job.models.gemini) throw new Stop("models", "no Claude or Gemini model is set (AI setup page or wrangler.jsonc)");
+    if (alone && !GEMINI_KEY) throw new Stop("gemini_key", "the GitHub secret GEMINI_API_KEY is not set");
+    if ((!reader && !alone) || (alone && !job.models.gemini)) throw new Stop("models", "no Claude or Gemini model is set (AI setup page or wrangler.jsonc)");
+    if (!alone && (!GEMINI_KEY || !job.models.gemini)) geminiOut ??= "gemini_key";
   }
+  if (second && (!GEMINI_KEY || !job.models.gemini)) throw new Stop("gemini_key", "the GitHub secret GEMINI_API_KEY or the Gemini model is not set");
   if (job.pdfBytes > job.limits.maxPdfBytes) throw new Stop("pdf_too_big");
 
   await step(job.batch ? `Paper ${job.batch.at} of ${job.batch.of}: ${job.paper}` : "Fetching the paper", { stage: "pdf", state: "start" });
@@ -588,7 +607,7 @@ async function runPaper(job: PaperJob) {
   const pdf64 = slim.pdf64;
   const sentPages = slim.kept.length || pages.length;
 
-  const scoped = job.scope.items.length > 0 || job.scope.figures.length > 0;
+  const scoped = !second && (job.scope.items.length > 0 || job.scope.figures.length > 0);
   const figuresOnly = !!job.check || (scoped && job.scope.items.length === 0);
   const prior = job.prior.content ? cleanPaper(job.prior.content, job.kind) : null;
   const priorGemini = job.prior.gemini ? cleanPaper(job.prior.gemini, job.kind) : null;
@@ -596,6 +615,8 @@ async function runPaper(job: PaperJob) {
   // A full reading's own result before it is merged with what was kept: its score is this run's read accuracy, with
   // the models that read it (owner, 8 Nov 2026: compare a cheaper Claude with the one in use).
   let fresh: PaperContent | null = null;
+  // Claude read alone this time (Gemini could not help): no second reader to compare with.
+  let claudeAlone = false;
   const save = async (content: PaperContent, gemini: PaperContent | null, final: boolean) => {
     // Gemini alone: its reading is the reading, so there is no second reader to compare with.
     const second = alone ? null : gemini;
@@ -614,20 +635,39 @@ async function runPaper(job: PaperJob) {
     if (final) await step(`Checks done: ${flags.length} flag${flags.length === 1 ? "" : "s"} for the review screen`, { stage: "checks", state: "done" });
     const own = final && fresh ? {
       fresh: { items: fresh.items.map((i) => ({ number: i.number, marks: i.marks })), flags: paperFlags({ content: fresh, pages, gemini: second, outline }) },
-      models: { claude: alone ? "" : reader, gemini: job.models.gemini },
+      models: { claude: alone ? "" : reader, gemini: claudeAlone ? "" : job.models.gemini },
     } : {};
     // `read`: a full reading (not a figures-only run), so the first one sets the paper's read accuracy.
-    const r = await api("/api/brain/paper", { content, gemini, pages, flags, final, read: !figuresOnly, ...own, ...(auto.length ? { auto } : {}) });
+    // Check with Gemini: the reading Claude made alone now has its second reader.
+    const checked = second && final && gemini ? { checkedBy: job.models.gemini } : {};
+    const r = await api("/api/brain/paper", { content, gemini, pages, flags, final, read: !figuresOnly, ...own, ...checked, ...(auto.length ? { auto } : {}) });
     if (r.status !== 200) throw new Stop(`save_${r.status}`);
     if (final) await note("Saved", { stage: "save", state: "done" });
   };
 
   // Gemini first: free on the owner's plan, so a failure here costs nothing. A figure redraw needs no reading.
+  // Gemini cannot help (owner, 12 Nov 2026: busy, out of its free limit, down, no key): Claude reads alone and the
+  // paper is marked so; "Check with Gemini" adds the second reader later, free.
   let gemini = priorGemini;
-  if (!figuresOnly) {
-    const g = await timed("gemini", job.models.gemini, "Gemini is reading the paper", () =>
-      askGemini({ model: job.models.gemini, system: PAPER_SYSTEM, schema: PAPER_SCHEMA_GEMINI, prompt: paperPrompt(job.kind, job.paper), pdf64, pages: sentPages, limits: job.limits }));
-    gemini = placeOnPages(remapPages(cleanPaper(g.raw, job.kind), slim.kept), pages);
+  if (!figuresOnly || second) {
+    if (geminiOut && !alone && !second) {
+      gemini = null;
+      claudeAlone = true;
+      await note(`Gemini: not asked (${GEMINI_OUT_WORDS[geminiOut] ?? "it could not help"} earlier in this run); Claude reads alone`, { stage: "gemini", state: "skip" });
+    } else {
+      try {
+        const g = await timed("gemini", job.models.gemini, second ? "Gemini is reading the paper to check Claude's reading" : "Gemini is reading the paper", () =>
+          askGemini({ model: job.models.gemini, system: PAPER_SYSTEM, schema: PAPER_SCHEMA_GEMINI, prompt: paperPrompt(job.kind, job.paper), pdf64, pages: sentPages, limits: job.limits }));
+        gemini = placeOnPages(remapPages(cleanPaper(g.raw, job.kind), slim.kept), pages);
+        if (!gemini.items.length && !alone) throw new Stop("gemini_bad_answer", "Gemini's reading had no questions");
+      } catch (err) {
+        if (alone || second || !(err instanceof Stop) || !GEMINI_SOFT.has(err.reason)) throw err;
+        geminiOut = err.reason;
+        gemini = null;
+        claudeAlone = true;
+        await note(`Gemini could not read it (${GEMINI_OUT_WORDS[err.reason] ?? err.reason}): Claude reads alone, and Gemini is not asked again in this run`, { stage: "gemini", state: "skip" });
+      }
+    }
   } else await note(job.check ? "Gemini: not asked (checking the reading again)" : "Gemini: not needed to cut a figure again", { stage: "gemini", state: "skip" });
 
   let content = prior;
@@ -664,7 +704,7 @@ async function runPaper(job: PaperJob) {
     content = placeOnPages(mergeReading(prior, read, new Set(job.prior.open), scoped ? job.scope : undefined), pages);
     await step("Saving Claude's reading", { stage: "save", state: "start" });
     await save(content, gemini, false);
-  } else await note(job.check ? "Claude: not asked (checking the reading again)" : "Claude: not needed to cut a figure again", { stage: "claude", state: "skip" });
+  } else await note(second ? "Claude: not asked (Gemini checks the stored reading)" : job.check ? "Claude: not asked (checking the reading again)" : "Claude: not needed to cut a figure again", { stage: "claude", state: "skip" });
   if (!content) throw new Stop("no_reading", "there is no reading to cut figures for");
 
   content = await cutFigures(job, content, doc.bytes);

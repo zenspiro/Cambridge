@@ -115,3 +115,24 @@ test("the run queue: Remove takes one ask out; an ask with nothing to read is dr
   assert.equal(run?.params?.task === "paper" && run.params.shadow, true);
   assert.equal(run?.params?.task === "paper" && run.params.batch?.docs.length, 3);
 });
+
+test("Check with Gemini: the papers whose last reading Claude made alone, read by Gemini only, free", async () => {
+  const { db, id } = await library();
+  sent.length = 0;
+  const { readByClaudeAlone, cleanScores } = await import("../../src/lib/brain/paperRead.ts");
+  const alone = [{ at: 1, claude: "claude-haiku-5-5", gemini: "", items: 3, clean: 3, red: 0 }];
+  const both = [{ at: 1, claude: "claude-haiku-5-5", gemini: "gemini-3.6-flash", items: 3, clean: 3, red: 0 }];
+  assert.equal(readByClaudeAlone(cleanScores(alone)), true);
+  assert.equal(readByClaudeAlone(cleanScores(both)), false);
+  assert.equal(readByClaudeAlone(cleanScores([{ ...both[0], claude: "" }])), false, "Gemini alone is not Claude alone");
+  assert.equal(await launchAsk(db, env, { kind: "second", code: "0625" }, "a", dispatch, 1000), "second_none");
+  const a = await id("0625_w25_qp_22.pdf");
+  const b = await id("0625_w25_qp_42.pdf");
+  await db.prepare(`INSERT INTO paper_read (doc_id, items, flags, read_at, updated_at, scores) VALUES (?1, 3, '[]', 1, 1, ?2)`).bind(a, JSON.stringify(alone)).run();
+  await db.prepare(`INSERT INTO paper_read (doc_id, items, flags, read_at, updated_at, scores) VALUES (?1, 3, '[]', 1, 1, ?2)`).bind(b, JSON.stringify(both)).run();
+  assert.equal(await launchAsk(db, env, { kind: "second", code: "0625" }, "a", dispatch, 1100), "ok_second");
+  const run = await runState(db, sent[0]!, 1100);
+  const p = run?.params;
+  assert.ok(p?.task === "paper" && p.check && p.second, "a check run in which Gemini reads");
+  assert.deepEqual(p?.task === "paper" && p.batch?.docs, [a], "only the paper read by Claude alone");
+});

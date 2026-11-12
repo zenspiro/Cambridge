@@ -779,6 +779,32 @@ try {
   check(rCheck.status === 0 && ai.seq.length === 0 && rCheck.out.includes("not asked (checking the reading again)"), `Run the checks again asks no AI (${ai.seq.join(",") || "none"})${rCheck.status ? ": " + rCheck.out.slice(-500) : ""}`);
   check(rows(`SELECT COUNT(*) AS n FROM ai_spend WHERE job_id = '${recheck}'`)[0].n === 0 && rows(`SELECT status FROM job WHERE id = '${recheck}'`)[0].status === "succeeded", "it records no spend and finishes");
 
+  // Gemini cannot help (owner, 12 Nov 2026: out of its free limit, down): Claude reads alone and the run finishes.
+  const solo = `e2es${Date.now()}`;
+  sql(`INSERT INTO job (id, type, status, params, created_by, created_at) VALUES ('${solo}', 'brain', 'queued', '{"task":"paper","docId":"${paperId}","scope":{"items":[],"figures":[]}}', 'platform-admin', ${Date.now()})`);
+  sql(`UPDATE paper_read SET job_id = '${solo}' WHERE doc_id = '${paperId}'`);
+  ai.down503 = 10;
+  ai.seq.length = 0;
+  const rSolo = await runBrain(solo);
+  ai.down503 = 0;
+  check(rSolo.status === 0 && ai.seq.includes("claude-paper") && rSolo.out.includes("Claude reads alone"), `Gemini down: Claude reads alone and the run finishes (${ai.seq.join(",")})${rSolo.status ? ": " + rSolo.out.slice(-500) : ""}`);
+  const last = rows(`SELECT json_extract(scores, '$[#-1].gemini') AS g, json_extract(scores, '$[#-1].claude') AS c FROM paper_read WHERE doc_id = '${paperId}'`)[0];
+  check(last?.g === "" && !!last?.c, `the reading is marked as Claude's alone (${JSON.stringify(last)})`);
+  await page.goto(`${BASE}/admin/library/review/${paperId}`);
+  check((await page.locator("#reading button", { hasText: "Check with Gemini" }).count()) === 1, "the review screen offers Check with Gemini, tagged Free");
+  check(((await page.locator("#reading").textContent()) ?? "").includes("alone (Gemini could not help)"), "the score list says the reading was Claude's alone");
+  // Check with Gemini later: Gemini only, free, and the reading is marked as checked.
+  const second = `e2ec${Date.now()}`;
+  sql(`INSERT INTO job (id, type, status, params, created_by, created_at) VALUES ('${second}', 'brain', 'queued', '{"task":"paper","docId":"${paperId}","scope":{"items":[],"figures":[]},"check":true,"second":true}', 'platform-admin', ${Date.now()})`);
+  sql(`UPDATE paper_read SET job_id = '${second}' WHERE doc_id = '${paperId}'`);
+  ai.seq.length = 0;
+  const rSecond = await runBrain(second);
+  check(rSecond.status === 0 && ai.seq.join(",") === "gemini-paper", `Check with Gemini asks Gemini only (${ai.seq.join(",")})${rSecond.status ? ": " + rSecond.out.slice(-500) : ""}`);
+  check(rows(`SELECT COUNT(*) AS n FROM ai_spend WHERE job_id = '${second}' AND provider = 'claude'`)[0].n === 0, "no Claude spend for Check with Gemini");
+  check(!!rows(`SELECT json_extract(scores, '$[#-1].gemini') AS g FROM paper_read WHERE doc_id = '${paperId}'`)[0]?.g, "the reading is now marked as checked by Gemini");
+  await page.goto(`${BASE}/admin/library/review/${paperId}`);
+  check((await page.locator("#reading button", { hasText: "Check with Gemini" }).count()) === 0, "once checked, the button goes");
+
   // 13. Read all (owner, 8 Nov 2026): the choice shows what it reads and the cost; one run reads the papers in turn.
   sql(`DELETE FROM source_document WHERE file_name IN ('0625_s24_qp_22.pdf', '0625_s24_qp_62.pdf')`);
   for (const [name, tag] of [["0625_s24_qp_22.pdf", "two"], ["0625_s24_qp_62.pdf", "six"]]) {

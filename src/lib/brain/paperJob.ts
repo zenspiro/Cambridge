@@ -8,7 +8,7 @@ import type { PaperKind } from "./paper.ts";
 import type { AiModels } from "./aiSetup.ts";
 import type { PaperScope, Batch } from "./runs.ts";
 
-export async function paperJobPayload(db: Db, files: Bucket, docId: string, scope: PaperScope, batch: Batch | undefined, models: AiModels, limits: Record<string, unknown>, reader?: string, check = false, shadow = false): Promise<Record<string, unknown> | null> {
+export async function paperJobPayload(db: Db, files: Bucket, docId: string, scope: PaperScope, batch: Batch | undefined, models: AiModels, limits: Record<string, unknown>, reader?: string, check = false, shadow = false, second = false): Promise<Record<string, unknown> | null> {
   const doc = await paperDoc(db, docId);
   if (!doc || !PAPER_KINDS.includes(doc.docType as PaperKind)) return null;
   const [{ papers }, subjects, size, prior] = await Promise.all([
@@ -31,6 +31,8 @@ export async function paperJobPayload(db: Db, files: Bucket, docId: string, scop
     readWith: reader === "gemini" ? "gemini" : "claude",
     // Run the checks again (owner, 9 Nov 2026): no AI, the stored reading checked with today's checks.
     ...(check ? { check: true } : {}),
+    // Check with Gemini (owner, 12 Nov 2026): Gemini reads to check a reading Claude made alone.
+    ...(check && second ? { second: true } : {}),
     limits,
   };
 }

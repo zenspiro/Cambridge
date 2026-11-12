@@ -77,7 +77,13 @@ export type PaperRow = {
 };
 
 /** One full reading's accuracy: the AIs' own reading before it was merged with what was kept. */
-export type ReadScore = { at: number; claude: string; gemini: string; score: PaperScore };
+export type ReadScore = { at: number; claude: string; gemini: string; score: PaperScore; checkedLater?: boolean };
+
+/** The last full reading was Claude's alone (owner, 12 Nov 2026: Gemini could not help), not yet checked by Gemini. */
+export const readByClaudeAlone = (scores: readonly ReadScore[]) => {
+  const last = scores.at(-1);
+  return !!last && !!last.claude && !last.gemini;
+};
 
 /** Stored per-reading scores made safe. Pure. */
 export function cleanScores(v: unknown): ReadScore[] {
@@ -89,7 +95,7 @@ export function cleanScores(v: unknown): ReadScore[] {
     const score = items !== null && clean !== null && red !== null && clean <= items && red <= items ? storedScore(items, clean, red) : null;
     const claude = typeof r.claude === "string" && CLAUDE_MODEL_RE.test(r.claude) ? r.claude : "";
     const gemini = typeof r.gemini === "string" && GEMINI_MODEL_RE.test(r.gemini) ? r.gemini : "";
-    return at !== null && score ? [{ at, claude, gemini, score }] : [];
+    return at !== null && score ? [{ at, claude, gemini, score, ...(gemini && typeof r.checkedAt === "number" ? { checkedLater: true } : {}) }] : [];
   });
 }
 
@@ -310,6 +316,20 @@ export async function savePaperReading(db: Db, bucket: Bucket, jobId: string, do
   // The AI's own copy (owner, 12 Nov 2026): the benchmark scores this, so a person's fixes never count as the AI's.
   // Kept from every whole-paper reading of a paper nobody has fixed by hand (automatic fixes are the reader's own).
   if (final && raw.read !== false && how.full && !(await handFixed(db, docId))) await aiCopy();
+  // Claude read alone (owner, 12 Nov 2026: Gemini could not help): an older Gemini reading no longer matches it.
+  if (final && raw.read !== false && how.full && models.gemini === "" && typeof models.claude === "string" && models.claude) await bucket.delete(key(docId, "gemini"));
+  // Check with Gemini: the last reading, made by Claude alone, is marked as checked by this Gemini model.
+  if (final && typeof raw.checkedBy === "string" && GEMINI_MODEL_RE.test(raw.checkedBy) && raw.gemini) {
+    const stored = await db.prepare(`SELECT scores FROM paper_read WHERE doc_id = ?1`).bind(docId).first<{ scores: string }>();
+    const list = safeJson(stored?.scores ?? "[]");
+    if (Array.isArray(list) && list.length) {
+      const last = list[list.length - 1] as Record<string, unknown>;
+      if (last && typeof last === "object" && !last.gemini) {
+        list[list.length - 1] = { ...last, gemini: raw.checkedBy, checkedAt: now };
+        await db.prepare(`UPDATE paper_read SET scores = ?2 WHERE doc_id = ?1`).bind(docId, JSON.stringify(list)).run();
+      }
+    }
+  }
   if (final && raw.read !== false) {
     const fresh = freshReading(raw.fresh);
     const parts = fresh ? fresh.items : content.items;

@@ -60,6 +60,8 @@ export const QUEUE_MESSAGES: Readonly<Record<string, string>> = {
   queue_full: "The queue is full. Remove one from it first.",
   queue_empty: "Nothing is waiting in the queue.",
   ok_unqueued: "Removed from the queue.",
+  ok_second: "Checking with Gemini started. Progress shows in the Read all card.",
+  second_none: "No paper of this subject was read by Claude alone, so there is nothing to check.",
   running: "Another AI run is going on, so this cannot start yet.",
   gemini_down: "Gemini is down, so the queue is waiting. It tries again on its own in 30 minutes, or press Start now.",
   over_cap: "This would go past your monthly AI cap, so it did not start. Raise the cap on AI setup, or read fewer papers.",
