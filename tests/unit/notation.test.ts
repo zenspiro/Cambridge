@@ -495,3 +495,12 @@ test("a part label first on its line is kept even inside a figure's box", () => 
   const figure: [number, number, number, number] = [92, 400, 503, 697];
   assert.deepEqual(pdfOutline(bboxWords(xml([[], p])), [[], [figure]]).map((o) => o.number), ["1", "1(a)", "1(a)(i)", "1(a)(ii)"]);
 });
+
+test("column vectors: one markup, a tree node, and no false flat power from a base", () => {
+  // Gemini writes LaTeX; Claude \binom. Both end as \binom (Maths Mar 2024 P42 7(a)).
+  assert.equal(normaliseNotation("\\mathbf{p} = \\begin{pmatrix} 8 \\\\ -5 \\end{pmatrix} \\quad \\mathbf{q}"), "p = \\binom{8}{−5}   q");
+  assert.deepEqual(notationTree("p = \\binom{8}{−5}"), [{ kind: "text", text: "p = " }, { kind: "vec", top: [{ kind: "text", text: "8" }], bottom: [{ kind: "text", text: "−5" }] }]);
+  // A page printing h(x) = 2^{x} does not make "2x^{3}" a flat power: there "2x" is the base of x^{3}.
+  assert.equal(lostNotation("y = 2x^{3} + 6x^{2} − 2.5", ["h(x) = 2^{x}"]), null);
+  assert.equal(lostNotation("h(x) = 2x", ["h(x) = 2^{x}"])?.marked, "2^{x}");
+});

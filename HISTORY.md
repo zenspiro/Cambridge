@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-12: Column vectors, and no false flat power from a base
+
+**What:** column vectors are one markup, \binom{8}{−5}, shown on the review screen as two numbers stacked in brackets; Gemini's LaTeX (pmatrix, \mathbf, \quad) becomes the same markup, and the word check ignores markup names. The flat-notation check no longer flags "2x^{3}" because the page also prints 2^{x}.
+
+**Why:** owner, 12 Nov 2026 (reading the weakest benchmark papers): Maths Mar 2024 P42 had red flags on 7(a)'s vectors (wording and agreement) and four false notation flags on question 10.
+
+**Tested:** unit tests; on every benchmark paper's stored reading the four false flags go and no notation flag is added. Maths Mar 2024 P42 read again in this session (8(c) numbered, f(x) = \frac{1}{x}, answer-line units, F10's box by hand) and loaded: 0 red flags, 100% on its key.
+
 ## 2026-11-12: Parts the paper never prints, labels inside figure boxes, Insert figures
 
 **What:** an amber flag for a part with marks under a number the paper never prints (an invented "3(lead)", "6(iii)"). The printed outline keeps a part label such as "(i)" that starts a line even when a figure's box covers it. Answer keys leave out figures and tables printed in the separate Insert, which no reading of the question paper can hold.

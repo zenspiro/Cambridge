@@ -175,7 +175,8 @@ function flatPattern(pieces: readonly string[], prefix = false): RegExp {
     const lead = /^[A-Za-z0-9]/.test(ps[0] ?? "") ? "(?<![A-Za-z0-9^_{])" : "";
     const last = ps.at(-1) ?? "";
     const tail = /\d$/.test(last) ? "(?![\\d.]\\d|\\d)" : /[a-z]$/.test(last) ? "(?![a-z])" : "";
-    return lead + body + tail;
+    // Flat text running straight into markup is the base of another power ("2x^{3}" is not a flat "2^{x}").
+    return lead + body + tail + "(?![\\^_]\\{)";
   };
   if (!prefix || pieces.length < 2) return new RegExp(one(pieces), "g");
   const base = pieces.at(-1)!;
@@ -322,6 +323,10 @@ export function normaliseNotation(s: string): string {
   // as "l_0"). A name in code ("total_marks", "x_pos") is longer on one side, so it is left alone.
   out = out.replace(/(?<![\p{L}\p{N}_])(\p{L})_(\d{1,2}|[a-z])(?![\p{L}\p{N}_{])/gu, "$1_{$2}");
   out = out.replace(/([\^_])\{([^{}]{0,40})\}/g, (_m, k: string, t: string) => `${k}{${t.replace(MINUS, "−")}}`);
+  // LaTeX dress around the notation (Gemini): \mathbf{p} is p, \quad a space.
+  out = out.replace(/\\math(?:bf|rm|it)\{([^{}]{1,20})\}/g, "$1").replace(/\\q?quad\b/g, " ");
+  // A column vector in one markup: LaTeX's pmatrix (Gemini) is \binom{top}{bottom}.
+  out = out.replace(/\\begin\{[pb]matrix\}\s*([^\\{}]{1,20}?)\s*\\\\\s*([^\\{}]{1,20}?)\s*\\end\{[pb]matrix\}/g, (_m, a: string, b: string) => `\\binom{${a.replace(MINUS, "−")}}{${b.replace(MINUS, "−")}}`);
   // Fractions in one markup too: ¾ is \frac{3}{4}.
   out = out.replace(/[¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]/g, (c) => VULGAR[c] ?? c);
   return out;
@@ -396,7 +401,9 @@ export function notationParts(s: string): { kind: "text" | "sup" | "sub"; text: 
 export type NotationNode =
   | { kind: "text"; text: string }
   | { kind: "sup" | "sub"; children: NotationNode[] }
-  | { kind: "frac"; num: NotationNode[]; den: NotationNode[] };
+  | { kind: "frac"; num: NotationNode[]; den: NotationNode[] }
+  /** A column vector, \binom{top}{bottom}: two numbers stacked in brackets (Maths, owner 12 Nov 2026). */
+  | { kind: "vec"; top: NotationNode[]; bottom: NotationNode[] };
 
 /** Text with our markup as a tree for the review screen: superscripts, subscripts and fractions, nested. Pure. */
 export function notationTree(s: string, depth = 0): NotationNode[] {
@@ -414,6 +421,16 @@ export function notationTree(s: string, depth = 0): NotationNode[] {
         flush();
         out.push({ kind: "frac", num: notationTree(n.text, depth + 1), den: notationTree(d.text, depth + 1) });
         i = d.end;
+        continue;
+      }
+    }
+    if (depth < 6 && s.startsWith("\\binom{", i)) {
+      const t = group(s, i + 6);
+      const b = t ? group(s, t.end) : null;
+      if (t && b) {
+        flush();
+        out.push({ kind: "vec", top: notationTree(t.text, depth + 1), bottom: notationTree(b.text, depth + 1) });
+        i = b.end;
         continue;
       }
     }

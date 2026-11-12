@@ -339,7 +339,9 @@ export function paperFlags({ content, pages, gemini, outline }: CheckInput): Fla
   // that fails the run check passes when its real words (four letters or more) are all printed; a part that is almost
   // all formula, with too few words to judge, is left to Gemini's reading of the page picture.
   const words = (s: string) => (s.normalize("NFKD").toLowerCase().match(/[a-z]{4,}/g) ?? []);
-  const found = (s: string) => {
+  const found = (raw: string) => {
+    // Markup names (\frac, \binom) are never printed.
+    const s = raw.replace(/\\[a-z]+(?=\{)/g, " ");
     if (coverage(idx, s) >= BRAIN.minWordCover) return true;
     const w = words(s);
     if (w.length < 3) return isFormula(s) && w.every((x) => idx.text.includes(x));
