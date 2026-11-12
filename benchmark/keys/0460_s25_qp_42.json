@@ -17,8 +17,12 @@
    "marks": 2
   },
   {
-   "n": "1(d)",
-   "marks": 6
+   "n": "1(d)(i)",
+   "marks": 2
+  },
+  {
+   "n": "1(d)(ii)",
+   "marks": 4
   },
   {
    "n": "1(e)(i)",
@@ -99,6 +103,7 @@
  ],
  "leads": [
   "1",
+  "1(d)",
   "1(f)",
   "2",
   "2(b)",
@@ -108,12 +113,12 @@
  ],
  "figures": [
   {
-   "label": "Fig. 1.2",
-   "part": "1(c)"
-  },
-  {
    "label": "Fig. 1.3",
-   "part": "1(d)"
+   "part": "1(d)(i)",
+   "also": [
+    "1(d)",
+    "1(d)(ii)"
+   ]
   },
   {
    "label": "Fig. 1.4",
@@ -123,36 +128,17 @@
    ]
   },
   {
-   "label": "Fig. 2.1",
-   "part": "2(b)(iv)"
-  },
-  {
    "label": "Fig. 2.2",
    "part": "2(c)(iii)",
    "also": [
     "2(d)(i)"
    ]
-  },
-  {
-   "label": "Fig. 2.3",
-   "part": "2(e)(ii)"
   }
  ],
  "tables": [
   {
    "label": "Table 1.1",
    "part": "1(b)"
-  },
-  {
-   "label": "Table 1.2",
-   "part": "1(d)"
-  },
-  {
-   "label": "Table 1.3",
-   "part": "1(f)",
-   "also": [
-    "1(f)(iii)"
-   ]
   },
   {
    "label": "Table 2.1",

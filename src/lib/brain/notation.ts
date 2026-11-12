@@ -646,7 +646,9 @@ export function pdfOutline(pages: readonly (readonly Word[])[], figures: readonl
     // provided." sits just above Fig. 3.1's drawing).
     const sentence = (l: Word[]) => l.length >= 4 && /[.?!:]$/.test(l.at(-1)!.t);
     const words = lines.filter((l) => !isCaptionLine(l.map((w) => w.t).join(" "))).flatMap((l) => {
-      const kept = sentence(l) ? l : l.filter((w) => !inFigure(w));
+      // A part label first on its line ("(i)") is never the figure's (Jun 2025 Geography P42: Fig. 1.3's box began at
+      // 1(d)(i)'s line, so (i) and (ii) were lost).
+      const kept = sentence(l) ? l : l.filter((w, k) => !inFigure(w) || (k === 0 && w.b[0] < 160 && /^\([a-z]{1,4}\)$/.test(w.t)));
       return kept.map((w, k) => ({ ...w, first: k === 0 }));
     });
     let prevLabelLine = -1;

@@ -129,8 +129,10 @@ function draftQp(file: string, outline: OutlinePart[], cover: string): BenchKey 
     const [part, next] = naming(label);
     return { label, part: part!, ...(next ? { also: [next] } : {}) };
   };
-  const figures = labels(/\bFig\.\s*\d+\.\d+/g).map(holders);
-  const tables = labels(/\bTable\s*\d+\.\d+/g).map(holders);
+  // A figure or table printed in the separate Insert ("Fig. 1.2 (Insert)") is not in the question paper, so no reading holds it.
+  const inInsert = (label: string) => outline.some((x) => new RegExp(`${label.replace(/\./g, "\\.").replace(/ /g, "\\s*")}\\s*\\(Insert\\)`).test(x.text));
+  const figures = labels(/\bFig\.\s*\d+\.\d+/g).filter((l) => !inInsert(l)).map(holders);
+  const tables = labels(/\bTable\s*\d+\.\d+/g).filter((l) => !inInsert(l)).map(holders);
   const notation: BenchKey["notation"] = [];
   for (const x of outline) {
     const seen = new Set<string>();

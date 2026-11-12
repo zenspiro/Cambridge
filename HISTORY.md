@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-12: Parts the paper never prints, labels inside figure boxes, Insert figures
+
+**What:** an amber flag for a part with marks under a number the paper never prints (an invented "3(lead)", "6(iii)"). The printed outline keeps a part label such as "(i)" that starts a line even when a figure's box covers it. Answer keys leave out figures and tables printed in the separate Insert, which no reading of the question paper can hold.
+
+**Why:** owner, 12 Nov 2026 (reading the weakest benchmark papers): Chemistry Jun 2023 P52 had "3(lead)" with no flag; Geography Jun 2025 P42 lost 1(d)(i) and (ii) from the outline (and its key) because Fig. 1.3's box began on the "(i)" line; Geography keys counted Insert figures against every reading.
+
+**Tested:** unit tests (the outline test fails without the fix). The outline of every benchmark paper is unchanged except Geography P42. On the stored readings the new flag names only real misnumberings. Benchmark tuning 96.7%, locked 93.1% to 93.4%, baseline saved. Loaded from this session: Biology Jun 2024 P42 (2(d) and 5(d) numbered, 100% on its key) and Chemistry Jun 2023 P52 (question 3 as one part, 100%).
+
 ## 2026-11-12: A flag for parts the reading leaves out
 
 **What:** a red flag for every part the paper prints with its [marks] that the reading does not have, worked out from the printed page (not only when Gemini found it). Raised only when the printed marks add up to the paper's total, so a misread page raises nothing. The dev-session loader takes the paper's total from its cover. Benchmark keys no longer count the reference notes at the back of Chemistry Paper 6 as question 4.

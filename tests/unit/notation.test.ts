@@ -477,4 +477,21 @@ test("a printed part the reading leaves out is flagged, only when the printed ma
   assert.deepEqual(missingFromOutline(content, outline, ["The total mark for this paper is 40."]), []);
   assert.deepEqual(missingFromOutline({ ...content, items: [...content.items, item("1(b)", 2)] }, outline, cover), []);
   assert.deepEqual(missingFromOutline({ ...content, kind: "ms" }, outline, cover), []);
+  // A part with marks under a number the paper never prints (Haiku's "3(lead)").
+  const extra = { ...content, items: [...content.items, item("1(b)", 2), item("1(c)", 1)] };
+  assert.deepEqual(missingFromOutline(extra, outline, cover).map((f) => [f.key, f.colour]), [["numbering:1(c):printed", "amber"]]);
+});
+
+test("a part label first on its line is kept even inside a figure's box", () => {
+  // Jun 2025 Geography P42: Fig. 1.3's box began at the line holding only "(i)", so 1(d)(i) and (ii) were lost.
+  const p: W[][] = [
+    [[49.6, 88, 55.7, 102, "1"], [72.3, 88, 110, 102, "Students"], [113, 88, 160, 102, "measured."]],
+    [[72.3, 120, 85.7, 134, "(a)"], [95, 120, 130, 134, "Plot"], [133, 120, 170, 134, "results."]],
+    [[95.9, 400, 106.3, 414, "(i)"]],
+    [[118, 416, 150, 430, "Plot"], [153, 416, 180, 430, "day"], [183, 416, 190, 430, "7"], [193, 416, 210, 430, "on"], [213, 416, 240, 430, "Fig."], [243, 416, 260, 430, "1.3."]],
+    [[300, 500, 320, 514, "1005"]],
+    [[72.3, 720, 85.7, 734, "(ii)"], [118, 720, 150, 734, "What"], [153, 720, 200, 734, "conclusion?"]],
+  ];
+  const figure: [number, number, number, number] = [92, 400, 503, 697];
+  assert.deepEqual(pdfOutline(bboxWords(xml([[], p])), [[], [figure]]).map((o) => o.number), ["1", "1(a)", "1(a)(i)", "1(a)(ii)"]);
 });

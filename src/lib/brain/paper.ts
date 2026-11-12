@@ -440,7 +440,8 @@ export function paperFlags({ content, pages, gemini, outline }: CheckInput): Fla
 }
 
 /**
- * A part the paper prints with its [marks] that the reading does not have (owner, 12 Nov 2026: Haiku read Chemistry
+ * A part the paper prints with its [marks] that the reading does not have, and a part with marks under a number the
+ * paper never prints (owner, 12 Nov 2026: Haiku read Chemistry
  * Jun 2024 P42 alone and left out 22 parts with only 3 flags, since only Gemini's reading raised "missing"). Trusted
  * only when the printed parts' marks add up to the paper's total, so a misread outline raises nothing. Adds flags only,
  * with no "PDF's version" to copy, so older flags stay current (CHECKS_VERSION unchanged). Question papers. Pure.
@@ -452,10 +453,17 @@ export function missingFromOutline(content: Pick<PaperContent, "kind" | "items" 
   const printed = outline.filter((o) => o.marks !== undefined);
   if (!printed.length || printed.reduce((a, o) => a + (o.marks ?? 0), 0) !== total) return [];
   const ours = new Set(content.items.map((i) => i.number));
-  return printed.filter((o) => !ours.has(o.number)).map((o) => {
+  const missing = printed.filter((o) => !ours.has(o.number)).map((o) => {
     const reason = `The paper prints ${o.number} [${o.marks}] on page ${o.page}; this reading does not have it.`;
     return { key: `missing:${o.number}`, item: o.number, kind: "missing" as const, colour: COLOUR.missing, reason, pdfText: "", fingerprint: fingerprint("missing", squash(o.text), "printed"), v: CHECKS_VERSION };
   });
+  // The other way round: a part with marks under a number the paper never prints (Haiku's "6(iii)", "3(lead)").
+  const labels = new Set(outline.map((o) => o.number));
+  const extra = content.items.filter((i) => i.marks !== null && !labels.has(i.number)).map((i) => {
+    const reason = `The paper prints no ${i.number}. Check the number against the printed page.`;
+    return { key: `numbering:${i.number}:printed`, item: i.number, kind: "numbering" as const, colour: COLOUR.numbering, reason, pdfText: "", fingerprint: fingerprint("numbering", squash(itemWording(i)), "not printed"), v: CHECKS_VERSION };
+  });
+  return [...missing, ...extra];
 }
 
 /** Flags a mark scheme raises against its question paper: the marks per question must match. */
