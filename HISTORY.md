@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-12: Benchmark baseline saved
+
+**What:** the first scores of all six subjects' benchmark papers are kept as `benchmark/baseline.json` (check results only, never wording). Tuning set 94.1% of 3,286 checks, locked set 91.6% of 1,487. From now on `score.ts` fails when a check that passed here fails. Details and what is wrong: `docs/benchmark.md`.
+
+**Why:** owner, 12 Nov 2026 (option A): measure every reading-rule change against these before fixing the problems found.
+
+**Tested:** `score.ts` on the live readings (read only).
+
 ## 2026-11-12: AI runs wait out a busy site
 
 **What:** when our site answers busy (502, 503, 504) or not at all, the AI run script waits 30, 60, then 120 seconds and asks again before giving up, the same as the library agent. It covers every save, the next paper of a Read all, and the message that a run stopped (so a stopped run no longer shows as going until it times out). Progress notes while an AI writes are not retried, so they never hold up a reading. Each wait is in the GitHub log.
