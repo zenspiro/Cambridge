@@ -13,7 +13,7 @@ export type PaperScope = { items: string[]; figures: string[] };
 export type BrainParams =
   | { task: "topics"; syllabusId: string }
   | { task: "check"; which: "claude" | "gemini" | null }
-  | { task: "paper"; docId: string; scope: PaperScope; batch?: Batch; reader?: string; check?: boolean; shadow?: boolean };
+  | { task: "paper"; docId: string; scope: PaperScope; batch?: Batch; reader?: string; check?: boolean; shadow?: boolean; second?: boolean };
 /**
  * Read all (owner, 8 Nov 2026): one run reads these papers in turn; `docId` is the one being read now. Gemini down
  * (owner, 12 Nov 2026): a paper Gemini could not read is `skipped` and the run moves on; once the list is done the
@@ -85,12 +85,13 @@ export async function finishCheckRun(db: Db, id: string, now = Date.now()): Prom
  * "Read this paper" (or read one question again, or redraw one figure): a brain run for one question paper or mark
  * scheme. An empty scope reads the whole paper (keeping what is confirmed).
  */
-export async function startPaperRun(db: Db, docId: string, scope: PaperScope, actorId: string, now = Date.now(), reader?: string, check = false): Promise<string | null> {
+export async function startPaperRun(db: Db, docId: string, scope: PaperScope, actorId: string, now = Date.now(), reader?: string, check = false, second = false): Promise<string | null> {
   // `reader` (owner, 9 Nov 2026): the AI chosen for this one reading ("Read with"); the saved Reading AI stays as it is.
   const r = reader && isReader(reader) ? reader : undefined;
   // `check` (owner, 9 Nov 2026): no AI; the stored reading is checked again with today's checks (and figures without a
   // box are cut).
-  const id = await startBrainRun(db, { task: "paper", docId, scope, ...(r && !check ? { reader: r } : {}), ...(check ? { check: true } : {}) }, actorId, now);
+  // `second` (owner, 12 Nov 2026): with `check`, Gemini reads the paper to check a reading Claude made alone; free.
+  const id = await startBrainRun(db, { task: "paper", docId, scope, ...(r && !check ? { reader: r } : {}), ...(check ? { check: true } : {}), ...(check && second ? { second: true } : {}) }, actorId, now);
   if (!id) return null;
   await db
     .prepare(`INSERT INTO paper_read (doc_id, job_id, updated_at) VALUES (?1, ?2, ?3) ON CONFLICT (doc_id) DO UPDATE SET job_id = ?2, updated_at = ?3`)
@@ -103,11 +104,11 @@ export async function startPaperRun(db: Db, docId: string, scope: PaperScope, ac
 const DOC_ID_RE = /^[A-Za-z0-9_-]{10,64}$/;
 
 /** Read all: one run for many papers, the first one claimed now (each later one when the script asks for it). */
-export async function startBatchRun(db: Db, docs: readonly string[], label: string, actorId: string, now = Date.now(), check = false, shadow = false): Promise<string | null> {
+export async function startBatchRun(db: Db, docs: readonly string[], label: string, actorId: string, now = Date.now(), check = false, shadow = false, second = false): Promise<string | null> {
   const list = docs.filter((d) => DOC_ID_RE.test(d)).slice(0, BRAIN.maxBatchPapers);
   if (!list.length) return null;
   // A check batch (owner, 9 Nov 2026): the papers already read, checked again with no AI.
-  const id = await startBrainRun(db, { task: "paper", docId: list[0]!, scope: { items: [], figures: [] }, batch: { docs: list, label: label.slice(0, 120) }, ...(check ? { check: true } : {}), ...(shadow && !check ? { shadow: true } : {}) }, actorId, now);
+  const id = await startBrainRun(db, { task: "paper", docId: list[0]!, scope: { items: [], figures: [] }, batch: { docs: list, label: label.slice(0, 120) }, ...(check ? { check: true } : {}), ...(shadow && !check ? { shadow: true } : {}), ...(check && second ? { second: true } : {}) }, actorId, now);
   if (!id) return null;
   await claimPaper(db, list[0]!, id, now);
   await audit(db, { actorId, action: "brain.batch_start", entity: "job", entityId: id, detail: { papers: list.length, label: label.slice(0, 120) } }, now);
@@ -317,7 +318,7 @@ const readParams = (s: string): BrainParams | null => {
         }
         : undefined;
       const reader = typeof p.reader === "string" && isReader(p.reader) ? p.reader : undefined;
-      return { task: "paper", docId: p.docId, scope: { items: list(sc.items), figures: list(sc.figures) }, ...(batch ? { batch } : {}), ...(reader ? { reader } : {}), ...(p.check === true ? { check: true } : {}), ...(p.shadow === true && p.check !== true ? { shadow: true } : {}) };
+      return { task: "paper", docId: p.docId, scope: { items: list(sc.items), figures: list(sc.figures) }, ...(batch ? { batch } : {}), ...(reader ? { reader } : {}), ...(p.check === true ? { check: true } : {}), ...(p.shadow === true && p.check !== true ? { shadow: true } : {}), ...(p.second === true && p.check === true ? { second: true } : {}) };
     }
     return p?.task === "topics" && typeof p.syllabusId === "string" ? { task: "topics", syllabusId: p.syllabusId } : null;
   } catch {

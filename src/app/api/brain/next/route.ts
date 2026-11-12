@@ -44,7 +44,7 @@ export async function POST(request: Request) {
   if (!docId) return ended({});
   const next = await activeBrainRun(a.db, jobId);
   if (next?.task !== "paper") return json({ error: "no_run" }, 409);
-  const payload = await paperJobPayload(a.db, a.env.FILES, docId, next.scope, next.batch, await aiModels(a.db, a.env), brainLimits(), undefined, next.check, next.shadow);
+  const payload = await paperJobPayload(a.db, a.env.FILES, docId, next.scope, next.batch, await aiModels(a.db, a.env), brainLimits(), undefined, next.check, next.shadow, next.second);
   // The second try of the skipped papers waits a little first, so a busy spell has time to pass.
   return payload ? json({ ...payload, ...(step.retryPass ? { waitMs: 120_000 } : {}) }) : json({ error: "no_paper" }, 404);
 }

@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-12: Claude reads alone when Gemini cannot help; Check with Gemini later
+
+**What:** a paper reading no longer stops for Gemini. When Gemini is busy, out of its free limit, down, has no key, or answers badly, Claude reads the paper alone and the run finishes. All the PDF checks run (wording, marks, outline, notation, tables); only the Claude and Gemini comparison is missing. The rest of that run does not ask Gemini again, so it never waits on it twice. The reading is marked "alone (Gemini could not help)" in its score list. "Check with Gemini" (review screen) and "Check them with Gemini" (each subject's Read all card, under "Read by Claude alone") later run Gemini only on those papers, free: the checks compare the two readings and the reading is marked as checked. A Gemini reading left from before is dropped when Claude reads alone, so nothing compares against an old copy. Gemini alone ("Read with") and topic trees still need Gemini. A queued run held after Gemini ran out of its limit tries again after 30 minutes.
+
+**Why:** owner, 12 Nov 2026: Google refuses the card, so Gemini stays on its free limit, and the last two Maths benchmark runs stopped with "Gemini busy" before Claude was asked.
+
+**Tested:** unit tests for the Check with Gemini plan (only papers whose last reading Claude made alone) and the run it starts. Browser: Gemini down, then Claude reads alone and the run finishes, marked as Claude's alone; the review screen offers Check with Gemini; that run asks Gemini only, spends nothing on Claude, marks the reading checked, and the button goes (635 checks).
+
 ## 2026-11-12: Move or remove any stored file
 
 **What:** every file's review screen has "Move or remove this file" (under About this file, or in What we hold). Move to: a month and year; type, paper and variant stay, and the new name is built for you (`movedName`, `moveDocument` through `renameDocument`). It is refused when that session already has the file, when the year is outside the library, or for specimen and syllabus files. Remove from the library: deletes the file, its row, its readings and fixes (`removeDocument`, `forgetReadings`), then opens the subject's Documents. Both ask inline first, are owner only (the whole admin to edit), are audited, and are refused while an AI run is reading the file. Route `/admin/library/review/[id]/file`.

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireStaff, allowed, ADMIN_EDIT, ADMIN_VIEW } from "@/lib/auth/staff";
 import { getEnv } from "@/lib/env";
-import { AdminShell, Notice } from "@/components/AdminShell";
+import { AdminShell, FreeTag, Notice } from "@/components/AdminShell";
 import { CellLink, StatusLine } from "@/components/LibraryBits";
 import { Legend } from "@/components/LibraryTables";
 import { BRAIN, DOC_TYPE_LABELS, SESSION_LABELS } from "@/lib/config";
@@ -23,7 +23,7 @@ import { filterWords, hasTiers, planBatch, planBenchmark, ragOf, readFilter, rea
 import { batchCostCheck, estimateWords, usdWords } from "@/lib/brain/spend";
 import { benchFilesFor } from "@/lib/brain/benchmark";
 import { QUEUE_MESSAGES } from "@/lib/brain/labels";
-import { askWords, readQueue, startQueued } from "@/lib/brain/queue";
+import { askWords, planAsk, readQueue, startQueued } from "@/lib/brain/queue";
 
 export const metadata: Metadata = { title: "Library" };
 
@@ -131,6 +131,8 @@ export default async function SyllabusOverview({
   const benchFiles = benchFilesFor(code);
   const bench = owner && benchFiles.length ? await planBenchmark(env.DB, benchFiles, states) : null;
   const benchCost = bench?.toRead.length ? await batchCostCheck(env.DB, env, bench.toRead.map((d) => d.bytes)) : null;
+  // Read by Claude alone (owner, 12 Nov 2026: Gemini could not help): checked later by Gemini, free.
+  const aloneCount = owner ? (await planAsk(env.DB, { kind: "second", code }))?.docs.length ?? 0 : 0;
   const againCost = bench && !bench.toRead.length && bench.stored.length ? await batchCostCheck(env.DB, env, bench.stored.map((d) => d.bytes)) : null;
   // Reading and review in one line; the list itself is the Documents page (owner, 10 Nov 2026: it will grow).
   const sum = reviewSummary(await loadDocRows(env.DB, [code]));
@@ -263,6 +265,19 @@ export default async function SyllabusOverview({
                 </ActionForm>
               </>
             ) : <p className="notice m-0">Nothing to read: every stored paper in this choice is read already.</p>}
+          </div>
+        ) : null}
+        {aloneCount ? (
+          <div className="stack-tight" id="read-alone">
+            <h3 className="subtitle">Read by Claude alone</h3>
+            <p className="hint m-0">
+              {aloneCount} paper{aloneCount === 1 ? " was" : "s were"} read while Gemini could not help (busy, out of its
+              free limit or down), so nothing compared the two readings. Gemini can check {aloneCount === 1 ? "it" : "them"} now:
+              Claude is not asked, so it costs nothing.
+            </p>
+            <ActionForm action={`/admin/library/${code}/second`} messages={MESSAGES} yes="Yes" no="No" confirm={`Check ${aloneCount} with Gemini? Free.`}>
+              <button className="btn" type="submit">Check them with Gemini <FreeTag tip="Uses no paid AI credits: Gemini (free) reads them and our checks compare the two readings." /></button>
+            </ActionForm>
           </div>
         ) : null}
         {bench ? (
