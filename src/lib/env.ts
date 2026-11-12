@@ -9,6 +9,8 @@ export type AppEnv = CloudflareEnv & {
   GITHUB_TOKEN?: string;
   /** Shared with the GitHub secret of the same name; signs agent requests. */
   AGENT_SECRET?: string;
+  /** A dev session's key for loading its own paper readings (`/api/reader/*`, 32+ characters); the session's proxy adds it. */
+  READER_TOKEN?: string;
   GITHUB_REPO?: string;
   AGENT_WORKFLOW?: string;
   /** Subject brain workflow file (topic tree runs), and the models it uses. */

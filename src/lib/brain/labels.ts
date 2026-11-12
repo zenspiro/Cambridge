@@ -2,6 +2,7 @@
 
 /** Why a run stopped, by its reason code. */
 export const BRAIN_REASONS: Record<string, string> = {
+  session_stopped: "The dev session stopped loading its reading; nothing was saved.",
   never_started: "GitHub never started the run. Check that the Brain workflow exists on the main branch and that AGENT_SECRET is set in GitHub.",
   timeout: "The run went quiet for 30 minutes and was closed.",
   not_set_up: "Starting runs is not set up (GITHUB_TOKEN or the workflow name is missing).",

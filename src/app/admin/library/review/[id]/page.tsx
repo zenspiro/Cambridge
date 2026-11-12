@@ -324,7 +324,7 @@ function ReadingCard({ docId, view, choices, run, busy, facts, canFix, canRead, 
             {[...view.row.scores].reverse().map((s) => (
               <li key={s.at}>
                 <ScoreBadge score={s.score} />{" "}
-                <span>{s.claude ? `${modelName(s.claude)}${s.gemini ? `, checked by ${modelName(s.gemini)}${s.checkedLater ? " later" : ""}` : " alone (Gemini could not help)"}` : s.gemini ? `${modelName(s.gemini)} alone` : "Claude"}</span>{" "}
+                <span>{s.session ? "Read in a dev session" : s.claude ? `${modelName(s.claude)}${s.gemini ? `, checked by ${modelName(s.gemini)}${s.checkedLater ? " later" : ""}` : " alone (Gemini could not help)"}` : s.gemini ? `${modelName(s.gemini)} alone` : "Claude"}</span>{" "}
                 <span className="muted">{dateFmt.format(s.at)}, {s.score.clean} of {s.score.items} parts with no flag</span>
               </li>
             ))}

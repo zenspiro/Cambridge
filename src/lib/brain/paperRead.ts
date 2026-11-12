@@ -77,7 +77,7 @@ export type PaperRow = {
 };
 
 /** One full reading's accuracy: the AIs' own reading before it was merged with what was kept. */
-export type ReadScore = { at: number; claude: string; gemini: string; score: PaperScore; checkedLater?: boolean };
+export type ReadScore = { at: number; claude: string; gemini: string; score: PaperScore; checkedLater?: boolean; /** Read in a dev session, not by an AI. */ session?: boolean };
 
 /** The last full reading was Claude's alone (owner, 12 Nov 2026: Gemini could not help), not yet checked by Gemini. */
 export const readByClaudeAlone = (scores: readonly ReadScore[]) => {
@@ -95,7 +95,7 @@ export function cleanScores(v: unknown): ReadScore[] {
     const score = items !== null && clean !== null && red !== null && clean <= items && red <= items ? storedScore(items, clean, red) : null;
     const claude = typeof r.claude === "string" && CLAUDE_MODEL_RE.test(r.claude) ? r.claude : "";
     const gemini = typeof r.gemini === "string" && GEMINI_MODEL_RE.test(r.gemini) ? r.gemini : "";
-    return at !== null && score ? [{ at, claude, gemini, score, ...(gemini && typeof r.checkedAt === "number" ? { checkedLater: true } : {}) }] : [];
+    return at !== null && score ? [{ at, claude, gemini, score, ...(gemini && typeof r.checkedAt === "number" ? { checkedLater: true } : {}), ...(r.by === "session" ? { session: true } : {}) }] : [];
   });
 }
 
@@ -280,7 +280,7 @@ export type SaveResult = "ok" | "no_run" | "bad" | "too_big";
  * Saves a reading from the brain script (already merged with what was there, flags worked out). `final` closes the
  * run; a first save after Claude's reading keeps the run open for the drawings, so a failed drawing never loses it.
  */
-export async function savePaperReading(db: Db, bucket: Bucket, jobId: string, docId: string, raw: Record<string, unknown>, final: boolean, now = Date.now(), closeRun = true, how: { full?: boolean; shadow?: boolean } = {}): Promise<SaveResult> {
+export async function savePaperReading(db: Db, bucket: Bucket, jobId: string, docId: string, raw: Record<string, unknown>, final: boolean, now = Date.now(), closeRun = true, how: { full?: boolean; shadow?: boolean; session?: boolean } = {}): Promise<SaveResult> {
   const doc = await paperDoc(db, docId);
   if (!doc || !PAPER_KINDS.includes(doc.docType as PaperKind)) return "bad";
   const content = cleanPaper(raw.content, doc.docType as PaperKind);
@@ -320,9 +320,10 @@ export async function savePaperReading(db: Db, bucket: Bucket, jobId: string, do
   // AIs' reading before it was merged with what was kept. A mark scheme's marks against its question paper count.
   // The AI's own copy (owner, 12 Nov 2026): the benchmark scores this, so a person's fixes never count as the AI's.
   // Kept from every whole-paper reading of a paper nobody has fixed by hand (automatic fixes are the reader's own).
-  if (final && raw.read !== false && how.full && !(await handFixed(db, docId))) await aiCopy();
+  // A reading made in a dev session is never the AI's own copy (the benchmark measures the AI).
+  if (final && raw.read !== false && how.full && !how.session && !(await handFixed(db, docId))) await aiCopy();
   // Claude read alone (owner, 12 Nov 2026: Gemini could not help): an older Gemini reading no longer matches it.
-  if (final && raw.read !== false && how.full && models.gemini === "" && typeof models.claude === "string" && models.claude) await bucket.delete(key(docId, "gemini"));
+  if (final && raw.read !== false && how.full && !how.session && models.gemini === "" && typeof models.claude === "string" && models.claude) await bucket.delete(key(docId, "gemini"));
   // Check with Gemini: the last reading, made by Claude alone, is marked as checked by this Gemini model.
   if (final && typeof raw.checkedBy === "string" && GEMINI_MODEL_RE.test(raw.checkedBy) && raw.gemini) {
     const stored = await db.prepare(`SELECT scores FROM paper_read WHERE doc_id = ?1`).bind(docId).first<{ scores: string }>();
@@ -345,7 +346,8 @@ export async function savePaperReading(db: Db, bucket: Bucket, jobId: string, do
       if (qp) scoreFlags = [...scoreFlags, ...marksAgainstPaper({ items: parts }, qp)];
     }
     const sc = paperScore(parts.length, scoreFlags);
-    if (sc) await db.prepare(`UPDATE paper_read SET first_items = ?2, first_clean = ?3, first_red = ?4, first_at = ?5 WHERE doc_id = ?1 AND first_items IS NULL`).bind(docId, sc.items, sc.clean, sc.red, now).run();
+    // The first reading's score is the AI's read accuracy: a session's reading never sets it.
+    if (sc && !how.session) await db.prepare(`UPDATE paper_read SET first_items = ?2, first_clean = ?3, first_red = ?4, first_at = ?5 WHERE doc_id = ?1 AND first_items IS NULL`).bind(docId, sc.items, sc.clean, sc.red, now).run();
     if (sc && fresh) {
       const m = raw.models && typeof raw.models === "object" ? (raw.models as Record<string, unknown>) : {};
       const stored = await db.prepare(`SELECT scores FROM paper_read WHERE doc_id = ?1`).bind(docId).first<{ scores: string }>();
@@ -354,6 +356,7 @@ export async function savePaperReading(db: Db, bucket: Bucket, jobId: string, do
         at: now, items: sc.items, clean: sc.clean, red: sc.red,
         claude: typeof m.claude === "string" && CLAUDE_MODEL_RE.test(m.claude) ? m.claude : "",
         gemini: typeof m.gemini === "string" && GEMINI_MODEL_RE.test(m.gemini) ? m.gemini : "",
+        ...(how.session ? { by: "session" } : {}),
       });
       await db.prepare(`UPDATE paper_read SET scores = ?2 WHERE doc_id = ?1`).bind(docId, JSON.stringify(list)).run();
     }

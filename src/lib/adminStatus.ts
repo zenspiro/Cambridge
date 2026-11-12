@@ -32,7 +32,7 @@ export function describeRun(r: { id: string; type: string; status: string; param
       const what = typeof b.label === "string" && b.label ? b.label : p.check ? "checks again" : "Read all";
       return { id: r.id, label: `${p.check ? "Checking" : "Reading"} ${what}: paper ${at} of ${b.docs.length}`, href: code ? `/admin/library/${code}#read-all` : `/admin/library/review/${encodeURIComponent(p.docId)}`, step: r.step, queued };
     }
-    if (p.task === "paper" && typeof p.docId === "string") return { id: r.id, label: "Reading a paper", href: `/admin/library/review/${encodeURIComponent(p.docId)}`, step: r.step, queued };
+    if (p.task === "paper" && typeof p.docId === "string") return { id: r.id, label: p.session ? "Loading a reading from a dev session" : "Reading a paper", href: `/admin/library/review/${encodeURIComponent(p.docId)}`, step: r.step, queued };
     if (p.task === "check") return { id: r.id, label: "AI setup check", href: "/admin/ai", step: r.step, queued };
     return { id: r.id, label: "Drafting a topic tree", href: "/admin/topics", step: r.step, queued };
   }

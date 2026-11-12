@@ -13,7 +13,7 @@ export type PaperScope = { items: string[]; figures: string[] };
 export type BrainParams =
   | { task: "topics"; syllabusId: string }
   | { task: "check"; which: "claude" | "gemini" | null }
-  | { task: "paper"; docId: string; scope: PaperScope; batch?: Batch; reader?: string; check?: boolean; shadow?: boolean; second?: boolean };
+  | { task: "paper"; docId: string; scope: PaperScope; batch?: Batch; reader?: string; check?: boolean; shadow?: boolean; second?: boolean; session?: boolean };
 /**
  * Read all (owner, 8 Nov 2026): one run reads these papers in turn; `docId` is the one being read now. Gemini down
  * (owner, 12 Nov 2026): a paper Gemini could not read is `skipped` and the run moves on; once the list is done the
@@ -102,6 +102,21 @@ export async function startPaperRun(db: Db, docId: string, scope: PaperScope, ac
 }
 
 const DOC_ID_RE = /^[A-Za-z0-9_-]{10,64}$/;
+
+/**
+ * A reading made in a dev session (owner, 12 Nov 2026: "you are going to read the pdfs and load them in to the
+ * database, with me reviewing"): a paper run claimed at once, saved through the same door as the AI's readings.
+ * Null when another brain run is going on.
+ */
+export async function startSessionRun(db: Db, docId: string, now = Date.now()): Promise<string | null> {
+  if (!DOC_ID_RE.test(docId)) return null;
+  const id = await startBrainRun(db, { task: "paper", docId, scope: { items: [], figures: [] }, session: true }, "session-reader", now);
+  if (!id) return null;
+  await claimPaper(db, docId, id, now);
+  await claimBrainRun(db, id, null, now);
+  await audit(db, { actorId: "session-reader", action: "brain.session_start", entity: "source_document", entityId: docId, detail: { job: id } }, now);
+  return id;
+}
 
 /** Read all: one run for many papers, the first one claimed now (each later one when the script asks for it). */
 export async function startBatchRun(db: Db, docs: readonly string[], label: string, actorId: string, now = Date.now(), check = false, shadow = false, second = false): Promise<string | null> {
@@ -318,7 +333,7 @@ const readParams = (s: string): BrainParams | null => {
         }
         : undefined;
       const reader = typeof p.reader === "string" && isReader(p.reader) ? p.reader : undefined;
-      return { task: "paper", docId: p.docId, scope: { items: list(sc.items), figures: list(sc.figures) }, ...(batch ? { batch } : {}), ...(reader ? { reader } : {}), ...(p.check === true ? { check: true } : {}), ...(p.shadow === true && p.check !== true ? { shadow: true } : {}), ...(p.second === true && p.check === true ? { second: true } : {}) };
+      return { task: "paper", docId: p.docId, scope: { items: list(sc.items), figures: list(sc.figures) }, ...(batch ? { batch } : {}), ...(reader ? { reader } : {}), ...(p.check === true ? { check: true } : {}), ...(p.shadow === true && p.check !== true ? { shadow: true } : {}), ...(p.second === true && p.check === true ? { second: true } : {}), ...(p.session === true ? { session: true } : {}) };
     }
     return p?.task === "topics" && typeof p.syllabusId === "string" ? { task: "topics", syllabusId: p.syllabusId } : null;
   } catch {

@@ -942,6 +942,31 @@ try {
   check(anon.status !== 200 && !(anon.headers.get("content-type") ?? "").includes("json"), "run state needs the admin");
   check((await fetch(`${BASE}/api/brain/reading`, { method: "POST", body: "{}" })).status === 401 && (await fetch(`${BASE}/api/brain/saved`, { method: "POST", body: "{}" })).status === 401, "the kept-reading endpoints refuse unsigned requests");
 
+  // 12. Readings loaded from a dev session (owner, 12 Nov 2026): a bearer key, saved like the AI's, labelled.
+  const READER = vars.match(/^READER_TOKEN=(.*)$/m)?.[1]?.trim();
+  const reader = (path, body, token = READER) => fetch(`${BASE}/api/reader/${path}`, { method: "POST", headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) });
+  check((await reader("start", { docId: paperId }, "")).status === 401 && (await reader("start", { docId: paperId }, "x".repeat(40))).status === 401, "the reader door refuses a missing or wrong key");
+  sql(`UPDATE job SET status = 'failed' WHERE type = 'brain' AND status IN ('queued', 'running')`);
+  const firstBefore = rows(`SELECT first_items FROM paper_read WHERE doc_id = '${paperId}'`)[0]?.first_items ?? null;
+  const fixedFirst = await reader("start", { docId: paperId });
+  check(fixedFirst.status === 409 && (await fixedFirst.json()).error === "hand_fixed", "a paper fixed by hand is not replaced unless the session says so");
+  const rst = await reader("start", { docId: paperId, replace: true });
+  const sj = await rst.json();
+  check(rst.status === 200 && typeof sj.jobId === "string" && sj.kind === "qp", "the session's run starts");
+  check((await reader("start", { docId: paperId, replace: true })).status === 409, "one brain run at a time");
+  const sessionContent = { kind: "qp", totalMarks: 3, figures: [], items: [
+    { number: "1", page: 2, text: "A ball is dropped.", marks: null, options: [], answerLines: 0, figures: [], guidance: "" },
+    { number: "1(a)", page: 2, text: "State the force on it.", marks: 1, options: [], answerLines: 1, figures: [], guidance: "" },
+    { number: "1(b)", page: 2, text: "Explain why it speeds up.", marks: 2, options: [], answerLines: 2, figures: [], guidance: "" },
+  ] };
+  const sv = await reader("paper", { jobId: sj.jobId, content: sessionContent, pages: [], flags: [], fresh: { items: sessionContent.items.map((i) => ({ number: i.number, marks: i.marks })), flags: [] }, models: { claude: "claude-haiku-5-5" } });
+  check(sv.status === 200, `the session's reading is saved${sv.status !== 200 ? ": " + sv.status : ""}`);
+  check(rows(`SELECT status FROM job WHERE id = '${sj.jobId}'`)[0]?.status === "succeeded", "its run closes");
+  check((rows(`SELECT first_items FROM paper_read WHERE doc_id = '${paperId}'`)[0]?.first_items ?? null) === firstBefore, "the AI's first read accuracy is left alone");
+  await page.goto(`${BASE}/admin/library/review/${paperId}`);
+  check((await page.locator(".score-list li").first().textContent())?.includes("Read in a dev session"), "the score list says it was read in a dev session, not by an AI");
+  check((await reader("paper", { jobId: sj.jobId, content: sessionContent })).status === 409, "a closed run takes nothing more");
+
   check(errors.length === 0, `no script errors${errors.length ? ": " + errors.join(" | ") : ""}`);
 } finally {
   await browser.close();
