@@ -69,7 +69,14 @@ test("agent and brain endpoints are public only behind a signed request", () => 
     const code = readFileSync(join(appDir, r), "utf8").replace(/\/\/.*$/gm, "");
     assert.match(code, /\bagentRequest\(request/, `${r} must verify the signature with agentRequest()`);
   }
-  for (const r of routes(appDir).filter((x) => x.startsWith("api/") && !signed(x))) {
+  // Readings from a dev session (owner, 12 Nov 2026): public only behind the bearer key.
+  const keyed = routes(appDir).filter((x) => x.startsWith("api/reader/"));
+  for (const r of keyed) {
+    assert.ok(PUBLIC_ROUTES.includes(r), `${r} should be listed as public (key)`);
+    const code = readFileSync(join(appDir, r), "utf8").replace(/\/\/.*$/gm, "");
+    assert.match(code, /\breaderRequest\(request/, `${r} must check the key with readerRequest()`);
+  }
+  for (const r of routes(appDir).filter((x) => x.startsWith("api/") && !signed(x) && !x.startsWith("api/reader/"))) {
     if (r === "api/auth/[...all]/route.ts") continue;
     assert.fail(`${r}: new api routes need their own rule here`);
   }

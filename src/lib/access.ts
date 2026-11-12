@@ -42,4 +42,9 @@ export const PUBLIC_ROUTES: readonly string[] = [
   "api/brain/paper/route.ts",
   "api/brain/figpage/route.ts",
   "api/brain/next/route.ts",
+  // Readings loaded from a dev session: a bearer key (READER_TOKEN), shut without it.
+  "api/reader/start/route.ts",
+  "api/reader/figpage/route.ts",
+  "api/reader/paper/route.ts",
+  "api/reader/fail/route.ts",
 ];

@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-12: Readings loaded from a dev session
+
+**What:** a door for paper readings made in a dev session: `/api/reader/start`, `/figpage`, `/paper`, `/fail`, open only with the Worker secret `READER_TOKEN` as a bearer key (the session's proxy adds it). A reading goes through the same cleaning, checks, automatic fixes and figure cutting as the AI's (`scripts/reader/load.ts` runs the script's steps with Poppler in the session), is scored as "Read in a dev session", and never becomes the AI's own copy or first read accuracy, so the benchmark still measures the AI. One brain run at a time; a paper fixed by hand is only replaced when the session says so.
+
+**Why:** owner, 12 Nov 2026: "you are going to read the pdfs and load them in to the database, with me reviewing, and at the same time you keep updating the reading engine to evolve it."
+
+**Tested:** unit test for the key check, access test rule for the routes. Browser: a missing or wrong key refused, a hand-fixed paper refused without replace, the run starts, one run at a time, the reading saved and the run closed, the AI's first score untouched, the score list says "Read in a dev session" (645 checks). Dry run of the loader on 0478 Nov 2023 P22: 3 flags (two figure boxes to check, Gemini missing the 3(a) table) against Haiku's 6.
+
 ## 2026-11-12: Question numbers put right from the printed page
 
 **What:** after every reading of a question paper (and every "Run the checks again"), each page's parts are given the question numbers printed beside them when they line up one to one with the printed labels and their [marks]. Kept only when no kind of flag grows; one automatic fix per page, under Changes ("Question numbers put right from the printed page") with Undo; never on a part fixed by hand or a page whose fix was undone. Gemini's copy is put right the same way, so the two are compared like for like. Claude's (and Gemini's) instructions now say the question number is the one at the left margin, a later page's part belongs to the last question printed, and code line numbers, table numbers and page numbers are never question numbers.
