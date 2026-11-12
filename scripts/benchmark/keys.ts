@@ -135,15 +135,18 @@ function draftQp(file: string, outline: OutlinePart[], cover: string): BenchKey 
   for (const x of outline) {
     const seen = new Set<string>();
     let from = 0;
-    for (const raw of notationTokens(x.text)) {
-      const at = x.text.indexOf(raw, from);
+    // The last part runs on into the reference pages at the back ("Notes for use in qualitative analysis", the
+    // Periodic Table), which no reading keeps as the part's text.
+    const text = x.text.split(/Notes for use in qualitative analysis|The Periodic Table of Elements/)[0]!;
+    for (const raw of notationTokens(text)) {
+      const at = text.indexOf(raw, from);
       from = at + raw.length;
-      let token = reliable(raw.replace(/^[(\[]+/, ""), x.text.slice(from));
+      let token = reliable(raw.replace(/^[(\[]+/, ""), text.slice(from));
       // A lettered label (R_{1}, A_{2}) may be only a diagram's label, which no reading keeps as text: kept when the
       // question's words name it too (it is printed twice in the part).
-      if (token && /^[A-Z]_\{[a-z0-9]\}$/.test(token) && x.text.split(token).length < 3) token = null;
+      if (token && /^[A-Z]_\{[a-z0-9]\}$/.test(token) && text.split(token).length < 3) token = null;
       // A unit after "/" is an axis or column heading ("distance / 10^{25} m"), often inside a graph no reading keeps.
-      if (token && /\/\s*$/.test(x.text.slice(0, at))) token = null;
+      if (token && /\/\s*$/.test(text.slice(0, at))) token = null;
       if (!token || seen.has(token) || seen.size >= 6) continue;
       seen.add(token);
       notation.push({ part: x.number, token });
