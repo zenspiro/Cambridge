@@ -5,7 +5,8 @@ import { allowed, staffForDoc, ADMIN_EDIT } from "@/lib/auth/staff";
 import { redirect } from "next/navigation";
 import { getEnv } from "@/lib/env";
 import { AdminShell, FreeTag } from "@/components/AdminShell";
-import { docTypeLabel } from "@/lib/config";
+import { docTypeLabel, SESSION_LABELS } from "@/lib/config";
+import { getLibrarySettings, libraryYears } from "@/lib/settings";
 import { listSubjects, subjectLabel } from "@/lib/library/catalog";
 import { describeFile, loadPapers, paperLookup } from "@/lib/library/papers";
 import { dateFmt, formatBytes, sessionLabel } from "@/lib/library/labels";
@@ -44,6 +45,17 @@ const MESSAGES = {
   not_set_up: "Starting runs is not set up yet (GITHUB_TOKEN).",
   github: "GitHub refused to start the run. Check the GITHUB_TOKEN secret.",
   bad: "That did not work. Please reload the page and try again.",
+  // Move or remove this file (owner, 12 Nov 2026).
+  ok_moved: "Moved. The file now sits in the session you picked.",
+  ok_removed: "Removed from the library.",
+  same_place: "It is in that session already.",
+  same_name: "That session already has this file. Remove that one first, then move this one.",
+  year: "That year is outside the library years.",
+  no_syllabus: "No syllabus version covers that session.",
+  name: "This file cannot be moved: its name has no exam session (a specimen or syllabus file).",
+  gone: "This file is no longer in the library.",
+  file_busy: "An AI run is reading this file. Wait for it to finish first.",
+  storage: "The file could not be copied in storage. Please try again.",
 };
 
 const PAPER_STAGES = ["pdf", "gemini", "claude", "figures", "checks", "save"] as const;
@@ -95,6 +107,39 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
       <dt>Added</dt><dd>{ORIGIN[doc.origin]}{doc.siteName ? ` from ${doc.siteName}` : host ? ` from ${host}` : ""}, {dateFmt.format(doc.acquiredAt)}</dd>
     </dl>
   );
+  // Move or remove this file (owner, 12 Nov 2026: a file uploaded under the wrong month could not be put right).
+  const years = canRead ? libraryYears(await getLibrarySettings(env.DB)).sort((a, b) => b - a) : [];
+  const fileTools = canRead ? (
+    <details className="file-tools" id="file-tools">
+      <summary className="link">Move or remove this file</summary>
+      <div className="stack-tight">
+        {doc.session !== "y" ? (
+          <ActionForm className="form-actions" action={`/admin/library/review/${encodeURIComponent(doc.id)}/file`} messages={MESSAGES} yes="Yes" no="No" confirm="Move this file to that session?">
+            <input type="hidden" name="do" value="move" />
+            <label className="field">
+              <span className="label-inline">Month</span>
+              <select className="input" name="session" defaultValue={doc.session}>
+                {(["m", "s", "w"] as const).map((s) => <option key={s} value={s}>{SESSION_LABELS[s]}</option>)}
+              </select>
+            </label>
+            <label className="field">
+              <span className="label-inline">Year</span>
+              <select className="input" name="year" defaultValue={String(doc.year)}>
+                {years.map((y) => <option key={y} value={y}>{y}</option>)}
+              </select>
+            </label>
+            <button className="btn" type="submit">Move here</button>
+          </ActionForm>
+        ) : null}
+        <p className="hint m-0">Moving keeps the type, paper and variant; only the session changes. Its readings stay with it.</p>
+        <ActionForm action={`/admin/library/review/${encodeURIComponent(doc.id)}/file`} messages={MESSAGES} yes="Yes, remove" no="No" follow
+          confirm="Remove this file and its readings?">
+          <input type="hidden" name="do" value="remove" />
+          <button className="btn btn-danger" type="submit">Remove from the library</button>
+        </ActionForm>
+      </div>
+    </details>
+  ) : null;
 
   return (
     <AdminShell
@@ -118,7 +163,7 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
           </nav>
         ) : <span />}
       </div>
-      {view && choices?.length ? <ReadingCard docId={doc.id} view={view} choices={choices} run={run} busy={busy} facts={facts} canFix={canFix} canRead={canRead} reviewer={reviewer} /> : null}
+      {view && choices?.length ? <ReadingCard docId={doc.id} view={view} choices={choices} run={run} busy={busy} facts={<>{facts}{fileTools}</>} canFix={canFix} canRead={canRead} reviewer={reviewer} /> : null}
       {view?.content ? (
         <PaperReview
           docId={doc.id}
@@ -144,6 +189,7 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
           <h2 className="review-head">What we hold</h2>
           <div className="review-body stack-tight">
             {facts}
+            {fileTools}
             {related.session.length > 0 ? (
               <>
                 <h3 className="label-inline">{doc.docType === "er" || doc.docType === "gt" ? "Question papers of this session" : "This session"}</h3>

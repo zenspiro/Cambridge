@@ -16,6 +16,7 @@ export const metadata: Metadata = { title: "Documents" };
 
 const MESSAGES = {
   ok_check: "Checking again started. Progress shows above; new flags show on each paper.",
+  ok_removed: "Removed from the library, with its readings.",
   check_none: "No paper of this subject has been read yet, so there is nothing to check.",
   busy: "Too many runs this hour. Please wait a little.",
   ...QUEUE_MESSAGES,

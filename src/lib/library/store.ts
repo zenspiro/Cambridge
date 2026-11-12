@@ -5,7 +5,7 @@ import { getLibrarySettings } from "../settings.ts";
 import type { Bucket, Db } from "../db.ts";
 import { randomId } from "../auth/crypto.ts";
 import { audit } from "../auth/session.ts";
-import { parseCambridgeName, storageKey } from "./names.ts";
+import { movedName, parseCambridgeName, storageKey } from "./names.ts";
 import * as Q from "./queries.ts";
 
 export type StoreReason =
@@ -100,7 +100,7 @@ export async function storeDocument(db: Db, bucket: Bucket, input: StoreInput, n
   return { fileName: p.fileName, ok: true, id: reserved.id };
 }
 
-export type FixResult = "ok_renamed" | "ok_removed" | "gone" | "name" | "year" | "no_syllabus" | "same_name" | "storage";
+export type FixResult = "ok_renamed" | "ok_removed" | "gone" | "name" | "year" | "no_syllabus" | "same_name" | "storage" | "same_place";
 
 type DocRow = { id: string; file_name: string; r2_key: string; status: string };
 
@@ -140,4 +140,25 @@ export async function removeDocument(db: Db, bucket: Bucket, id: string, actorId
   await db.prepare(`DELETE FROM source_document WHERE id = ?1`).bind(id).run();
   await audit(db, { actorId, action: "source.remove", entity: "source_document", entityId: id, detail: { file: row.file_name } }, now);
   return "ok_removed";
+}
+
+/**
+ * Move a stored file to another exam session (owner, 12 Nov 2026: an examiner report uploaded under the wrong month):
+ * the same file under the name it should have had, through `renameDocument`, so the new place must be free and in the
+ * library. Its readings stay with it (they belong to the file, not the name).
+ */
+export async function moveDocument(db: Db, bucket: Bucket, id: string, session: "m" | "s" | "w", year: number, actorId: string, now = Date.now()): Promise<FixResult> {
+  const row = await db.prepare(`SELECT file_name, status FROM source_document WHERE id = ?1`).bind(id).first<{ file_name: string; status: string }>();
+  if (!row || row.status !== "stored") return "gone";
+  const to = movedName(row.file_name, session, year);
+  if (!to) return "name";
+  if (to === row.file_name) return "same_place";
+  return renameDocument(db, bucket, id, to, actorId, now);
+}
+
+/** A removed paper's readings in the app files (content, pages, Gemini's, the AI's copy, figure pages). */
+export async function forgetReadings(files: Bucket, id: string): Promise<void> {
+  const base = `papers/${encodeURIComponent(id)}/`;
+  const keys = ["content", "pages", "gemini", "ai", ...Array.from({ length: 60 }, (_, i) => `art-${i + 1}`)].map((k) => `${base}${k}.json`);
+  for (const k of keys) await files.delete(k);
 }

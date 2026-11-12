@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-12: Move or remove any stored file
+
+**What:** every file's review screen has "Move or remove this file" (under About this file, or in What we hold). Move to: a month and year; type, paper and variant stay, and the new name is built for you (`movedName`, `moveDocument` through `renameDocument`). It is refused when that session already has the file, when the year is outside the library, or for specimen and syllabus files. Remove from the library: deletes the file, its row, its readings and fixes (`removeDocument`, `forgetReadings`), then opens the subject's Documents. Both ask inline first, are owner only (the whole admin to edit), are audited, and are refused while an AI run is reading the file. Route `/admin/library/review/[id]/file`.
+
+**Why:** owner, 12 Nov 2026: a Maths examiner report was uploaded under the wrong month and could not be fixed. Read live: "0580_w24_er.pdf" is really Nov 2023's report ("0580 Mathematics November 2023"), and Nov 2023 has none.
+
+**Tested:** unit tests for the new name, a move (row, storage key), a move into a taken place, and readings forgotten on remove. Browser: an examiner report uploaded as Nov 2024, moved to Nov 2023, then removed (627 checks pass).
+
 ## 2026-11-12: Run queue, Gemini skips, the AI's own copy, shorter confirms
 
 **What:** nine fixes from running the benchmark reads.

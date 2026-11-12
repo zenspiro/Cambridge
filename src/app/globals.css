@@ -469,6 +469,8 @@
   .facts { @apply grid grid-cols-[9rem_minmax(0,1fr)] gap-x-4 gap-y-2 text-base; }
   .facts dt { @apply font-medium text-muted; }
   .facts dd { @apply m-0 break-words; }
+  .file-tools { @apply mt-3 border-t border-line pt-3; }
+  .file-tools > summary { @apply mb-2; }
   .model-detail { @apply mt-1 text-sm; }
   /* AI setup (owner, 6 Nov 2026): the two AIs side by side, the usage dashboard, prices and the cap. */
   .ai-pair { @apply grid gap-4 lg:grid-cols-2; }

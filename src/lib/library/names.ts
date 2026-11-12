@@ -73,6 +73,16 @@ export function parseCambridgeName(raw: string): ParsedName | null {
 }
 
 /** Storage key in the cambridge-source bucket: code/year/session/file. */
+/**
+ * The same file in another exam session (owner, 12 Nov 2026: a file uploaded under the wrong month): code, type, paper
+ * and variant kept, only the session and year changed. Null for a specimen or version document, or a name we cannot read.
+ */
+export function movedName(fileName: string, session: "m" | "s" | "w", year: number): string | null {
+  const m = /^(\d{4})_([msw])(\d{2})_(.+\.pdf)$/.exec(fileName.trim().toLowerCase());
+  if (!m || !Number.isInteger(year) || year < 2000 || year > 2099) return null;
+  return `${m[1]}_${session}${String(year % 100).padStart(2, "0")}_${m[4]}`;
+}
+
 export function storageKey(p: ParsedName): string {
   return `${p.code}/${p.year}/${p.session}/${p.fileName}`;
 }
