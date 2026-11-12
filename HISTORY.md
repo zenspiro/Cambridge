@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-12: Question numbers put right from the printed page
+
+**What:** after every reading of a question paper (and every "Run the checks again"), each page's parts are given the question numbers printed beside them when they line up one to one with the printed labels and their [marks]. Kept only when no kind of flag grows; one automatic fix per page, under Changes ("Question numbers put right from the printed page") with Undo; never on a part fixed by hand or a page whose fix was undone. Gemini's copy is put right the same way, so the two are compared like for like. Claude's (and Gemini's) instructions now say the question number is the one at the left margin, a later page's part belongs to the last question printed, and code line numbers, table numbers and page numbers are never question numbers.
+
+**Why:** owner, 12 Nov 2026 ("go A" and update Claude's instructions): the benchmark showed parts read under the wrong question (0610 Jun 2024 P42's 2(d) as 7(d), 0620 Jun 2025 P42's 3(d) as 7(d), 0478 Nov 2023 P22 shifted by pseudocode line numbers), counted as missing.
+
+**Tested:** dry run on the stored readings of all 48 benchmark question papers (local, no AI): 7 papers renumbered, tuning question papers 94.3% to 95.5% of checks, 0610 Jun 2024 P42 and 0620 Jun 2025 P42 to 100%, 0478 Nov 2023 P22 67% to 90%, no paper worse. Unit tests for the rule, what it leaves alone, saving, Changes and Undo. Browser suite 636 checks.
+
 ## 2026-11-12: Benchmark baseline saved
 
 **What:** the first scores of all six subjects' benchmark papers are kept as `benchmark/baseline.json` (check results only, never wording). Tuning set 94.1% of 3,286 checks, locked set 91.6% of 1,487. From now on `score.ts` fails when a check that passed here fails. Details and what is wrong: `docs/benchmark.md`.

@@ -229,6 +229,11 @@ export function fixView(r: { id: string; action: string; item: string | null; fl
     what = `Added figure ${b.addfigure} to this part`;
   } else if (b.figure) {
     what = "Moved the figure's box";
+  } else if (r.action === "pdf" && Array.isArray(b.renumber)) {
+    const list = (b.renumber as unknown[]).flatMap((x) => (x && typeof x === "object" ? [x as Record<string, unknown>] : []));
+    what = `Question numbers put right from the printed page (page ${String(b.page ?? "?")})`;
+    before = list.map((x) => text(x.from)).join(", ");
+    after = list.map((x) => text(x.to)).join(", ");
   } else if (r.action === "pdf" && typeof b.lead === "string") {
     what = `Gave question ${b.lead}'s lead-in its own part`;
     before = text(item?.text);
@@ -368,6 +373,21 @@ export async function savePaperReading(db: Db, bucket: Bucket, jobId: string, do
         lead ? { lead } : { text: str(f.text, BRAIN.maxItemText), marks: before.marks }, AUTO_ACTOR, now2);
     }
   }
+  // Question numbers the checks put right from the printed page (owner, 12 Nov 2026), one fix per page with Undo.
+  if (final && Array.isArray(raw.renumber)) {
+    for (const [k, x] of raw.renumber.slice(0, BRAIN.maxPaperItems).entries()) {
+      const f = x && typeof x === "object" ? (x as Record<string, unknown>) : {};
+      const flagKey = str(f.key, 80);
+      const page = typeof f.page === "number" && Number.isInteger(f.page) && f.page > 0 && f.page <= 500 ? f.page : 0;
+      const renames = cleanRenames(f.renames);
+      const before = cleanPaper({ items: Array.isArray(f.before) ? f.before : [] }, doc.docType as PaperKind).items;
+      if (flagKey !== `structure:p${page}:numbers` || !renames.length || !renames.every((r) => content.items.some((i) => i.number === r.to && i.page === page))) continue;
+      const g = f.gemini && typeof f.gemini === "object" ? (f.gemini as Record<string, unknown>) : null;
+      const gem = g ? { renames: cleanRenames(g.renames), items: cleanPaper({ items: Array.isArray(g.items) ? g.items : [] }, doc.docType as PaperKind).items } : null;
+      await recordFix(db, docId, "pdf", renames[0]!.to, flagKey, { renumber: renames, page, items: before, flags: cleanFlags(f.flags), merge: true, ...(gem?.renames.length ? { gemini: gem } : {}) },
+        { renumber: renames }, AUTO_ACTOR, now + k);
+    }
+  }
   if (final) {
     // A batch (Read all) stays open for its next paper; the script asks for it and the last one closes the run.
     if (closeRun) await db.prepare(`UPDATE job SET status = 'succeeded', progress = 100, finished_at = ?2, step = NULL WHERE id = ?1 AND type = 'brain' AND status = 'running'`).bind(jobId, now).run();
@@ -415,6 +435,37 @@ export async function autoHold(db: Db, doc: Pick<DocInfo, "id" | "code">): Promi
 }
 
 // ---------- Fixes ----------
+
+const PART_NUMBER = /^\d{1,2}(\([a-z]{1,4}\)){0,3}$/;
+/** Renames as the script sent them: part numbers only, each part once. */
+function cleanRenames(raw: unknown): { from: string; to: string }[] {
+  if (!Array.isArray(raw)) return [];
+  const out = raw.slice(0, BRAIN.maxPaperItems).flatMap((x) => {
+    const r = x && typeof x === "object" ? (x as Record<string, unknown>) : {};
+    return typeof r.from === "string" && typeof r.to === "string" && PART_NUMBER.test(r.from) && PART_NUMBER.test(r.to) ? [{ from: r.from, to: r.to }] : [];
+  });
+  return new Set(out.map((r) => r.to)).size === out.length ? out : [];
+}
+
+/**
+ * A page's renumbering undone: each renamed part gets its old number back (its old self when it is unchanged since,
+ * else its number only, so later edits stay). Null when a part is gone or an old number is taken again. Pure.
+ */
+export function unrename(c: PaperContent, page: number, renames: readonly { from: string; to: string }[], old: readonly PaperItem[]): PaperContent | null {
+  if (!renames.length) return null;
+  const taken = new Set(c.items.filter((i) => !(i.page === page && renames.some((r) => r.to === i.number))).map((i) => i.number));
+  if (renames.some((r) => taken.has(r.from) || !c.items.some((i) => i.page === page && i.number === r.to))) return null;
+  return {
+    ...c,
+    items: c.items.map((i) => {
+      const r = i.page === page ? renames.find((x) => x.to === i.number) : undefined;
+      if (!r) return i;
+      const was = old.find((o) => o.number === r.from);
+      return was && was.text === i.text && was.marks === i.marks ? was : { ...i, number: r.from };
+    }),
+  };
+}
+
 
 export type FixAction = "pdf" | "edit" | "fine" | "looks_right" | "box" | "unfigure" | "addfigure" | "delfigure" | "override" | "unoverride" | "review" | "unreview" | "undo";
 export type FixResult = "ok_fixed" | "ok_undone" | "ok_ready" | "ok_reviewed" | "ok_unreviewed" | "still_flagged" | "stale" | "has_table" | "bad" | "not_read";
@@ -638,6 +689,19 @@ export async function applyFix(db: Db, bucket: Bucket, doc: DocInfo, action: Fix
         if (!old) return "bad";
         const content = { ...view.content, figures: view.content.figures.map((x) => (x.id === old.id ? old : x)) };
         await putJson(bucket, key(doc.id, "content"), content);
+        await writeRow(db, doc.id, undoFlags(row.flags, before), row.dismissed, now);
+      } else if (fix.action === "pdf" && Array.isArray(before.renumber)) {
+        // Question numbers put back as the reading had them, ours and Gemini's.
+        const page = typeof before.page === "number" ? before.page : 0;
+        const content = unrename(view.content, page, cleanRenames(before.renumber), cleanPaper({ items: Array.isArray(before.items) ? before.items : [] }, kind).items);
+        if (!content) return "bad";
+        await putJson(bucket, key(doc.id, "content"), content);
+        const g = before.gemini && typeof before.gemini === "object" ? (before.gemini as Record<string, unknown>) : null;
+        const gRaw = g ? await getJson(bucket, key(doc.id, "gemini")) : null;
+        if (g && gRaw) {
+          const back = unrename(cleanPaper(gRaw, kind), page, cleanRenames(g.renames), cleanPaper({ items: Array.isArray(g.items) ? g.items : [] }, kind).items);
+          if (back) await putJson(bucket, key(doc.id, "gemini"), back);
+        }
         await writeRow(db, doc.id, undoFlags(row.flags, before), row.dismissed, now);
       } else if (fix.action === "pdf" && typeof before.lead === "string") {
         // A lead-in split: its item goes and the first part gets its old text back.

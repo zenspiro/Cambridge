@@ -397,3 +397,50 @@ test("page furniture's invisible comma over the margin is never a superscript, s
   const words = bboxWords(xml([[], p5])).map((p) => notate(p).words);
   assert.deepEqual(pdfOutline(words).map((p) => p.number), ["3"]);
 });
+
+// Question numbers put right from the printed page (owner, 12 Nov 2026), shaped like the benchmark's 0610 Jun 2024
+// Paper 42, where Claude read page 8's 2(d) as "7(d)" while Gemini and the printed labels had 2(d).
+test("a page's parts get the numbers printed beside them when they line up one to one with the marks", async () => {
+  const { autoRenumber } = await import("../../src/lib/brain/paper.ts");
+  const { unrename } = await import("../../src/lib/brain/paperRead.ts");
+  const pages = ["", "2 Plants make sugar. (a) Name the gas. [1]", "(b) State a use. [2] (d) Leaves are thin. (i) Explain why. [2] (ii) Name the cells. [1]"];
+  const outline = [
+    { number: "2", page: 2, text: "Plants make sugar." },
+    { number: "2(a)", page: 2, text: "Name the gas.", marks: 1 },
+    { number: "2(b)", page: 3, text: "State a use.", marks: 2 },
+    { number: "2(d)", page: 3, text: "Leaves are thin." },
+    { number: "2(d)(i)", page: 3, text: "Explain why.", marks: 2 },
+    { number: "2(d)(ii)", page: 3, text: "Name the cells.", marks: 1 },
+  ];
+  const read = (d: string) => cleanPaper({
+    items: [
+      { number: "2", page: 2, text: "Plants make sugar.", marks: null },
+      { number: "2(a)", page: 2, text: "Name the gas.", marks: 1 },
+      { number: "2(b)", page: 3, text: "State a use.", marks: 2 },
+      { number: d, page: 3, text: "Leaves are thin.", marks: null },
+      { number: `${d}(i)`, page: 3, text: "Explain why.", marks: 2 },
+      { number: `${d}(ii)`, page: 3, text: "Name the cells.", marks: 1 },
+    ],
+    figures: [],
+  }, "qp");
+  const none = { fingerprints: [], keys: [], items: [] };
+  const content = read("7(d)");
+  const r = autoRenumber({ content, pages, gemini: read("2(d)"), outline }, none);
+  assert.deepEqual(r.content.items.map((i) => i.number), ["2", "2(a)", "2(b)", "2(d)", "2(d)(i)", "2(d)(ii)"]);
+  assert.deepEqual(r.fixes.map((f) => [f.key, f.renames.map((x) => `${x.from}>${x.to}`).join(" ")]), [["structure:p3:numbers", "7(d)(i)>2(d)(i) 7(d)(ii)>2(d)(ii) 7(d)>2(d)"]]);
+  assert.ok(r.fixes[0]!.flags.some((f) => f.kind === "missing"), "the flags it settled are kept for Undo");
+  // Claude alone (no Gemini): the printed labels alone are enough.
+  assert.equal(autoRenumber({ content, pages, gemini: null, outline }, none).fixes.length, 1);
+  // Left alone: marks that do not line up, a part fixed by hand, a fix a person undid, a mark scheme.
+  const off = { ...content, items: content.items.map((i) => (i.number === "7(d)(i)" ? { ...i, marks: 3 } : i)) };
+  assert.equal(autoRenumber({ content: off, pages, gemini: null, outline }, none).fixes.length, 0, "marks differ: not the printed parts");
+  assert.equal(autoRenumber({ content, pages, gemini: null, outline }, { ...none, items: ["7(d)(i)"] }).fixes.length, 0);
+  assert.equal(autoRenumber({ content, pages, gemini: null, outline }, { ...none, keys: ["structure:p3:numbers"] }).fixes.length, 0);
+  assert.equal(autoRenumber({ content: { ...content, kind: "ms" }, pages, gemini: null, outline }, none).fixes.length, 0);
+  // A number already used elsewhere is never given twice.
+  const taken = { ...content, items: [...content.items, { ...content.items[0]!, number: "2(d)", page: 2, marks: 4 }] };
+  assert.equal(autoRenumber({ content: taken, pages, gemini: null, outline }, none).fixes.filter((f) => f.page === 3).length, 0);
+  // Undo: every part gets its old number back.
+  const back = unrename(r.content, 3, r.fixes[0]!.renames, r.fixes[0]!.before);
+  assert.deepEqual(back?.items.map((i) => i.number), content.items.map((i) => i.number));
+});

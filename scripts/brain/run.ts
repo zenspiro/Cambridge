@@ -21,7 +21,7 @@ import {
   PAPER_SCHEMA, PAPER_SCHEMA_GEMINI, PAPER_SYSTEM, paperPrompt,
   retryPrompt, TOPIC_SCHEMA, TOPIC_SCHEMA_GEMINI, TOPIC_SYSTEM, topicPrompt,
 } from "../../src/lib/brain/prompts.ts";
-import { autoFixLeads, blankPages, cleanPaper, figuresToLeads, type AutoFix, type AutoHold, keptPages, mergeReading, paperFlags, picturePages, placeOnPages, remapPages, textPagesBlock, type PaperContent, type PaperKind } from "../../src/lib/brain/paper.ts";
+import { autoFixLeads, autoRenumber, blankPages, cleanPaper, figuresToLeads, type AutoFix, type AutoHold, type Renumber, keptPages, mergeReading, paperFlags, picturePages, placeOnPages, remapPages, textPagesBlock, type PaperContent, type PaperKind } from "../../src/lib/brain/paper.ts";
 import {
   checkNumbers, checkWords, cleanDraft, compareDrafts, isReady, missingHeadings, retryNotes, textIndex,
   type Draft, type Problem, type TextIndex, type TreeReport,
@@ -651,8 +651,16 @@ async function runPaper(job: PaperJob) {
     content = figuresToLeads(content);
     // Opening text put right without a click (owner, 10 Nov 2026), each fix kept only when every check agrees.
     let auto: AutoFix[] = [];
+    let renumber: Renumber[] = [];
     if (final) {
-      const r = autoFixLeads({ content, pages, gemini: second, outline }, job.prior.hold ?? { fingerprints: [], keys: [], items: [] });
+      const hold = job.prior.hold ?? { fingerprints: [], keys: [], items: [] };
+      // Question numbers from the printed page first (owner, 12 Nov 2026), so opening text is matched to the right question.
+      const n = autoRenumber({ content, pages, gemini: second, outline }, hold);
+      content = n.content;
+      if (second && n.gemini) gemini = n.gemini;
+      renumber = n.fixes;
+      if (renumber.length) await step(`Put right the question numbers on ${renumber.length} page${renumber.length === 1 ? "" : "s"} from the printed page (listed under Changes, each with Undo)`, { stage: "checks", state: "done" });
+      const r = autoFixLeads({ content, pages, gemini: second, outline }, hold);
       content = r.content;
       if (second && r.gemini) gemini = r.gemini;
       auto = r.fixes;
@@ -667,7 +675,7 @@ async function runPaper(job: PaperJob) {
     // `read`: a full reading (not a figures-only run), so the first one sets the paper's read accuracy.
     // Check with Gemini: the reading Claude made alone now has its second reader.
     const checked = second && final && gemini ? { checkedBy: job.models.gemini } : {};
-    const r = await api("/api/brain/paper", { content, gemini, pages, flags, final, read: !figuresOnly, ...own, ...checked, ...(auto.length ? { auto } : {}) });
+    const r = await api("/api/brain/paper", { content, gemini, pages, flags, final, read: !figuresOnly, ...own, ...checked, ...(auto.length ? { auto } : {}), ...(renumber.length ? { renumber } : {}) });
     if (r.status !== 200) throw new Stop(`save_${r.status}`);
     if (final) await note("Saved", { stage: "save", state: "done" });
   };

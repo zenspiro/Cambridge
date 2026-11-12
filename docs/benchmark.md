@@ -90,6 +90,10 @@ each as missing), multiple choice options not taken (0610 Mar 2024 P22, 0620 Jun
 subscripts lost (ion charges in 0620 P6, R₄ and V₂ in 0625 P22, cm² and cm³ in 0580), tables in 0625 P5 and P6, lead-ins
 joined, a few marks.
 
+First change measured (12 Nov 2026): question numbers from the printed page (`autoRenumber`), scored on the stored
+readings without a new AI run: tuning question papers 94.3% to 95.5% of checks, 9 fully right (was 7), no regression.
+Still open: 0478 Mar 2023 P12 and the 0580 P42s (their marks do not line up page by page).
+
 ## The rule for changes
 
 1. Score before the change (`score.ts`, baseline saved).
