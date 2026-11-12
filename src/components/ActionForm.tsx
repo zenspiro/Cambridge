@@ -29,6 +29,21 @@ function folderCounts(q: URLSearchParams): string {
   return q.has("added") ? `Added ${n("added")}, already listed ${n("dupes")}, not a folder link ${n("bad")}.` : "";
 }
 
+/** Codes that mean another AI run is going on: the message names it and says how far it has got (owner, 12 Nov 2026). */
+const RUN_CODES = new Set(["running", "ok_queued", "queue_dupe"]);
+
+async function goingOn(): Promise<string> {
+  try {
+    const r = await fetch("/admin/brain/active", { cache: "no-store" });
+    const j = (await r.json()) as { run?: { label?: string; step?: string | null } | null };
+    if (!j.run?.label) return "";
+    const step = j.run.step && !/^Paper \d/.test(j.run.step) ? ` (${j.run.step})` : "";
+    return `Going on now: ${j.run.label}${step}.`;
+  } catch {
+    return "";
+  }
+}
+
 export function ActionForm({ action, children, messages, confirm, className, counts, onDone, yes = "Yes", no = "Never mind" }: Props) {
   const router = useRouter();
   const form = useRef<HTMLFormElement>(null);
@@ -44,7 +59,7 @@ export function ActionForm({ action, children, messages, confirm, className, cou
       const q = new URL(r.url).searchParams;
       const code = q.get("e") ?? q.get("r") ?? q.get("f") ?? (r.ok ? "ok" : "failed");
       const ok = code.startsWith("ok");
-      const text = [messages[code] ?? (ok ? "Done." : "That did not work. Please try again."), counts ? folderCounts(q) : ""].filter(Boolean).join(" ");
+      const text = [messages[code] ?? (ok ? "Done." : "That did not work. Please try again."), counts ? folderCounts(q) : "", RUN_CODES.has(code) ? await goingOn() : ""].filter(Boolean).join(" ");
       setNote({ ok, text });
       window.dispatchEvent(new CustomEvent("admin-toast", { detail: { ok, text } })); // the corner toast (AdminEnhance)
       onDone?.(ok, code);

@@ -8,7 +8,7 @@ import { CellLink, StatusLine } from "@/components/LibraryBits";
 import { Legend } from "@/components/LibraryTables";
 import { BRAIN, DOC_TYPE_LABELS, SESSION_LABELS } from "@/lib/config";
 import { getLibrarySettings, libraryYears } from "@/lib/settings";
-import { loadHeader, loadSyllabus } from "@/lib/library/catalog";
+import { listSubjects, loadHeader, loadSyllabus, subjectLabel } from "@/lib/library/catalog";
 import { essentialFor, filterChecklist, groupCells, type Cell, type ChecklistFilter } from "@/lib/library/checklist";
 import { describeFile, duration, loadPapers, paperLookup, routeText, TIER_LABELS } from "@/lib/library/papers";
 import { type ExamSession } from "@/lib/library/slugs";
@@ -22,6 +22,8 @@ import { RagDot } from "@/components/RagDot";
 import { filterWords, hasTiers, planBatch, planBenchmark, ragOf, readFilter, readStates, rowDocIds } from "@/lib/brain/readAll";
 import { batchCostCheck, estimateWords, usdWords } from "@/lib/brain/spend";
 import { benchFilesFor } from "@/lib/brain/benchmark";
+import { QUEUE_MESSAGES } from "@/lib/brain/labels";
+import { askWords, readQueue, startQueued } from "@/lib/brain/queue";
 
 export const metadata: Metadata = { title: "Library" };
 
@@ -30,15 +32,24 @@ const MESSAGES = {
   ok_variants: "Essential variants saved for this syllabus.",
   bad_variants: "Tick at least one variant for each session.",
   busy: "Too many changes this hour. Please wait a little.",
-  ok_batch: "Read all started. It reads the papers one after another; the Read all card shows where it is.",
+  ok_batch: "Read all started. Progress shows in the Read all card.",
+  // Its own words (owner, 11 Nov 2026: "Read all started" made no sense for the benchmark button).
+  ok_bench: "Reading the benchmark papers started. Progress shows in the Read all card.",
+  ok_check: "Checking again started. Progress shows in the Read all card.",
+  ok_bench_again: "Reading the benchmark papers again for the score started. The readings you review stay as they are.",
   batch_none: "Nothing to read: every stored paper in this choice is read already.",
-  over_cap: "This would go past your monthly AI cap, so it did not start. Raise the cap on AI setup, or read fewer papers.",
-  no_price: "A model in use has no price, so the cap cannot be checked. Set its price on AI setup.",
-  running: "Another AI run is going on. Wait for it to finish, then press Read all again.",
-  not_set_up: "Starting runs is not set up (GITHUB_TOKEN or the workflow name is missing).",
-  github: "GitHub refused to start the run. Check the GITHUB_TOKEN secret.",
+  check_none: "No paper of this subject has been read yet, so there is nothing to check.",
+  ...QUEUE_MESSAGES,
   bad: "That choice could not be read. Pick again.",
 };
+
+/** Why the first queued run is waiting, in words. */
+const HOLD_WORDS: Record<string, string> = {
+  gemini_down: "Held: Gemini was down", over_cap: "Held: past the AI cap", no_price: "Held: a model has no price", github: "Held: GitHub refused", not_set_up: "Held: runs not set up",
+};
+
+/** The cost in a confirm: one short line (owner, 11 Nov 2026: "minimise the inline confirmations"). */
+const costWords = (c: { estimate: { usd: number | null } } | null) => (c?.estimate.usd == null ? "Cost unknown." : `About ${usdWords(c.estimate.usd)}.`);
 
 const pick = <T extends string>(v: string | undefined, allowed: readonly T[]): T | null =>
   v && (allowed as readonly string[]).includes(v) ? (v as T) : null;
@@ -107,6 +118,12 @@ export default async function SyllabusOverview({
   const choice = readFilter((k) => q[k], yearNums);
   const tiered = hasTiers(papers);
   const plan = choice ? planBatch(list, papers, choice, states) : null;
+  // The run queue (owner, 12 Nov 2026): asks waiting for the run going on. If none is going on (a run that went quiet
+  // and was closed), the first one starts now.
+  let queue = owner ? await readQueue(env.DB) : [];
+  if (queue.length && (await startQueued(env.DB, env)).startsWith("ok")) queue = await readQueue(env.DB);
+  const subjects = queue.length ? await listSubjects(env.DB) : [];
+  const askName = (x: (typeof queue)[number]) => `${subjectLabel(subjects, x.code)}: ${askWords(x).slice(5)}`;
   // The Read all running for this subject, or the last one (finished in the last 30 minutes): shown live in the card.
   const batchRun = await latestBatch(env.DB, code);
   const batchCost = plan?.toRead.length ? await batchCostCheck(env.DB, env, plan.toRead.map((d) => d.bytes)) : null;
@@ -114,6 +131,7 @@ export default async function SyllabusOverview({
   const benchFiles = benchFilesFor(code);
   const bench = owner && benchFiles.length ? await planBenchmark(env.DB, benchFiles, states) : null;
   const benchCost = bench?.toRead.length ? await batchCostCheck(env.DB, env, bench.toRead.map((d) => d.bytes)) : null;
+  const againCost = bench && !bench.toRead.length && bench.stored.length ? await batchCostCheck(env.DB, env, bench.stored.map((d) => d.bytes)) : null;
   // Reading and review in one line; the list itself is the Documents page (owner, 10 Nov 2026: it will grow).
   const sum = reviewSummary(await loadDocRows(env.DB, [code]));
   const docs = `/admin/library/${code}/documents`;
@@ -161,6 +179,35 @@ export default async function SyllabusOverview({
           year, or leave them on every one.
         </p>
         {batchRun ? <RunProgress key={batchRun.id} runId={batchRun.id} stages={["pdf", "gemini", "claude", "figures", "checks", "save"]} /> : null}
+        {queue.length ? (
+          <div className="stack-tight" id="run-queue">
+            <div className="card-head">
+              <h3 className="subtitle">Waiting in the queue</h3>
+              {queue[0]?.held ? (
+                <ActionForm action="/admin/brain/queue" messages={MESSAGES}>
+                  <input type="hidden" name="code" value={code} />
+                  <input type="hidden" name="do" value="start" />
+                  <button className="btn btn-small" type="submit">Start now</button>
+                </ActionForm>
+              ) : null}
+            </div>
+            <p className="hint m-0">Each starts on its own when the run before it ends, any subject.</p>
+            <ol className="read-plan">
+              {queue.map((x, i) => (
+                <li key={x.id} className="batch-paper">
+                  <span>{askName(x)}</span>
+                  <span className={x.held ? "pill pill-warn" : "pill"}>{x.held ? HOLD_WORDS[x.held] ?? "Waiting" : i === 0 ? "Next" : "Waiting"}</span>
+                  <ActionForm action="/admin/brain/queue" messages={MESSAGES}>
+                    <input type="hidden" name="code" value={code} />
+                    <input type="hidden" name="id" value={x.id} />
+                    <input type="hidden" name="do" value="remove" />
+                    <button className="btn btn-small" type="submit">Remove</button>
+                  </ActionForm>
+                </li>
+              ))}
+            </ol>
+          </div>
+        ) : null}
         <form className="form-actions read-all-pick" method="get" action={`/admin/library/${code}#read-all`}>
           <label className="field">
             <span className="label-inline">Month</span>
@@ -207,8 +254,8 @@ export default async function SyllabusOverview({
                     {" "}The cap is checked again before each paper.
                   </p>
                 ) : null}
-                <ActionForm action={`/admin/library/${code}/read-all`} messages={MESSAGES} yes="Yes, proceed" no="No"
-                  confirm={`Read ${plan.toRead.length} paper${plan.toRead.length === 1 ? "" : "s"}? This uses AI tokens: ${batchCost?.estimate.usd == null ? "cost unknown" : `about ${usdWords(batchCost.estimate.usd)}`}. Proceed?`}>
+                <ActionForm action={`/admin/library/${code}/read-all`} messages={MESSAGES} yes="Yes" no="No"
+                  confirm={`Read ${plan.toRead.length} paper${plan.toRead.length === 1 ? "" : "s"}? ${costWords(batchCost)}`}>
                   <input type="hidden" name="ra" value={choice.tier} />
                   {choice.session ? <input type="hidden" name="ras" value={choice.session} /> : null}
                   {choice.year ? <input type="hidden" name="ray" value={choice.year} /> : null}
@@ -237,13 +284,27 @@ export default async function SyllabusOverview({
                     {benchCost.verdict === "over_cap" ? " This would go past the cap, so it will not start." : benchCost.verdict === "no_price" ? " With a cap set, runs need a price for every model in use." : ""}
                   </p>
                 ) : null}
-                <ActionForm action={`/admin/library/${code}/read-benchmark`} messages={MESSAGES} yes="Yes, proceed" no="No"
-                  confirm={`Read the ${bench.toRead.length} benchmark paper${bench.toRead.length === 1 ? "" : "s"}? This uses AI tokens: ${benchCost?.estimate.usd == null ? "cost unknown" : `about ${usdWords(benchCost.estimate.usd)}`}. Proceed?`}>
+                <ActionForm action={`/admin/library/${code}/read-benchmark`} messages={MESSAGES} yes="Yes" no="No"
+                  confirm={`Read ${bench.toRead.length} benchmark paper${bench.toRead.length === 1 ? "" : "s"}? ${costWords(benchCost)}`}>
                   <button className="btn btn-primary" type="submit">Read the {bench.toRead.length} benchmark papers</button>
                 </ActionForm>
               </>
-            ) : bench.read ? <p className="notice m-0">Every benchmark paper of this subject in the library is read.</p>
-              : <p className="muted m-0">None of them is in the library yet.</p>}
+            ) : bench.read ? (
+              <>
+                <p className="notice m-0">Every benchmark paper of this subject in the library is read.</p>
+                {/* The AI's own copy (owner, 12 Nov 2026): after a change to the reading rules, read them afresh for
+                    the score; what you review and fix is not touched. */}
+                <p className="hint m-0">
+                  The score uses the AI&apos;s own copy of each reading, so your fixes never count as the AI&apos;s. After
+                  a change to the reading rules, read them again for the score: your readings and fixes stay as they are.
+                </p>
+                <ActionForm action={`/admin/library/${code}/read-benchmark`} messages={MESSAGES} yes="Yes" no="No"
+                  confirm={`Read ${bench.stored.length} again for the score? ${costWords(againCost)}`}>
+                  <input type="hidden" name="again" value="1" />
+                  <button className="btn" type="submit">Read them again for the score</button>
+                </ActionForm>
+              </>
+            ) : <p className="muted m-0">None of them is in the library yet.</p>}
           </div>
         ) : null}
       </section> : null}

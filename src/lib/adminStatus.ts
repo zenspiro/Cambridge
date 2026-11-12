@@ -28,7 +28,9 @@ export function describeRun(r: { id: string; type: string; status: string; param
       const at = b.docs.indexOf(p.docId) + 1;
       const code = typeof b.label === "string" && /^[0-9]{4} /.test(b.label) ? b.label.slice(0, 4) : "";
       // Watched where it was started: the subject's Read all card (owner, 9 Nov 2026).
-      return { id: r.id, label: `${p.check ? "Checking again" : "Read all"}: paper ${at} of ${b.docs.length}`, href: code ? `/admin/library/${code}#read-all` : `/admin/library/review/${encodeURIComponent(p.docId)}`, step: r.step, queued };
+      // Named by what was asked ("0580 benchmark papers"), so a message can say which run is going on (owner, 12 Nov 2026).
+      const what = typeof b.label === "string" && b.label ? b.label : p.check ? "checks again" : "Read all";
+      return { id: r.id, label: `${p.check ? "Checking" : "Reading"} ${what}: paper ${at} of ${b.docs.length}`, href: code ? `/admin/library/${code}#read-all` : `/admin/library/review/${encodeURIComponent(p.docId)}`, step: r.step, queued };
     }
     if (p.task === "paper" && typeof p.docId === "string") return { id: r.id, label: "Reading a paper", href: `/admin/library/review/${encodeURIComponent(p.docId)}`, step: r.step, queued };
     if (p.task === "check") return { id: r.id, label: "AI setup check", href: "/admin/ai", step: r.step, queued };
@@ -67,6 +69,8 @@ const ACTIVITY: Record<string, string> = {
   "brain.ai_check": "AI setup check finished", "brain.claude_model": "Changed the main AI's model", "brain.gemini_model": "Changed the checking AI's model",
   "brain.drawing_model": "Changed the drawing AI's model", "brain.reading_model": "Changed the reading AI's model", "brain.price": "Changed an AI price",
   "brain.cap": "Changed the monthly AI cap",
+  "brain.queue_add": "Added a run to the queue", "brain.queue_remove": "Removed a run from the queue", "brain.queue_start": "A queued run started",
+  "brain.queue_drop": "A queued run had nothing left to read",
   "home.clear": "Cleared an item from Needs you", "home.clear_all": "Cleared Needs you", "home.undo": "Brought back an item to Needs you",
   "icons.choose": "Changed an icon", "icons.reset": "Put an icon back to its default",
   "paper.pdf": "Used the PDF's version on a paper", "paper.edit": "Edited a paper part", "paper.fine": "Marked a paper flag as fine",

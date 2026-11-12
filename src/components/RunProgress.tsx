@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type Event = { at: number; stage: string; state: "start" | "wait" | "done" | "fail" | "skip"; text: string; model: string; tokens: number };
-type BatchPaper = { docId: string; name: string; read: boolean; flags: number; now: boolean };
+type BatchPaper = { docId: string; name: string; read: boolean; flags: number; now: boolean; skipped?: boolean };
 type State = {
   status: "queued" | "running" | "succeeded" | "failed" | "cancelled"; step: string | null; events: Event[]; createdAt: number; finishedAt: number | null; stopped: string | null;
   /** Read all: where the batch is and each paper's state. */
@@ -107,11 +107,13 @@ function BatchHead({ batch, active }: { batch: NonNullable<State["batch"]>; acti
   const read = batch.papers.filter((p) => p.read).length;
   const flagged = batch.papers.filter((p) => p.read && p.flags > 0).length;
   const current = batch.papers.find((p) => p.now);
+  const skipped = batch.papers.filter((p) => p.skipped).length;
   return (
     <div className="batch-head">
       <p className="m-0">
         <strong>{active ? `${batch.check ? "Checking paper" : "Paper"} ${batch.at} of ${batch.of}` : `Done: ${read} of ${batch.of} ${batch.check ? "checked" : "read"}`}</strong>
         {active && current ? `: ${current.name}` : !active ? `, ${flagged} with flags to review` : ""}
+        {skipped ? `. ${skipped} skipped: Gemini was down${active ? " (tried again at the end)" : ""}` : ""}
       </p>
       <progress className="batch-bar" max={batch.of} value={read}>{read} of {batch.of}</progress>
     </div>
@@ -127,8 +129,9 @@ function BatchList({ papers, active, check }: { papers: BatchPaper[]; active: bo
         {papers.map((p) => (
           <li key={p.docId} className="batch-paper">
             <span>{p.name}</span>
-            <span className={p.read ? (p.flags ? "pill pill-warn" : "pill pill-ok") : p.now && active ? "pill pill-busy" : "pill"}>
-              {p.read ? (p.flags ? `${p.flags} flag${p.flags === 1 ? "" : "s"}` : "Ready") : p.now && active ? (check ? "Checking now" : "Reading now") : active ? "Waiting" : check ? "Not checked" : "Not read"}
+            <span className={p.read ? (p.flags ? "pill pill-warn" : "pill pill-ok") : p.now && active ? "pill pill-busy" : p.skipped ? "pill pill-warn" : "pill"}>
+              {p.read ? (p.flags ? `${p.flags} flag${p.flags === 1 ? "" : "s"}` : "Ready") : p.now && active ? (check ? "Checking now" : "Reading now")
+                : p.skipped ? (active ? "Skipped: tried again at the end" : "Not read: Gemini was down") : active ? "Waiting" : check ? "Not checked" : "Not read"}
             </span>
             {/* A plain link: the review screen needs its own page load for its PDF frame. */}
             {p.read ? <a className="link" href={`/admin/library/review/${encodeURIComponent(p.docId)}`}>Review</a> : <span />}

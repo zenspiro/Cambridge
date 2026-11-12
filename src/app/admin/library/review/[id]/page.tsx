@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { allowed, staffForDoc, ADMIN_EDIT } from "@/lib/auth/staff";
 import { redirect } from "next/navigation";
 import { getEnv } from "@/lib/env";
-import { AdminShell } from "@/components/AdminShell";
+import { AdminShell, FreeTag } from "@/components/AdminShell";
 import { docTypeLabel } from "@/lib/config";
 import { listSubjects, subjectLabel } from "@/lib/library/catalog";
 import { describeFile, loadPapers, paperLookup } from "@/lib/library/papers";
@@ -23,6 +23,7 @@ import { modelName } from "@/lib/brain/labels";
 import { estimateWords, readerChoices, usdWords, type ReaderChoice } from "@/lib/brain/spend";
 import type { PaperKind } from "@/lib/brain/paper";
 
+const CUT_TIP = "Uses no AI credits: our own code cuts the figures from the PDF.";
 export const metadata: Metadata = { title: "Review" };
 
 const ORIGIN = { upload: "Uploaded", agent: "Fetched by the agent", link: "Added from a link" } as const;
@@ -197,8 +198,8 @@ function ReadingCard({ docId, view, choices, run, busy, facts, canFix, canRead, 
       {run && (busy || run.status === "failed" || (run.finishedAt !== null && Date.now() - run.finishedAt < RECENT_MS)) ? <RunProgress runId={run.id} stages={PAPER_STAGES} /> : null}
       <div className="row-actions">
         {!busy && canRead ? (
-          <ActionForm action={`${base}/read`} messages={MESSAGES} yes="Yes, proceed" no="No"
-            confirm={`${read ? "Read the paper again? Confirmed items stay; flagged and missing ones are read again." : "Read this paper?"} This uses AI tokens: the rough cost is beside the AI you chose. Proceed?`}>
+          <ActionForm action={`${base}/read`} messages={MESSAGES} yes="Yes" no="No"
+            confirm={`${read ? "Read it again" : "Read this paper"}? Uses AI credits: the cost is beside the AI you picked.`}>
             <span className="read-with">
               <label className="label-inline" htmlFor="read-with">Read with</label>
               <select className="input" id="read-with" name="reader" defaultValue="">
@@ -215,29 +216,28 @@ function ReadingCard({ docId, view, choices, run, busy, facts, canFix, canRead, 
         {/* Run the checks again (owner, 9 Nov 2026): no AI; the reading as it stands, fixes included, checked with today's
             checks, so new flags show before anything is paid for. Figures with no box are cut too. */}
         {!busy && canRead && read ? (
-          <ActionForm action={`${base}/read`} messages={MESSAGES} yes="Yes, check it" no="No"
-            confirm="Check this reading again with the latest checks? No AI is asked, so nothing is spent. Your fixes stay; anything new is flagged here.">
+          <ActionForm action={`${base}/read`} messages={MESSAGES} yes="Yes" no="No" confirm="Run the checks again? Free.">
             <input type="hidden" name="check" value="1" />
-            <button className="btn" type="submit">Run the checks again</button>
+            <button className="btn" type="submit">Run the checks again <FreeTag /></button>
           </ActionForm>
         ) : null}
         {/* No AI (owner, 7 Nov 2026): cuts every figure again from the PDF with no AI; words, fixes and hand-drawn boxes stay. */}
         {!busy && canRead && cutAgain.length ? (
-          <ActionForm action={`${base}/read`} messages={MESSAGES} yes="Yes, proceed" no="No"
-            confirm={`Cut ${cutAgain.length} figure${cutAgain.length === 1 ? "" : "s"} again from the PDF? No AI is used, so it costs nothing; boxes you drew by hand stay. Proceed?`}>
+          <ActionForm action={`${base}/read`} messages={MESSAGES} yes="Yes" no="No"
+            confirm={`Cut ${cutAgain.length} figure${cutAgain.length === 1 ? "" : "s"} again? Free. Hand-drawn boxes stay.`}>
             {cutAgain.map((id) => <input key={id} type="hidden" name="figure" value={id} />)}
-            <button className="btn" type="submit">Cut figures again</button>
+            <button className="btn" type="submit">Cut figures again <FreeTag tip={CUT_TIP} /></button>
           </ActionForm>
         ) : null}
         {canFix && read && view.open.length > 0 && !override ? (
-          <ActionForm action={`${base}/fix`} messages={MESSAGES} confirm={`Mark it ready with ${view.open.length} flag${view.open.length === 1 ? "" : "s"} still open? They are recorded as ignored.`}>
+          <ActionForm action={`${base}/fix`} messages={MESSAGES} confirm={`Mark it ready with ${view.open.length} flag${view.open.length === 1 ? "" : "s"} open?`}>
             <input type="hidden" name="action" value="override" />
             <button className="btn" type="submit">Mark ready anyway</button>
           </ActionForm>
         ) : null}
         {canFix && read && view.open.length === 0 && !marked ? (
           <ActionForm action={`${base}/fix`} messages={MESSAGES} yes="Yes, mark it" no="No"
-            confirm="Mark this paper as reviewed? Say yes only if you have checked it against the PDF. Your name and today's date are kept.">
+            confirm="Checked against the PDF? Mark it reviewed.">
             <input type="hidden" name="action" value="review" />
             <button className="btn btn-primary" type="submit">Mark as reviewed</button>
           </ActionForm>

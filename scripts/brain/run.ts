@@ -44,7 +44,9 @@ type PaperJob = {
   /** reading: the Claude model that reads papers (AI setup's Reading AI, else the main AI's; older sites send none). */
   models: { claude: string; gemini: string; drawing: string; reading?: string }; limits: Limits;
   /** Read all (owner, 8 Nov 2026): this paper's place in the batch. */
-  batch?: { at: number; of: number; label: string };
+  batch?: { at: number; of: number; label: string; again?: boolean };
+  /** The skipped papers' second try waits this long first (owner, 12 Nov 2026). */
+  waitMs?: number;
   /** "Read with" (owner, 9 Nov 2026): "gemini" reads with Gemini alone, no Claude and no second reader. */
   readWith?: "claude" | "gemini";
   /** Run the checks again (owner, 9 Nov 2026): no AI; today's checks on the stored reading, figures with no box cut. */
@@ -686,9 +688,24 @@ async function main() {
     // checks the monthly cap before handing it out, so a stop never loses a paper already read.
     let paper = job as unknown as PaperJob;
     for (;;) {
-      await runPaper(paper);
+      // Gemini down in a batch (owner, 12 Nov 2026): the paper is skipped (nothing was spent: Gemini reads first) and
+      // the run moves on; the site gives it one more try at the end, and stops the run when Gemini is down for several
+      // papers in a row.
+      let skipped = false;
+      const waitMs = paper.waitMs ?? 0;
+      if (waitMs > 0) {
+        await note(`Trying the papers Gemini could not read once more, in ${Math.round(waitMs / 60_000)} minutes`, { stage: "pdf", state: "wait" });
+        await new Promise((r) => setTimeout(r, TEST_MODE ? 10 : Math.min(waitMs, 600_000)));
+      }
+      try {
+        await runPaper(paper);
+      } catch (err) {
+        if (!(paper.batch && err instanceof Stop && err.reason === "gemini_down")) throw err;
+        skipped = true;
+        await note(paper.batch.again ? "Gemini is still down: this paper is left unread" : "Gemini is down: this paper is skipped and tried again at the end", { stage: "gemini", state: "skip" });
+      }
       if (!paper.batch) return;
-      const n = await api("/api/brain/next", {});
+      const n = await api("/api/brain/next", skipped ? { skipped: true } : {});
       if (n.status !== 200 || !n.data) throw new Stop(n.status === 409 ? "closed" : `next_${n.status}`);
       if (n.data.done) {
         log(n.data.stopped ? `batch stopped: ${String(n.data.stopped)}` : "batch done");

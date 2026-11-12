@@ -20,6 +20,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     const current = r.params.docId;
     const list = await batchPapers(env.DB, r.params.batch.docs, r.createdAt);
     const code = r.params.batch.label.slice(0, 4);
+    // Gemini down (owner, 12 Nov 2026): papers skipped, to be tried again at the end, or given up on.
+    const skipped = new Set([...(r.params.batch.skipped ?? []), ...(r.params.batch.failed ?? [])]);
     const look = paperLookup(/^[0-9]{4}$/.test(code) ? (await loadPapers(env.DB, code)).papers : []);
     batch = {
       label: r.params.batch.label.slice(5),
@@ -27,7 +29,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       of: r.params.batch.docs.length,
       // A check batch (owner, 9 Nov 2026): the same list, in the words of checking.
       check: !!r.params.check,
-      papers: list.map((p) => ({ docId: p.docId, name: describeFile(p.fileName, p.syllabusId, look), read: p.read, flags: p.flags, now: p.docId === current })),
+      papers: list.map((p) => ({ docId: p.docId, name: describeFile(p.fileName, p.syllabusId, look), read: p.read, flags: p.flags, now: p.docId === current, skipped: !p.read && skipped.has(p.docId) })),
     };
   }
   return Response.json(

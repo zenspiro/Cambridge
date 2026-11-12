@@ -125,5 +125,6 @@ test("read the benchmark papers: the subject's set not read yet, in the set's or
   assert.deepEqual(plan.toRead.map((d) => d.fileName), ["0625_m25_qp_42.pdf", "0625_m25_ms_42.pdf"]);
   assert.equal(plan.read, 1);
   assert.equal(plan.missing, files.length - 3, "the variant 1 paper is not in the set");
-  assert.deepEqual(await planBenchmark(db, [], new Map()), { toRead: [], read: 0, missing: 0 });
+  assert.deepEqual(plan.stored.map((d) => d.fileName), ["0625_m25_qp_42.pdf", "0625_m25_ms_42.pdf", "0625_w25_qp_42.pdf"], "every stored benchmark paper, for reading again for the score");
+  assert.deepEqual(await planBenchmark(db, [], new Map()), { toRead: [], read: 0, missing: 0, stored: [] });
 });

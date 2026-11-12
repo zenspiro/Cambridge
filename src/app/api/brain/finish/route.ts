@@ -2,6 +2,7 @@ import { agentRequest, json, JOB_ID_RE, parseJson } from "@/lib/agent/api";
 import { BRAIN } from "@/lib/config";
 import { activeBrainRun, saveTree } from "@/lib/brain/runs";
 import { clearReadings } from "@/lib/brain/readings";
+import { startQueued } from "@/lib/brain/queue";
 
 // The finished topic tree and its check report. Signed only. The draft is cleaned and re-checked before saving.
 export async function POST(request: Request) {
@@ -16,5 +17,6 @@ export async function POST(request: Request) {
   if ((r === "ok_ready" || r === "ok_not_ready") && params?.task === "topics") await clearReadings(a.env.FILES, params.syllabusId);
   if (r === "no_run") return json({ error: r }, 409);
   if (r === "too_big" || r === "empty") return json({ error: r }, 422);
+  await startQueued(a.db, a.env);
   return json({ ok: true, result: r });
 }

@@ -1,6 +1,7 @@
 import { agentRequest, json, JOB_ID_RE, parseJson } from "@/lib/agent/api";
 import { saveCheck } from "@/lib/brain/aiSetup";
 import { activeBrainRun, finishCheckRun } from "@/lib/brain/runs";
+import { startQueued } from "@/lib/brain/queue";
 
 // The AI setup check's result (models listed and tried). Signed only, a running check run only.
 export async function POST(request: Request) {
@@ -13,5 +14,6 @@ export async function POST(request: Request) {
   if (!params || params.task !== "check") return json({ error: "no_run" }, 409);
   await saveCheck(a.db, b?.result, params.which);
   await finishCheckRun(a.db, jobId);
+  await startQueued(a.db, a.env);
   return json({ ok: true });
 }

@@ -93,7 +93,7 @@ test("a Read all batch: one run reads its papers in turn; one read meanwhile is 
   assert.equal(p?.task === "paper" && p.docId, docs[0]);
   assert.deepEqual(batchPlace(p), { at: 1, of: 3 });
   const job = (await db.prepare(`SELECT status, params, step FROM job WHERE id = ?1`).bind(run).first<{ status: string; params: string; step: string | null }>())!;
-  assert.equal(describeRun({ id: run, type: "brain", ...job })?.label, "Read all: paper 1 of 3");
+  assert.equal(describeRun({ id: run, type: "brain", ...job })?.label, "Reading 0625 Extended papers, Nov 2025: paper 1 of 3", "named by what was asked");
   assert.equal(describeRun({ id: run, type: "brain", ...job })?.href, "/admin/library/0625#read-all", "watched on the subject's Read all card");
   // Paper 2 was read by another run meanwhile: skipped.
   await db.prepare(`INSERT INTO paper_read (doc_id, items, read_at, updated_at) VALUES (?1, 3, 5, 5) ON CONFLICT (doc_id) DO UPDATE SET read_at = 5`).bind(docs[1]).run();

@@ -522,8 +522,8 @@ try {
   check((await page.locator("#reading .pill").textContent()) === "Not read", "a paper not read yet says so");
   check((await page.locator("#reading").textContent())?.includes("Rough cost"), "Read this paper shows the rough cost first");
   await page.locator("#reading button", { hasText: "Read this paper" }).click();
-  check((await page.locator("#reading .confirm").textContent())?.includes("This uses AI tokens") && (await page.locator("#reading .confirm button", { hasText: "No" }).count()) === 1, "Read this paper asks first, with the cost (Yes, proceed / No)");
-  await page.locator("#reading button", { hasText: "Yes, proceed" }).click();
+  check((await page.locator("#reading .confirm").textContent())?.includes("Uses AI credits") && (await page.locator("#reading .confirm button", { hasText: "No" }).count()) === 1, "Read this paper asks first, in one short line (Yes / No)");
+  await page.locator("#reading .confirm button", { hasText: /^Yes$/ }).click();
   await page.locator("#reading .action-note", { hasText: "GITHUB_TOKEN" }).waitFor({ timeout: 10_000 }).then(() => check(true, "Read this paper without a GitHub token says what is missing"), () => check(false, "Read this paper without a GitHub token says what is missing"));
 
   // A queued run shows the live progress panel (no page reloads).
@@ -640,6 +640,8 @@ try {
   // Cutting figures again is free: no AI is asked, the words stay, a box drawn by hand stays.
   const cutBtn = page.locator("#reading button", { hasText: "Cut figures again" });
   check((await cutBtn.count()) === 1 && (await page.locator("#reading button", { hasText: "Run the checks again" }).count()) === 1, "a read paper offers Run the checks again and Cut figures again");
+  // "Free" on actions that use no AI (owner, 12 Nov 2026), with a tooltip saying so.
+  check((await page.locator("#reading button .tag-free").count()) === 2 && ((await page.locator("#reading button .tag-free").first().getAttribute("data-tip")) ?? "").includes("no AI credits"), "both carry a Free tag with its tooltip");
   await cutBtn.click();
   await page.locator("#reading button", { hasText: "Yes" }).click();
   await page.locator("#reading .action-note", { hasText: "GITHUB_TOKEN" }).waitFor({ timeout: 10_000 }).then(() => check(true, "cutting figures is not stopped by the cost check (only by the missing GitHub token here)"), () => check(false, "cutting figures is not stopped by the cost check (only by the missing GitHub token here)"));
@@ -713,8 +715,8 @@ try {
   check((await page.locator('.admin-side a[href="/admin/library/documents"]').count()) === 1, "Documents is in the Library menu");
   await page.goto(`${BASE}/admin/library/0625/documents`);
   await page.locator("button", { hasText: "Run the checks again on all" }).click();
-  check((await page.locator(".confirm").first().textContent())?.includes("No AI is asked"), "Run the checks again on all asks first, saying no AI is asked");
-  await page.locator("button", { hasText: "Yes, check them" }).click();
+  check((await page.locator(".confirm").first().textContent())?.includes("Free"), "Run the checks again on all asks first, saying it is free");
+  await page.locator(".confirm button", { hasText: /^Yes$/ }).first().click();
   await page.locator(".action-note", { hasText: "GITHUB_TOKEN" }).waitFor({ timeout: 10_000 }).then(() => check(true, "it starts with no cost check (only the missing GitHub token stops it here)"), () => check(false, "it starts with no cost check (only the missing GitHub token stops it here)"));
   await page.goto(`${BASE}/admin/library/0625/2024/june`);
   check((await page.locator("#to-review .score-red").count()) === 1, "the session page shows the read accuracy beside Review");
@@ -799,8 +801,8 @@ try {
   const bench = (await page.locator("#read-benchmark").textContent()) ?? "";
   check(bench.includes("10 papers of this subject are in the reading benchmark") && bench.includes("None of them is in the library yet"), `Read all shows the subject's benchmark papers (${bench.slice(0, 160)})`);
   await page.locator("#read-all button", { hasText: "Read these 2 papers" }).click();
-  check((await page.locator("#read-all .confirm").textContent())?.includes("Read 2 papers? This uses AI tokens"), "Read all asks first, with the cost");
-  await page.locator("#read-all button", { hasText: "Yes, proceed" }).click();
+  check(/^Read 2 papers\? (About|Cost)/.test(((await page.locator("#read-all .confirm").textContent()) ?? "").trim()), "Read all asks first: one short question and the cost");
+  await page.locator("#read-all .confirm button", { hasText: /^Yes$/ }).click();
   await page.locator("#read-all .action-note", { hasText: "GITHUB_TOKEN" }).waitFor({ timeout: 10_000 }).then(() => check(true, "Read all without a GitHub token says what is missing"), () => check(false, "Read all without a GitHub token says what is missing"));
   const rowDot = page.locator("table.map-table tr", { has: page.locator("th a", { hasText: /^Jun 2024$/ }) }).first().locator(".rag");
   check((await rowDot.getAttribute("class"))?.includes("rag-amber"), `the map's Jun 2024 dot is amber: some papers read (${await rowDot.getAttribute("class")})`);
@@ -810,16 +812,25 @@ try {
   sql(`INSERT INTO job (id, type, status, params, created_by, created_at) VALUES ('${batch}', 'brain', 'queued', '{"task":"paper","docId":"${id22}","scope":{"items":[],"figures":[]},"batch":{"docs":["${id22}","${id62}"],"label":"0625 Extended papers, Jun 2024"}}', 'platform-admin', ${Date.now()})`);
   sql(`INSERT INTO paper_read (doc_id, job_id, updated_at) VALUES ('${id22}', '${batch}', ${Date.now()}) ON CONFLICT (doc_id) DO UPDATE SET job_id = '${batch}'`);
   await page.goto(`${BASE}/admin`);
-  check((await page.locator("#running-now a", { hasText: "Read all: paper 1 of 2" }).getAttribute("href")) === "/admin/library/0625#read-all", "Home's Running now says which paper of how many and links to the Read all card");
+  check((await page.locator("#running-now a", { hasText: "Reading 0625 Extended papers, Jun 2024: paper 1 of 2" }).getAttribute("href")) === "/admin/library/0625#read-all", "Home's Running now names the run, which paper of how many, and links to the Read all card");
   check((await page.locator(".admin-side .side-run").count()) === 0, "runs are not in the sidebar");
   await page.goto(`${BASE}/admin/library/0625#read-all`);
   await page.locator("#read-all .batch-head", { hasText: "Paper 1 of 2" }).waitFor({ timeout: 10_000 }).then(() => check(true, "the Read all card shows the run live where it was started"), () => check(false, "the Read all card shows the run live where it was started"));
+  // The queue (owner, 12 Nov 2026): Read all pressed while a run goes on waits, and the message names that run.
+  sql(`DELETE FROM login_attempt`); // this suite starts more runs in an hour than the limit allows
+  await page.goto(`${BASE}/admin/library/0625?ra=extended&ras=s&ray=2024#read-all`);
+  await page.locator("#read-all button", { hasText: "Read these 2 papers" }).click();
+  await page.locator("#read-all .confirm button", { hasText: /^Yes$/ }).click();
+  await page.locator("#read-all .action-note", { hasText: "Added to the queue" }).waitFor({ timeout: 10_000 }).then(() => check(true, "Read all during another run joins the queue"), () => check(false, "Read all during another run joins the queue"));
+  check(((await page.locator("#read-all .action-note").first().textContent()) ?? "").includes("Going on now: Reading 0625 Extended papers, Jun 2024: paper 1 of 2"), `the message names the run going on and how far it has got (${await page.locator("#read-all .action-note").first().textContent()})`);
+  await page.locator("#run-queue li", { hasText: "Extended papers, Jun 2024" }).waitFor({ timeout: 10_000 }).then(() => check(true, "the card lists what waits in the queue"), () => check(false, "the card lists what waits in the queue"));
   const rbatch = await runBrain(batch);
   check(rbatch.status === 0 && rbatch.out.includes("Paper 1 of 2") && rbatch.out.includes("Paper 2 of 2") && rbatch.out.includes("batch done"), `one run reads both papers in turn${rbatch.status ? ": " + rbatch.out.slice(-800) : ""}`);
   const done = rows(`SELECT COUNT(*) AS n FROM paper_read WHERE doc_id IN ('${id22}', '${id62}') AND read_at IS NOT NULL`)[0].n;
   check(done === 2 && rows(`SELECT status FROM job WHERE id = '${batch}'`)[0].status === "succeeded", `both readings are saved and the run is done (${done})`);
   await page.locator("#read-all .batch-head", { hasText: "Done: 2 of 2 read" }).waitFor({ timeout: 15_000 }).then(() => check(true, "the card updates in place when the run ends"), () => check(false, "the card updates in place when the run ends"));
   check((await page.locator(`#read-all .batch-list a[href="/admin/library/review/${id22}"]`).count()) === 1, "each paper read links to its review screen");
+  check(rows(`SELECT value FROM setting WHERE key = 'brain_queue'`)[0]?.value === "[]", "when the run ended, the queued Read all found nothing left to read and left the queue");
   await page.goto(`${BASE}/admin/library/0625?ra=extended&ras=s&ray=2024#read-all`);
   check((await page.locator("#read-all").textContent())?.includes("Nothing to read"), "pressing it again finds nothing left to read");
   // Read all for both tiers (owner, 9 Nov 2026), on the same line as the month and year, bottoms aligned.

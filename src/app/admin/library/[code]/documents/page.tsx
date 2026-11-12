@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { requireStaff, allowed, ADMIN_EDIT } from "@/lib/auth/staff";
 import { getEnv } from "@/lib/env";
-import { AdminShell, Notice } from "@/components/AdminShell";
+import { AdminShell, FreeTag, Notice } from "@/components/AdminShell";
+import { QUEUE_MESSAGES } from "@/lib/brain/labels";
 import { ActionForm } from "@/components/ActionForm";
 import { DocumentsTable } from "@/components/DocumentsTable";
 import { RunProgress } from "@/components/RunProgress";
@@ -14,12 +15,10 @@ import { latestBatch } from "@/lib/brain/runs";
 export const metadata: Metadata = { title: "Documents" };
 
 const MESSAGES = {
-  ok_check: "The checks are running again on every paper read. No AI is asked; progress shows above, and new flags show on each paper's review screen.",
+  ok_check: "Checking again started. Progress shows above; new flags show on each paper.",
   check_none: "No paper of this subject has been read yet, so there is nothing to check.",
   busy: "Too many runs this hour. Please wait a little.",
-  running: "Another AI run is going on. Wait for it to finish, then press it again.",
-  not_set_up: "Starting runs is not set up (GITHUB_TOKEN or the workflow name is missing).",
-  github: "GitHub refused to start the run. Check the GITHUB_TOKEN secret.",
+  ...QUEUE_MESSAGES,
 };
 
 // One subject's documents (owner, 10 Nov 2026): every stored file with the AI's read accuracy and a person's review,
@@ -43,9 +42,9 @@ export default async function SubjectDocuments({ params, searchParams }: { param
       crumbs={[{ label: "Library", href: "/admin/library" }, { label: `${header.subject_name} ${code}`, href: `/admin/library/${code}` }, { label: "Documents" }]}
       actions={owner && sum.read ? (
         // Run the checks again on all of them (owner, 9 Nov 2026): no AI, so nothing is spent.
-        <ActionForm action={`/admin/library/${code}/check-all`} messages={MESSAGES} yes="Yes, check them" no="No"
-          confirm={`Check all ${Math.min(sum.read, BRAIN.maxBatchPapers)} readings again with the latest checks? No AI is asked, so nothing is spent. Fixes stay; new flags show on each paper.`}>
-          <button className="btn" type="submit">Run the checks again on all</button>
+        <ActionForm action={`/admin/library/${code}/check-all`} messages={MESSAGES} yes="Yes" no="No"
+          confirm={`Check all ${Math.min(sum.read, BRAIN.maxBatchPapers)} again? Free.`}>
+          <button className="btn" type="submit">Run the checks again on all <FreeTag /></button>
         </ActionForm>
       ) : null}
     >

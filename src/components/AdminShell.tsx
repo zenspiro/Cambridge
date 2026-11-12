@@ -136,6 +136,13 @@ export function Crumbs({ items }: { items: Crumb[] }) {
   );
 }
 
+export const FREE_TIP = "Uses no AI credits: only our own checks run on the stored reading.";
+
+/** "Free" on an action that asks no AI (owner, 12 Nov 2026); the tooltip says why, the words are there for screen readers. */
+export function FreeTag({ tip = FREE_TIP }: { tip?: string }) {
+  return <span className="tag-free" data-tip={tip}>Free<span className="sr-only">: {tip}</span></span>;
+}
+
 /** A section's empty state: what is missing and what to do about it. */
 export function Empty({ title, children }: { title: string; children?: React.ReactNode }) {
   return (

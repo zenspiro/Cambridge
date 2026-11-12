@@ -81,7 +81,7 @@ export type LinkKind = "session" | "subject" | "qualification" | "file" | "other
  * there); subject: names the code and no year; outside: names the code with only years outside the run, or names
  * the qualification beside another code; qualification: names the qualification ("igcse") and no code at all;
  * file: one file's own page ("...-0610-s26-qp-42-pdf", a viewer: the session page links the file itself), never
- * followed.
+ * followed. Topical pages ("igcse-biology-0610-topical-past-papers") are "other": never followed.
  * The code is matched as a whole number, so 0610 is not found in 20610.
  */
 export function linkKind(link: string, s: CrawlScope): LinkKind {
@@ -95,6 +95,9 @@ export function linkKind(link: string, s: CrawlScope): LinkKind {
   // One file's viewer page ("...-0610-s26-qp-42-pdf", "...-enzymes-igcse-0610-biology-pdf"): the session page
   // links the files themselves, so these are never read.
   if (/[-_.]pdf\/?$/.test(path.split("?")[0]!)) return "file";
+  // Topical pages (owner, 12 Nov 2026): questions cut out of papers and sorted by topic, not Cambridge's own files.
+  // They are never followed, so the run's page budget goes on the session pages.
+  if (/(^|[^a-z])(topical|topic-?wise|by-topics?)([^a-z]|$)/.test(path)) return "other";
   const codeRe = new RegExp(`(^|[^0-9])${s.code}(?![0-9])`);
   if (codeRe.test(path)) {
     if (new RegExp(`(^|[^0-9])${s.code}[-_][fmsjwy]\\d{2}[-_][a-z]{2}([-_.]|$)`).test(path)) return "file";
