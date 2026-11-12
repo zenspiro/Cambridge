@@ -52,3 +52,18 @@ export function modelName(id: string): string {
   if (/^gemini-[a-z0-9.-]+$/.test(id)) return id.split("-").map((w) => (/^[a-z]/.test(w) ? w[0]!.toUpperCase() + w.slice(1) : w)).join(" ");
   return id;
 }
+
+/** Messages for the buttons that start batch runs and the run queue (owner, 12 Nov 2026), shared by every page. */
+export const QUEUE_MESSAGES: Readonly<Record<string, string>> = {
+  ok_queued: "Added to the queue. It starts on its own when the run going on now ends.",
+  queue_dupe: "This is in the queue already.",
+  queue_full: "The queue is full. Remove one from it first.",
+  queue_empty: "Nothing is waiting in the queue.",
+  ok_unqueued: "Removed from the queue.",
+  running: "Another AI run is going on, so this cannot start yet.",
+  gemini_down: "Gemini is down, so the queue is waiting. It tries again on its own in 30 minutes, or press Start now.",
+  over_cap: "This would go past your monthly AI cap, so it did not start. Raise the cap on AI setup, or read fewer papers.",
+  no_price: "A model in use has no price, so the cap cannot be checked. Set its price on AI setup.",
+  not_set_up: "Starting runs is not set up (GITHUB_TOKEN or the workflow name is missing).",
+  github: "GitHub refused to start the run. Check the GITHUB_TOKEN secret.",
+};

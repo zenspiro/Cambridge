@@ -13,9 +13,13 @@ export type PaperScope = { items: string[]; figures: string[] };
 export type BrainParams =
   | { task: "topics"; syllabusId: string }
   | { task: "check"; which: "claude" | "gemini" | null }
-  | { task: "paper"; docId: string; scope: PaperScope; batch?: Batch; reader?: string; check?: boolean };
-/** Read all (owner, 8 Nov 2026): one run reads these papers in turn; `docId` is the one being read now. */
-export type Batch = { docs: string[]; label: string };
+  | { task: "paper"; docId: string; scope: PaperScope; batch?: Batch; reader?: string; check?: boolean; shadow?: boolean };
+/**
+ * Read all (owner, 8 Nov 2026): one run reads these papers in turn; `docId` is the one being read now. Gemini down
+ * (owner, 12 Nov 2026): a paper Gemini could not read is `skipped` and the run moves on; once the list is done the
+ * skipped papers get one more try (`again`); one that fails again is `failed`. `streak`: skips in a row.
+ */
+export type Batch = { docs: string[]; label: string; skipped?: string[]; failed?: string[]; again?: boolean; streak?: number };
 export type TreeStatus = "none" | "ready" | "not_ready";
 export type RunState = { id: string; status: "queued" | "running" | "succeeded" | "failed" | "cancelled"; step: string | null; errorRef: string | null; createdAt: number; finishedAt: number | null };
 
@@ -99,11 +103,11 @@ export async function startPaperRun(db: Db, docId: string, scope: PaperScope, ac
 const DOC_ID_RE = /^[A-Za-z0-9_-]{10,64}$/;
 
 /** Read all: one run for many papers, the first one claimed now (each later one when the script asks for it). */
-export async function startBatchRun(db: Db, docs: readonly string[], label: string, actorId: string, now = Date.now(), check = false): Promise<string | null> {
+export async function startBatchRun(db: Db, docs: readonly string[], label: string, actorId: string, now = Date.now(), check = false, shadow = false): Promise<string | null> {
   const list = docs.filter((d) => DOC_ID_RE.test(d)).slice(0, BRAIN.maxBatchPapers);
   if (!list.length) return null;
   // A check batch (owner, 9 Nov 2026): the papers already read, checked again with no AI.
-  const id = await startBrainRun(db, { task: "paper", docId: list[0]!, scope: { items: [], figures: [] }, batch: { docs: list, label: label.slice(0, 120) }, ...(check ? { check: true } : {}) }, actorId, now);
+  const id = await startBrainRun(db, { task: "paper", docId: list[0]!, scope: { items: [], figures: [] }, batch: { docs: list, label: label.slice(0, 120) }, ...(check ? { check: true } : {}), ...(shadow && !check ? { shadow: true } : {}) }, actorId, now);
   if (!id) return null;
   await claimPaper(db, list[0]!, id, now);
   await audit(db, { actorId, action: "brain.batch_start", entity: "job", entityId: id, detail: { papers: list.length, label: label.slice(0, 120) } }, now);
@@ -118,26 +122,61 @@ const claimPaper = (db: Db, docId: string, jobId: string, now: number) => db
 /** Where a batch stands: the paper being read (1-based) of how many. */
 export const batchPlace = (p: BrainParams | null) => (p?.task === "paper" && p.batch ? { at: p.batch.docs.indexOf(p.docId) + 1, of: p.batch.docs.length } : null);
 
+/** Gemini down this many papers in a row: it is out, not busy, so the run stops (the papers read so far are kept). */
+export const SKIP_STREAK_STOP = 3;
+
+export type BatchStep = { batch: Batch; candidates: string[]; retryPass: boolean; stop: boolean };
+
+/**
+ * Where a batch goes after its current paper (pure): the papers that may come next, in order, and the batch as it
+ * now stands. `skipped`: Gemini could not read the current paper. The first pass goes through `docs`; then the
+ * skipped papers once more; a paper skipped twice is given up (`failed`).
+ */
+export function batchAdvance(batch: Batch, current: string, skipped: boolean): BatchStep {
+  const b: Batch = { ...batch, skipped: [...(batch.skipped ?? [])], failed: [...(batch.failed ?? [])] };
+  if (skipped) {
+    if (b.again) b.failed!.push(current);
+    else b.skipped!.push(current);
+    b.streak = (b.streak ?? 0) + 1;
+  } else b.streak = 0;
+  if (b.streak >= SKIP_STREAK_STOP) return { batch: b, candidates: [], retryPass: false, stop: true };
+  const list = b.again ? b.skipped! : b.docs;
+  const at = list.indexOf(current);
+  let candidates = list.slice(at + 1);
+  let retryPass = false;
+  if (!b.again && !candidates.length && b.skipped!.length) {
+    b.again = true;
+    b.streak = 0;
+    candidates = [...b.skipped!];
+    retryPass = true;
+  }
+  if (!b.skipped!.length) delete b.skipped;
+  if (!b.failed!.length) delete b.failed;
+  return { batch: b, candidates, retryPass, stop: false };
+}
+
 /**
  * The next paper of a running batch that is still not read (a paper read meanwhile is skipped), made the run's
  * current paper. Null when none is left: the run is closed as done.
  */
-export async function nextBatchPaper(db: Db, jobId: string, now = Date.now()): Promise<string | null> {
+export async function nextBatchPaper(db: Db, jobId: string, now = Date.now(), step?: BatchStep): Promise<string | null> {
   const p = await activeBrainRun(db, jobId);
   if (p?.task !== "paper" || !p.batch) return null;
-  const rest = p.batch.docs.slice(p.batch.docs.indexOf(p.docId) + 1);
-  for (const docId of rest) {
+  const adv = step ?? batchAdvance(p.batch, p.docId, false);
+  for (const docId of adv.candidates) {
     const done = await db.prepare(`SELECT read_at FROM paper_read WHERE doc_id = ?1`).bind(docId).first<{ read_at: number | null }>();
-    // Reading skips papers read meanwhile; checking skips papers with no reading to check.
-    if (p.check ? !done?.read_at : done?.read_at) continue;
+    // Reading skips papers read meanwhile; checking skips papers with no reading to check; reading again for the score
+    // (`shadow`) reads them all.
+    if (p.shadow ? false : p.check ? !done?.read_at : done?.read_at) continue;
     const row = await db
       .prepare(`UPDATE job SET params = ?2, heartbeat_at = ?3 WHERE id = ?1 AND type = 'brain' AND status = 'running' RETURNING id`)
-      .bind(jobId, JSON.stringify({ ...p, docId }), now)
+      .bind(jobId, JSON.stringify({ ...p, docId, batch: adv.batch }), now)
       .first();
     if (!row) return null;
     await claimPaper(db, docId, jobId, now);
     return docId;
   }
+  await db.prepare(`UPDATE job SET params = ?2 WHERE id = ?1 AND type = 'brain' AND status = 'running'`).bind(jobId, JSON.stringify({ ...p, batch: adv.batch })).run();
   await finishBatchRun(db, jobId, now);
   return null;
 }
@@ -266,9 +305,19 @@ const readParams = (s: string): BrainParams | null => {
       const sc = (p.scope ?? {}) as { items?: unknown; figures?: unknown };
       const b = (p as { batch?: { docs?: unknown; label?: unknown } }).batch;
       const docs = b && Array.isArray(b.docs) ? b.docs.filter((x): x is string => typeof x === "string" && DOC_ID_RE.test(x)).slice(0, BRAIN.maxBatchPapers) : [];
-      const batch = docs.includes(p.docId) ? { docs, label: typeof b?.label === "string" ? b.label.slice(0, 120) : "" } : undefined;
+      const bb = (b ?? {}) as Batch;
+      const sub = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && docs.includes(x)) : []);
+      const skipped = sub(bb.skipped);
+      const failed = sub(bb.failed);
+      const batch = docs.includes(p.docId)
+        ? {
+          docs, label: typeof b?.label === "string" ? b.label.slice(0, 120) : "",
+          ...(skipped.length ? { skipped } : {}), ...(failed.length ? { failed } : {}), ...(bb.again === true ? { again: true } : {}),
+          ...(typeof bb.streak === "number" && bb.streak > 0 ? { streak: Math.min(bb.streak, 99) } : {}),
+        }
+        : undefined;
       const reader = typeof p.reader === "string" && isReader(p.reader) ? p.reader : undefined;
-      return { task: "paper", docId: p.docId, scope: { items: list(sc.items), figures: list(sc.figures) }, ...(batch ? { batch } : {}), ...(reader ? { reader } : {}), ...(p.check === true ? { check: true } : {}) };
+      return { task: "paper", docId: p.docId, scope: { items: list(sc.items), figures: list(sc.figures) }, ...(batch ? { batch } : {}), ...(reader ? { reader } : {}), ...(p.check === true ? { check: true } : {}), ...(p.shadow === true && p.check !== true ? { shadow: true } : {}) };
     }
     return p?.task === "topics" && typeof p.syllabusId === "string" ? { task: "topics", syllabusId: p.syllabusId } : null;
   } catch {

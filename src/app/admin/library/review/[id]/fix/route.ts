@@ -2,7 +2,7 @@ import { docSubject, staffPost } from "@/lib/auth/staff";
 import { applyFix, PAPER_KINDS, paperDoc, type FixAction } from "@/lib/brain/paperRead";
 import type { PaperKind } from "@/lib/brain/paper";
 
-const ACTIONS: readonly FixAction[] = ["pdf", "edit", "fine", "looks_right", "box", "unfigure", "delfigure", "override", "unoverride", "review", "unreview", "undo"];
+const ACTIONS: readonly FixAction[] = ["pdf", "edit", "fine", "looks_right", "box", "unfigure", "addfigure", "delfigure", "override", "unoverride", "review", "unreview", "undo"];
 const field = (form: FormData, name: string, max: number) => {
   const v = form.get(name);
   return typeof v === "string" ? v.slice(0, max) : undefined;

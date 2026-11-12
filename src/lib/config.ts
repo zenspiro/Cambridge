@@ -159,6 +159,9 @@ export const BRAIN = {
   maxReadScores: 20,
   /** Read all (owner, 8 Nov 2026): papers one batch run reads at most, one after another, the cap checked before each. */
   maxBatchPapers: 24,
+  /** The run queue (owner, 12 Nov 2026): asks waiting for the brain run going on; a Gemini hold is tried again after this. */
+  maxQueue: 10,
+  queueRetryMs: 30 * 60_000,
   /** Other Claude models offered in "Read with" besides the Reading AI (owner, 9 Nov 2026). */
   maxReaderChoices: 6,
   minPaperTextChars: 400,

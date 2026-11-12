@@ -397,7 +397,7 @@ export function PaperReview({ docId, pdfUrl, kind, items, figures, flags, pageCo
                     <span className="pq-marks">{it.marks !== null ? `[${it.marks}]` : ""}</span>
                   </div>
                   {fl.map((f) => box(f, it))}
-                  {canFix ? <PartEdit item={it} figures={figures} base={base} onFixed={(parts) => afterFix(parts)} /> : null}
+                  {canFix ? <PartEdit item={it} figures={figures} home={home} base={base} onFixed={(parts) => afterFix(parts)} /> : null}
                   {fixedNote(it.number, (byItem.get(it.number) ?? []).length)}
                 </article>
               );
@@ -582,9 +582,11 @@ function FlagBox({ flag, base, busy, item, current, onAdjust, canFix, canRead, o
  * and edit the text even after its green"): its wording and marks (checked against the PDF), and its figures, each
  * taken off this part or deleted from the reading. Every change is listed under Changes with Undo.
  */
-function PartEdit({ item, figures, base, onFixed }: { item: PaperItem; figures: ReviewFigure[]; base: string; onFixed: (parts: string[]) => (ok: boolean) => void }) {
+function PartEdit({ item, figures, home, base, onFixed }: { item: PaperItem; figures: ReviewFigure[]; home: ReadonlyMap<string, string>; base: string; onFixed: (parts: string[]) => (ok: boolean) => void }) {
   const fix = `${base}/fix`;
   const done = onFixed([item.number]);
+  // Add a figure (owner, 12 Nov 2026): any figure of the paper this part does not show yet, nearest page first.
+  const addable = figures.filter((f) => !item.figures.includes(f.id)).sort((a, b) => Math.abs(a.page - item.page) - Math.abs(b.page - item.page) || a.page - b.page);
   return (
     <details className="flag-edit part-edit">
       <summary className="link">Edit this part</summary>
@@ -629,6 +631,20 @@ function PartEdit({ item, figures, base, onFixed }: { item: PaperItem; figures: 
             );
           })}
         </div>
+      ) : null}
+      {addable.length ? (
+        <ActionForm className="inline-form part-edit-add" action={fix} messages={MESSAGES} onDone={done}>
+          <input type="hidden" name="action" value="addfigure" />
+          <input type="hidden" name="item" value={item.number} />
+          <label className="label-inline" htmlFor={`add-fig-${item.number}`}>Add a figure</label>
+          <select className="input" id={`add-fig-${item.number}`} name="figure" defaultValue={addable[0]!.id}>
+            {addable.map((f) => {
+              const on = home.get(f.id);
+              return <option key={f.id} value={f.id}>{f.caption || f.description || `Figure ${f.id}`} (page {f.page}{on ? `, on ${on}` : ", on no part"})</option>;
+            })}
+          </select>
+          <button className="btn btn-small" type="submit">Add to {item.number}</button>
+        </ActionForm>
       ) : null}
     </details>
   );

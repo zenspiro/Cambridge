@@ -20,7 +20,7 @@ export async function POST(request: Request) {
   const limits = brainLimits();
   if (params.task === "check") return json({ task: "check", which: params.which, models: { claude: models.claude, gemini: models.gemini }, limits });
   if (params.task === "paper") {
-    const payload = await paperJobPayload(a.db, a.env.FILES, params.docId, params.scope, params.batch, models, limits, params.reader, params.check);
+    const payload = await paperJobPayload(a.db, a.env.FILES, params.docId, params.scope, params.batch, models, limits, params.reader, params.check, params.shadow);
     return payload ? json(payload) : json({ error: "no_paper" }, 404);
   }
   const y = await a.db

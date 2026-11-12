@@ -4,8 +4,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { assignBoxes, cleanArt, cleanBox, cropSvg, findBoxes, labelBoxes, pageArt, pageSvg, textLines, wholePage } from "../../src/lib/brain/figures.ts";
 import { cleanPaper, figureFlag, figureHome, paperFlags, placeOnPages } from "../../src/lib/brain/paper.ts";
-import { applyFix, figurePageSvg, figureSvg, loadContent, paperDoc, paperView, saveArt, savePaperReading } from "../../src/lib/brain/paperRead.ts";
-import { claimBrainRun, startPaperRun } from "../../src/lib/brain/runs.ts";
+import { applyFix, figurePageSvg, figureSvg, handFixed, loadContent, paperDoc, paperView, saveArt, savePaperReading } from "../../src/lib/brain/paperRead.ts";
+import { claimBrainRun, startBatchRun, startPaperRun } from "../../src/lib/brain/runs.ts";
 import { testBucket, testDb } from "./helpers/d1.ts";
 
 const NOW = 1_780_000_000_000;
@@ -247,6 +247,53 @@ test("a figure taken off a part, or deleted, by hand on any part; Undo brings ea
   assert.equal(c.figures[0]!.id, "F1");
   assert.deepEqual(c.figures[0]!.box, [190, 140, 370, 300]);
   assert.deepEqual(c.items.map((x) => x.figures), [["F1"], ["F1"]], "back where it was");
+
+  // Add a figure (owner, 12 Nov 2026): taken off 1(c), then put back on it by hand; Undo takes it off again.
+  await applyFix(db, bucket, doc, "unfigure", { item: "1(c)", figure: "F1" }, "platform-admin", NOW + 50);
+  assert.equal(await applyFix(db, bucket, doc, "addfigure", { item: "1(c)", figure: "F9" }, "platform-admin", NOW + 60), "bad", "only a figure of this paper");
+  assert.equal(await applyFix(db, bucket, doc, "addfigure", { item: "1(b)", figure: "F1" }, "platform-admin", NOW + 60), "bad", "not twice on a part");
+  assert.equal(await applyFix(db, bucket, doc, "addfigure", { item: "1(c)", figure: "F1" }, "platform-admin", NOW + 60), "ok_fixed");
+  assert.deepEqual((await loadContent(bucket, "doc-qp-del", "qp"))!.items.map((x) => x.figures), [["F1"], ["F1"]]);
+  view = await paperView(db, bucket, doc);
+  const add = view.fixes[0]!;
+  assert.equal(add.what, "Added figure F1 to this part");
+  assert.equal(await applyFix(db, bucket, doc, "undo", { fix: add.id }, "platform-admin", NOW + 70), "ok_undone");
+  assert.deepEqual((await loadContent(bucket, "doc-qp-del", "qp"))!.items.map((x) => x.figures), [["F1"], []]);
+});
+
+test("the AI's own copy for the benchmark: kept from a whole reading of a paper nobody fixed; a read for the score touches nothing else", async () => {
+  const db = testDb();
+  const bucket = testBucket();
+  db.raw.exec(`INSERT INTO source_document (id, syllabus_id, session, year, paper, variant, doc_type, file_name, r2_key, sha256, size_bytes, origin, status, acquired_at)
+               VALUES ('doc-qp-aicopy', '0625-2023', 'w', 2025, 4, 2, 'qp', '0625_w25_qp_42.pdf', 'k', 'sha', 100000, 'upload', 'stored', ${NOW})`);
+  const item = (text: string) => ({ number: "1(a)", page: 2, text, marks: 2, options: [], answerLines: 1, figures: [], guidance: "" });
+  const read = async (text: string, at: number, shadow = false) => {
+    const run = (await startBatchRun(db, ["doc-qp-aicopy"], "0625 benchmark papers", "platform-admin", at, false, shadow))!;
+    await claimBrainRun(db, run, null, at + 1);
+    return savePaperReading(db, bucket, run, "doc-qp-aicopy", { content: cleanPaper({ items: [item(text)], figures: [] }, "qp"), flags: [], pages: [], models: { claude: "claude-haiku-5-5", gemini: "gemini-3.6-flash" } }, true, at + 2, true, { full: true, shadow });
+  };
+  const ai = async () => {
+    const o = await bucket.get("papers/doc-qp-aicopy/ai.json");
+    return o ? (JSON.parse(await new Response(o.body).text()) as { content: { items: { text: string }[] }; claude: string }) : undefined;
+  };
+  assert.equal(await read("State the AI's words.", NOW), "ok");
+  assert.equal((await ai())?.content.items[0]?.text, "State the AI's words.");
+  assert.equal((await ai())?.claude, "claude-haiku-5-5");
+  // A person fixes the words: the copy keeps the AI's.
+  const doc = (await paperDoc(db, "doc-qp-aicopy"))!;
+  assert.equal(await handFixed(db, "doc-qp-aicopy"), false);
+  assert.equal(await applyFix(db, bucket, doc, "edit", { item: "1(a)", text: "State the fixed words.", marks: "2" }, "platform-admin", NOW + 10), "ok_fixed");
+  assert.equal(await handFixed(db, "doc-qp-aicopy"), true);
+  assert.equal((await ai())?.content.items[0]?.text, "State the AI's words.");
+  // A normal reading again (merged with the fix) leaves the copy alone.
+  await read("State the fixed words.", NOW + 20);
+  assert.equal((await ai())?.content.items[0]?.text, "State the AI's words.");
+  // Read again for the score: only the copy changes; the reading people see keeps the fix, with no new revision.
+  const before = await db.prepare(`SELECT revision, read_at FROM paper_read WHERE doc_id = 'doc-qp-aicopy'`).bind().first<{ revision: number; read_at: number }>();
+  assert.equal(await read("State the new AI words.", NOW + 30, true), "ok");
+  assert.equal((await ai())?.content.items[0]?.text, "State the new AI words.");
+  assert.equal((await loadContent(bucket, "doc-qp-aicopy", "qp"))!.items[0]!.text, "State the fixed words.");
+  assert.deepEqual(await db.prepare(`SELECT revision, read_at FROM paper_read WHERE doc_id = 'doc-qp-aicopy'`).bind().first(), before);
 });
 
 test("a figure's labels by text alone: short lines between the question text and its printed label (Mar 2025 Paper 42, Fig. 7.1)", () => {

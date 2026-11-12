@@ -2,6 +2,20 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-12: Run queue, Gemini skips, the AI's own copy, shorter confirms
+
+**What:** nine fixes from running the benchmark reads.
+- **Queue:** Read all, the benchmark papers and Check all pressed while another AI run is going on wait in a queue (`src/lib/brain/queue.ts`, setting `brain_queue`) and start on their own when that run ends, whatever the subject. The queue keeps what was asked, so the papers are worked out again at start, and the cost is checked against the cap then. Each Read all card lists the queue with Remove. After a run stops for a reason that would stop the next one too (Gemini down, the cap, a missing key), the queue is held. Start now overrides that, and a Gemini hold tries again on its own after 30 minutes.
+- **Gemini down:** in a batch, a paper Gemini cannot read is skipped and the run moves on. Nothing is spent, because Gemini reads first. The skipped papers get one more try at the end, after a 2 minute wait. Gemini down for 3 papers in a row stops the run. Papers still not read show as "Not read: Gemini was down" in the card.
+- **The AI's own copy:** every whole reading of a paper nobody has fixed by hand is also kept as `papers/<doc>/ai.json`. The benchmark scores that copy, so a person's fixes never count as the AI's. "Read them again for the score" (on the card once a subject's benchmark papers are read) reads them afresh into that copy only. The reading people review and fix is not touched. `score.ts` reads `ai.json`, else the stored reading if it has no hand fixes, and names any paper it had to leave out.
+- **Messages:** the benchmark button has its own message. "Another AI run is going on" now names the run and how far it has got ("Going on now: Reading 0580 benchmark papers: paper 3 of 10"); `describeRun` names batches by what was asked. Confirmations are one short question plus the cost ("Read 9 papers? About $0.40."). Actions that use no AI carry a "Free" tag with a tooltip.
+- **Add a figure:** "Edit this part" can put any of the paper's figures on the part (fix `addfigure`, recorded as an edit with Undo).
+- **Topical pages:** the agent never follows topical pages (questions sorted by topic); its page budget goes on session pages.
+
+**Why:** owner, 12 Nov 2026, while running the benchmark reads. The Maths run stopped on a Gemini 503 after paper 1, and "Another AI run is going on" gave no detail. The owner also asked why benchmark papers should not be corrected yet: corrections changed the score.
+
+**Tested:** unit tests for the skip and retry order (`batchAdvance`), a batch that skips and retries on SQLite, the queue (waits, starts when a run ends, held after Gemini down, retries after 30 minutes, Remove, drops an ask with nothing left), reading again for the score, `addfigure` with Undo, the AI copy (kept, not overwritten after a hand fix, a read for the score changing nothing else), and topical links. Browser: Free tags with tooltips, the short confirms, Read all during another run joining the queue with the run named, and the queue emptying when that run ends (622 checks). Live, read only: `score.ts` with the new rule found three Physics papers fixed by hand (Mar 2023 P12, Mar 2025 P42, Nov 2025 P42), now left out until they are read again for the score.
+
 ## 2026-11-11: The brain workflow file reads again
 
 **What:** a line added to `.github/workflows/brain.yml` with the Poppler fallback held an unquoted ": ", which made the file invalid YAML, so GitHub refused every brain run ("GitHub refused to start the run"). Fixed, and a unit test now parses every workflow file (`tests/unit/workflows.test.ts`, with the `yaml` package pinned as a dev dependency; it was already installed through OpenNext).

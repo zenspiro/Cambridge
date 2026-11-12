@@ -115,6 +115,13 @@
   .pill-bad { @apply border-red-200 bg-red-50 text-red-800; }
   .pill-info { @apply border-blue-200 bg-blue-50 text-blue-900; }
   .pill-busy { @apply border-blue-200 bg-blue-50 text-blue-900; }
+  /* "Free" on actions that use no AI (owner, 12 Nov 2026), with its tooltip on hover or focus. */
+  .tag-free { @apply relative inline-block rounded-full border border-green-200 bg-green-50 px-2 text-sm font-semibold text-green-800; }
+  .tag-free::after {
+    content: attr(data-tip);
+    @apply pointer-events-none invisible absolute bottom-full left-1/2 z-30 mb-2 w-64 -translate-x-1/2 rounded-md bg-slate-900 px-3 py-2 text-left text-sm font-normal text-white opacity-0 shadow-lg transition-opacity;
+  }
+  .tag-free:hover::after, .tag-free:focus-visible::after, .btn:hover .tag-free::after, .btn:focus-visible .tag-free::after { @apply visible opacity-100; }
   /* Data tables. */
   .table { @apply w-full border-collapse text-base; }
   .table th { @apply border-b border-line px-3 py-2 text-left text-sm font-semibold text-muted; }

@@ -16,7 +16,7 @@ export const PAPER_KINDS: readonly PaperKind[] = ["qp", "ms"];
 const KINDS: readonly FlagKind[] = ["words", "numbers", "marks", "numbering", "figure", "agree", "missing", "text", "notation", "structure"];
 const enc = new TextEncoder();
 
-const key = (docId: string, part: "content" | "pages" | "gemini" | `art-${number}`) => `papers/${encodeURIComponent(docId)}/${part}.json`;
+const key = (docId: string, part: "content" | "pages" | "gemini" | "ai" | `art-${number}`) => `papers/${encodeURIComponent(docId)}/${part}.json`;
 
 async function getJson(bucket: Bucket, k: string): Promise<unknown> {
   const obj = await bucket.get(k);
@@ -219,6 +219,8 @@ export function fixView(r: { id: string; action: string; item: string | null; fl
     what = `Deleted ${text(f.caption) || `figure ${text(f.id)}`}`;
   } else if (typeof b.unfigure === "string") {
     what = `Took figure ${b.unfigure} off this part`;
+  } else if (typeof b.addfigure === "string") {
+    what = `Added figure ${b.addfigure} to this part`;
   } else if (b.figure) {
     what = "Moved the figure's box";
   } else if (r.action === "pdf" && typeof b.lead === "string") {
@@ -267,13 +269,30 @@ export type SaveResult = "ok" | "no_run" | "bad" | "too_big";
  * Saves a reading from the brain script (already merged with what was there, flags worked out). `final` closes the
  * run; a first save after Claude's reading keeps the run open for the drawings, so a failed drawing never loses it.
  */
-export async function savePaperReading(db: Db, bucket: Bucket, jobId: string, docId: string, raw: Record<string, unknown>, final: boolean, now = Date.now(), closeRun = true): Promise<SaveResult> {
+export async function savePaperReading(db: Db, bucket: Bucket, jobId: string, docId: string, raw: Record<string, unknown>, final: boolean, now = Date.now(), closeRun = true, how: { full?: boolean; shadow?: boolean } = {}): Promise<SaveResult> {
   const doc = await paperDoc(db, docId);
   if (!doc || !PAPER_KINDS.includes(doc.docType as PaperKind)) return "bad";
   const content = cleanPaper(raw.content, doc.docType as PaperKind);
   if (!content.items.length) return "bad";
   const body = JSON.stringify(content);
   if (body.length > BRAIN.maxPaperBytes) return "too_big";
+  const models = raw.models && typeof raw.models === "object" ? (raw.models as Record<string, unknown>) : {};
+  const aiCopy = () => putJson(bucket, key(docId, "ai"), {
+    at: now, content,
+    claude: typeof models.claude === "string" && CLAUDE_MODEL_RE.test(models.claude) ? models.claude : "",
+    gemini: typeof models.gemini === "string" && GEMINI_MODEL_RE.test(models.gemini) ? models.gemini : "",
+  });
+  // Read again for the score (owner, 12 Nov 2026): a fresh reading kept as the AI's own copy only; the reading people
+  // see and fix, its flags and its fixes stay exactly as they are.
+  if (how.shadow) {
+    const row = await db.prepare(`UPDATE paper_read SET updated_at = ?3 WHERE doc_id = ?1 AND job_id = ?2 RETURNING doc_id`).bind(docId, jobId, now).first();
+    if (!row) return "no_run";
+    if (final) {
+      await aiCopy();
+      if (closeRun) await db.prepare(`UPDATE job SET status = 'succeeded', progress = 100, finished_at = ?2, step = NULL WHERE id = ?1 AND type = 'brain' AND status = 'running'`).bind(jobId, now).run();
+    }
+    return "ok";
+  }
   const flags = cleanFlags(raw.flags);
   const pages = Array.isArray(raw.pages) ? raw.pages.filter((p): p is string => typeof p === "string").slice(0, 500) : null;
   const row = await db
@@ -288,6 +307,9 @@ export async function savePaperReading(db: Db, bucket: Bucket, jobId: string, do
   // The first full reading is kept as the paper's read accuracy (never a figures-only run, never overwritten). Each
   // full reading also adds its own score with the models that read it (owner, 8 Nov 2026: compare models), from the
   // AIs' reading before it was merged with what was kept. A mark scheme's marks against its question paper count.
+  // The AI's own copy (owner, 12 Nov 2026): the benchmark scores this, so a person's fixes never count as the AI's.
+  // Kept from every whole-paper reading of a paper nobody has fixed by hand (automatic fixes are the reader's own).
+  if (final && raw.read !== false && how.full && !(await handFixed(db, docId))) await aiCopy();
   if (final && raw.read !== false) {
     const fresh = freshReading(raw.fresh);
     const parts = fresh ? fresh.items : content.items;
@@ -334,6 +356,15 @@ export async function savePaperReading(db: Db, bucket: Bucket, jobId: string, do
   return "ok";
 }
 
+/** A person changed this reading's words, marks or figures (not "It's fine" or a ready mark), not undone. */
+export async function handFixed(db: Db, docId: string): Promise<boolean> {
+  const r = await db
+    .prepare(`SELECT 1 AS n FROM paper_fix WHERE doc_id = ?1 AND actor <> ?2 AND action IN ('pdf', 'edit') AND undone_at IS NULL LIMIT 1`)
+    .bind(docId, AUTO_ACTOR)
+    .first();
+  return !!r;
+}
+
 /** What the script needs to merge a new reading: the stored one, Gemini's, and the items with open flags. */
 export async function readingForRun(db: Db, bucket: Bucket, doc: DocInfo): Promise<{ content: PaperContent | null; gemini: PaperContent | null; open: string[]; hold: AutoHold }> {
   const v = await paperView(db, bucket, doc);
@@ -365,7 +396,7 @@ export async function autoHold(db: Db, doc: Pick<DocInfo, "id" | "code">): Promi
 
 // ---------- Fixes ----------
 
-export type FixAction = "pdf" | "edit" | "fine" | "looks_right" | "box" | "unfigure" | "delfigure" | "override" | "unoverride" | "review" | "unreview" | "undo";
+export type FixAction = "pdf" | "edit" | "fine" | "looks_right" | "box" | "unfigure" | "addfigure" | "delfigure" | "override" | "unoverride" | "review" | "unreview" | "undo";
 export type FixResult = "ok_fixed" | "ok_undone" | "ok_ready" | "ok_reviewed" | "ok_unreviewed" | "still_flagged" | "stale" | "has_table" | "bad" | "not_read";
 
 /**
@@ -428,7 +459,8 @@ async function writeRow(db: Db, docId: string, flags: Flag[], dismissed: string[
  * edit: the admin's wording and marks. Both are checked again against the PDF at once. fine: the flag is a false
  * alarm, remembered for this paper and as a rule for the subject. looks_right: a figure drawing is accepted.
  * override / unoverride: mark ready with flags left, or take that back. review / unreview: mark a paper with no flags
- * left as checked by a person, or take that back. unfigure: a figure taken off one part; delfigure: a figure that is
+ * left as checked by a person, or take that back. unfigure: a figure taken off one part; addfigure: one of the paper's
+ * figures put on a part (owner, 12 Nov 2026); delfigure: a figure that is
  * not in the paper deleted from the reading (owner, 11 Nov 2026: clean-up by hand on any part, flagged or not).
  * undo: reverses one earlier fix.
  */
@@ -514,6 +546,17 @@ export async function applyFix(db: Db, bucket: Bucket, doc: DocInfo, action: Fix
       await putJson(bucket, key(doc.id, "content"), content);
       await writeRow(db, doc.id, row.flags, row.dismissed, now);
       await recordFix(db, doc.id, "edit", it.number, null, { item: it, flags: row.flags, unfigure: args.figure }, { text: it.text, marks: it.marks }, actorId, now);
+      return "ok_fixed";
+    }
+    case "addfigure": {
+      // A figure of this paper put on a part that should show it (owner, 12 Nov 2026), as an edit of that part: Undo
+      // takes it off again. It stays on any other part that has it.
+      const it = view.content.items.find((x) => x.number === args.item);
+      if (!it || !args.figure || it.figures.includes(args.figure) || !view.content.figures.some((f) => f.id === args.figure)) return "bad";
+      const content = { ...view.content, items: view.content.items.map((x) => (x.number === it.number ? { ...x, figures: [...x.figures, args.figure!] } : x)) };
+      await putJson(bucket, key(doc.id, "content"), content);
+      await writeRow(db, doc.id, row.flags, row.dismissed, now);
+      await recordFix(db, doc.id, "edit", it.number, null, { item: it, flags: row.flags, addfigure: args.figure }, { text: it.text, marks: it.marks }, actorId, now);
       return "ok_fixed";
     }
     case "delfigure": {

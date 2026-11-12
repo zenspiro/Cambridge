@@ -4,7 +4,9 @@
 //   --save-baseline   keep this run as benchmark/baseline.json (only when it beats the last one)
 //   --show-locked     list the locked papers' checks too (never while tuning rules)
 // Live needs CF_ACCOUNT_ID, CF_D1_ID and either CF_API_TOKEN or a session whose proxy adds the token. It only reads:
-// one D1 query for the papers' ids, then each paper's content.json from the FILES bucket.
+// one D1 query for the papers' ids, then each paper's reading from the FILES bucket: the AI's own copy (ai.json, owner,
+// 12 Nov 2026), else the stored reading when nobody has fixed it by hand; a paper fixed by hand with no AI copy is not
+// scored (read it again for the score from its Read all card).
 // Exit code 1 when a check that passed in the baseline fails now on the tuning set (a regression).
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -29,7 +31,9 @@ const api = async (path: string, init?: RequestInit): Promise<Response> => {
   return fetch(`https://api.cloudflare.com/client/v4/accounts/${account}${path}`, { ...init, headers });
 };
 
-/** Each benchmark file's stored reading, or null when it has none yet. */
+const handFixed: string[] = [];
+
+/** Each benchmark file's reading by the AI alone, or none when it has none yet. */
 async function readings(): Promise<Map<string, unknown>> {
   const out = new Map<string, unknown>();
   if (dir) {
@@ -42,13 +46,24 @@ async function readings(): Promise<Map<string, unknown>> {
   const d1 = process.env.CF_D1_ID;
   if (!d1) throw new Error("CF_D1_ID is not set");
   const names = BENCHMARK.map(benchFileName);
-  const sql = `SELECT d.id, d.file_name FROM source_document d JOIN paper_read r ON r.doc_id = d.id WHERE d.status = 'stored' AND d.file_name IN (${names.map(() => "?").join(",")})`;
+  const sql = `SELECT d.id, d.file_name, (SELECT COUNT(*) FROM paper_fix f WHERE f.doc_id = d.id AND f.actor <> 'auto' AND f.action IN ('pdf', 'edit') AND f.undone_at IS NULL) AS hand
+    FROM source_document d JOIN paper_read r ON r.doc_id = d.id WHERE d.status = 'stored' AND r.read_at IS NOT NULL AND d.file_name IN (${names.map(() => "?").join(",")})`;
   const res = await api(`/d1/database/${d1}/query`, { method: "POST", body: JSON.stringify({ sql, params: names }) });
-  const body = (await res.json()) as { success: boolean; result?: { results: { id: string; file_name: string }[] }[]; errors?: unknown };
+  const body = (await res.json()) as { success: boolean; result?: { results: { id: string; file_name: string; hand: number }[] }[]; errors?: unknown };
   if (!body.success) throw new Error(`D1 query failed: ${JSON.stringify(body.errors)}`);
   for (const row of body.result?.[0]?.results ?? []) {
+    const file = row.file_name.replace(/\.pdf$/, "");
+    const ai = await api(`/r2/buckets/cambridge/objects/papers/${row.id}/ai.json`);
+    if (ai.ok) {
+      out.set(file, ((await ai.json()) as { content?: unknown }).content);
+      continue;
+    }
+    if (row.hand > 0) {
+      handFixed.push(file);
+      continue;
+    }
     const r = await api(`/r2/buckets/cambridge/objects/papers/${row.id}/content.json`);
-    if (r.ok) out.set(row.file_name.replace(/\.pdf$/, ""), await r.json());
+    if (r.ok) out.set(file, await r.json());
   }
   return out;
 }
@@ -90,6 +105,7 @@ if (showLocked) {
     console.log(`  ${f.padEnd(16)} ${s ? `${s.pct.toFixed(1)}%  ${s.checks.filter((c) => !c.ok).map((c) => c.id).join(", ")}` : "not read yet"}`);
   }
 }
+if (handFixed.length) console.log(`\nNot scored, fixed by hand and no AI copy yet (read them again for the score): ${handFixed.join(", ")}`);
 console.log("\nBy subject (tuning set):");
 for (const code of [...new Set(BENCHMARK.map((p) => benchCode(p.file)))]) console.log(`  ${line(code, totals(run, tuning.filter((f) => benchCode(f) === code)))}`);
 console.log("");

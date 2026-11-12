@@ -38,5 +38,7 @@ test("which links lead to the subject's files for the run's years", () => {
   assert.equal(k("papers/caie/igcse-biology-20610"), "qualification", "0610 inside a longer number is not the code");
   assert.equal(k("viewer/caie/igcse-biology-0610-2026-may-june-0610-s26-qp-42-pdf"), "file", "a file's viewer page");
   assert.equal(k("viewer/caie/igcse-biology-0610-topical-2023-june-2023-enzymes-igcse-0610-biology-pdf"), "file");
-  assert.equal(k("papers/caie/igcse-biology-0610-topical-past-papers"), "subject");
+  assert.equal(k("papers/caie/igcse-biology-0610-topical-past-papers"), "other", "topical pages are never followed");
+  assert.equal(k("papers/caie/igcse-biology-0610-topic-wise-2024"), "other");
+  assert.equal(k("papers/caie/igcse-biology-0610"), "subject");
 });

@@ -61,7 +61,11 @@ right" when every check passes.
 NODE_USE_ENV_PROXY=1 CF_ACCOUNT_ID=<account> CF_D1_ID=<database> node scripts/benchmark/score.ts
 ```
 
-Read only: one D1 query for the papers' ids, then each reading from R2 `FILES`. Prints each tuning paper's score and
+Read only: one D1 query for the papers' ids, then each reading from R2 `FILES`. It scores the AI's own copy
+(`papers/<doc>/ai.json`, owner, 12 Nov 2026): kept from every whole reading of a paper nobody has fixed by hand, and
+refreshed by "Read them again for the score" on the Read all card, which reads afresh into that copy only. A paper with
+no copy is scored on its stored reading only when it has no hand fixes; otherwise it is named and left out. So
+reviewing and correcting benchmark papers is safe. Prints each tuning paper's score and
 what is wrong, totals per subject, tuning and locked totals, and the comparison with `benchmark/baseline.json`: exit
 code 1 when a check that passed in the baseline fails now. `--save-baseline` keeps the run as the new baseline (refused
 while anything regressed). `--dir <folder>` scores readings saved as files instead.
@@ -80,6 +84,6 @@ lost in multiple choice (R₄, V₂, A₁ in Mar 2025 P22), and the mark scheme'
 ## The rule for changes
 
 1. Score before the change (`score.ts`, baseline saved).
-2. Make the change; read the tuning papers again where it touches reading, or run the checks again.
+2. Make the change; read the tuning papers again for the score where it touches reading ("Read them again for the score").
 3. Score again: no regressions on the tuning set, and the tuning total up. Then save the baseline.
 4. The locked total is looked at only to confirm, never to choose between versions of a change.
