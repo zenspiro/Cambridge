@@ -377,3 +377,12 @@ test("photos: placed from pdftocairo's <use>, filled with a JPEG, kept safe, cut
   const photoOnly = { ...clean, e: clean.e.filter((x) => "i" in x) };
   assert.deepEqual(findBoxes(photoOnly, lines).captions[0]?.box, [155.77, 308.9, 439.21, 499.94]);
 });
+
+test("two captions side by side each take the drawing in their own column", () => {
+  // Chemistry Nov 2023 P62 page 2: Fig. 1.1 (left) and Fig. 1.2 (right) on one line; each used to get the other's box.
+  const path = (x0: number, x1: number) => `<path fill="none" stroke-width="1" stroke="rgb(0%, 0%, 0%)" d="M ${x0} 300 L ${x1} 420 "/>`;
+  const svg = [`<svg xmlns="http://www.w3.org/2000/svg" width="595" height="842"><defs></defs>`, path(150, 230), path(355, 450), `</svg>`].join("\n");
+  const cap = (x0: number, n: string) => `<flow><block xMin="${x0}" yMin="440" xMax="${x0 + 40}" yMax="452"><line xMin="${x0}" yMin="440" xMax="${x0 + 40}" yMax="452"><word xMin="${x0}" yMin="440" xMax="${x0 + 18}" yMax="452">Fig.</word><word xMin="${x0 + 20}" yMin="440" xMax="${x0 + 40}" yMax="452">${n}</word></line></block></flow>`;
+  const found = findBoxes(pageArt(svg, 2), textLines(`<page>${cap(170, "1.1")}${cap(390, "1.2")}</page>`));
+  assert.deepEqual(found.captions.map((c) => [c.label, c.box[0], c.box[2]]), [["1.1", 150, 230], ["1.2", 355, 450]]);
+});

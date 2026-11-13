@@ -8,7 +8,7 @@ Newest first. What changed, why, and how it was tested.
 
 **Why:** owner, 13 Nov 2026, option A: figure cutting read only vector drawings, so every photo had to be boxed by hand (Biology Mar 2025 P42 had four).
 
-**Tested:** unit tests (placement, the JPEG check (only JPEG data URIs survive), dropping photos without data, the cut, a photo's box without the question's sentences); every benchmark paper's figures before and after: 8 figures that had no box now have one, 6 boxes better (whole leaf section, the bean pod, the variegated leaves), the side-by-side starfish fixed after a first pass swapped them, each checked by eye. Stored page sizes 90 to 220 KB with photos.
+**Tested:** unit tests (placement, the JPEG check (only JPEG data URIs survive), dropping photos without data, the cut, a photo's box without the question's sentences); every benchmark paper's figures before and after: 8 figures that had no box now have one, 6 boxes better (whole leaf section, the bean pod, the variegated leaves), side-by-side captions fixed (Biology Nov 2025 P62's starfish and Chemistry Nov 2023 P62's Fig. 1.1 and 1.2 had each other's box, also before this change), each checked by eye. Those two live papers keep their swapped boxes until "Cut figures again". Stored page sizes 90 to 220 KB with photos.
 
 ## 2026-11-13: Maths symbols in one form
 
