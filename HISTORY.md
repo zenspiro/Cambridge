@@ -2,6 +2,30 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-12: Opening texts get their "Fig. N.N shows ..." sentences back
+
+**What:** an opening text that is empty, or that leaves out the paper's sentences introducing a figure, is flagged red and put right automatically: only those whole sentences are added, before or after the reading's own words. Table cells, diagram labels and anything inside the text are never touched.
+
+**Why:** owner, 12 Nov 2026 (reading the weakest benchmark papers): Haiku read Biology Nov 2023 P32 with five empty opening texts and three missing their figure sentence, with no flag.
+
+**Tested:** unit tests; every benchmark paper's stored reading through the loader: 20 fixes, each checked by eye (a first wider rule copied tables, flowchart words and a duplicated equation, so it was narrowed). Biology Nov 2023 P32 loaded from this session: 2(d)(i) and (ii) added (the matching question as two lists), 0 flags, 100% on its key.
+
+## 2026-11-12: Column vectors, and no false flat power from a base
+
+**What:** column vectors are one markup, \binom{8}{−5}, shown on the review screen as two numbers stacked in brackets; Gemini's LaTeX (pmatrix, \mathbf, \quad) becomes the same markup, and the word check ignores markup names. The flat-notation check no longer flags "2x^{3}" because the page also prints 2^{x}.
+
+**Why:** owner, 12 Nov 2026 (reading the weakest benchmark papers): Maths Mar 2024 P42 had red flags on 7(a)'s vectors (wording and agreement) and four false notation flags on question 10.
+
+**Tested:** unit tests; on every benchmark paper's stored reading the four false flags go and no notation flag is added. Maths Mar 2024 P42 read again in this session (8(c) numbered, f(x) = \frac{1}{x}, answer-line units, F10's box by hand) and loaded: 0 red flags, 100% on its key.
+
+## 2026-11-12: Parts the paper never prints, labels inside figure boxes, Insert figures
+
+**What:** an amber flag for a part with marks under a number the paper never prints (an invented "3(lead)", "6(iii)"). The printed outline keeps a part label such as "(i)" that starts a line even when a figure's box covers it. Answer keys leave out figures and tables printed in the separate Insert, which no reading of the question paper can hold.
+
+**Why:** owner, 12 Nov 2026 (reading the weakest benchmark papers): Chemistry Jun 2023 P52 had "3(lead)" with no flag; Geography Jun 2025 P42 lost 1(d)(i) and (ii) from the outline (and its key) because Fig. 1.3's box began on the "(i)" line; Geography keys counted Insert figures against every reading.
+
+**Tested:** unit tests (the outline test fails without the fix). The outline of every benchmark paper is unchanged except Geography P42. On the stored readings the new flag names only real misnumberings. Benchmark tuning 96.7%, locked 93.1% to 93.4%, baseline saved. Loaded from this session: Biology Jun 2024 P42 (2(d) and 5(d) numbered, 100% on its key) and Chemistry Jun 2023 P52 (question 3 as one part, 100%).
+
 ## 2026-11-12: A flag for parts the reading leaves out
 
 **What:** a red flag for every part the paper prints with its [marks] that the reading does not have, worked out from the printed page (not only when Gemini found it). Raised only when the printed marks add up to the paper's total, so a misread page raises nothing. The dev-session loader takes the paper's total from its cover. Benchmark keys no longer count the reference notes at the back of Chemistry Paper 6 as question 4.

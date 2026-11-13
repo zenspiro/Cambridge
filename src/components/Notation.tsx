@@ -1,6 +1,6 @@
 // Text with our notation markup shown as the paper prints it (owner, 9 Nov 2026): ^{...} as a superscript, _{...} as
 // a subscript, \frac{...}{...} as a stacked fraction, so ^{208}_{81}Tl reads as the nuclide, H_{2}O as water and
-// \frac{4}{x − 1} as four over x − 1. Plain React, no HTML strings.
+// \frac{4}{x − 1} as four over x − 1, \binom{8}{−5} as a column vector. Plain React, no HTML strings.
 import type { ReactNode } from "react";
 import type { PaperTable } from "@/lib/brain/paper";
 import { notationPlain, notationTree, type NotationNode } from "@/lib/brain/notation";
@@ -18,7 +18,14 @@ function render(nodes: readonly NotationNode[]): ReactNode[] {
           <span className="nota-den" aria-hidden="true">{render(p.den)}</span>
         </span>,
       );
-    } else if (q && q.kind !== "text" && q.kind !== "frac" && q.kind !== p.kind) {
+    } else if (p.kind === "vec") {
+      out.push(
+        <span key={i} className="nota-vec" role="math" aria-label={`column vector ${notationPlain(plain(p.top))}, ${notationPlain(plain(p.bottom))}`}>
+          <span aria-hidden="true">{render(p.top)}</span>
+          <span aria-hidden="true">{render(p.bottom)}</span>
+        </span>,
+      );
+    } else if (q && q.kind !== "text" && q.kind !== "frac" && q.kind !== "vec" && q.kind !== p.kind) {
       // A superscript and subscript together (a nuclide's mass and atomic numbers, SO₄²⁻) stack as printed.
       const [sup, sub] = p.kind === "sup" ? [p, q] : [q, p];
       out.push(<span key={i} className="nota-stack"><span>{render(sup.children)}</span><span>{render(sub.children)}</span></span>);
@@ -30,7 +37,7 @@ function render(nodes: readonly NotationNode[]): ReactNode[] {
 
 /** A node list back to its markup (for a fraction's spoken label). */
 function plain(nodes: readonly NotationNode[]): string {
-  return nodes.map((n) => (n.kind === "text" ? n.text : n.kind === "frac" ? `\\frac{${plain(n.num)}}{${plain(n.den)}}` : `${n.kind === "sup" ? "^" : "_"}{${plain(n.children)}}`)).join("");
+  return nodes.map((n) => (n.kind === "text" ? n.text : n.kind === "frac" ? `\\frac{${plain(n.num)}}{${plain(n.den)}}` : n.kind === "vec" ? `\\binom{${plain(n.top)}}{${plain(n.bottom)}}` : `${n.kind === "sup" ? "^" : "_"}{${plain(n.children)}}`)).join("");
 }
 
 export function Notation({ text }: { text: string }) {

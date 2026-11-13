@@ -8,7 +8,7 @@ import {
   applyNotation, bboxWords, leadInProblems, lostNotation, normaliseNotation, notate, notatedPages, notationOn, notationParts, notationPlain,
   isCaptionLine, leadExtra, pdfOutline, stripLead, withoutLead, wordsText, type Word,
 } from "../../src/lib/brain/notation.ts";
-import { autoFixLeads, cleanPaper, figuresToLeads, isSplitFlag, mergeReading, missingFromOutline, paperFlags, recheckItem, splitLeadIn, structureFlags } from "../../src/lib/brain/paper.ts";
+import { autoFixLeads, cleanPaper, figuresToLeads, fillLead, isSplitFlag, mergeReading, missingFromOutline, paperFlags, recheckItem, splitLeadIn, structureFlags } from "../../src/lib/brain/paper.ts";
 
 type W = [number, number, number, number, string];
 /** Poppler's -bbox-layout shape: pages of lines of words. */
@@ -477,4 +477,41 @@ test("a printed part the reading leaves out is flagged, only when the printed ma
   assert.deepEqual(missingFromOutline(content, outline, ["The total mark for this paper is 40."]), []);
   assert.deepEqual(missingFromOutline({ ...content, items: [...content.items, item("1(b)", 2)] }, outline, cover), []);
   assert.deepEqual(missingFromOutline({ ...content, kind: "ms" }, outline, cover), []);
+  // A part with marks under a number the paper never prints (Haiku's "3(lead)").
+  const extra = { ...content, items: [...content.items, item("1(b)", 2), item("1(c)", 1)] };
+  assert.deepEqual(missingFromOutline(extra, outline, cover).map((f) => [f.key, f.colour]), [["numbering:1(c):printed", "amber"]]);
+});
+
+test("a part label first on its line is kept even inside a figure's box", () => {
+  // Jun 2025 Geography P42: Fig. 1.3's box began at the line holding only "(i)", so 1(d)(i) and (ii) were lost.
+  const p: W[][] = [
+    [[49.6, 88, 55.7, 102, "1"], [72.3, 88, 110, 102, "Students"], [113, 88, 160, 102, "measured."]],
+    [[72.3, 120, 85.7, 134, "(a)"], [95, 120, 130, 134, "Plot"], [133, 120, 170, 134, "results."]],
+    [[95.9, 400, 106.3, 414, "(i)"]],
+    [[118, 416, 150, 430, "Plot"], [153, 416, 180, 430, "day"], [183, 416, 190, 430, "7"], [193, 416, 210, 430, "on"], [213, 416, 240, 430, "Fig."], [243, 416, 260, 430, "1.3."]],
+    [[300, 500, 320, 514, "1005"]],
+    [[72.3, 720, 85.7, 734, "(ii)"], [118, 720, 150, 734, "What"], [153, 720, 200, 734, "conclusion?"]],
+  ];
+  const figure: [number, number, number, number] = [92, 400, 503, 697];
+  assert.deepEqual(pdfOutline(bboxWords(xml([[], p])), [[], [figure]]).map((o) => o.number), ["1", "1(a)", "1(a)(i)", "1(a)(ii)"]);
+});
+
+test("column vectors: one markup, a tree node, and no false flat power from a base", () => {
+  // Gemini writes LaTeX; Claude \binom. Both end as \binom (Maths Mar 2024 P42 7(a)).
+  assert.equal(normaliseNotation("\\mathbf{p} = \\begin{pmatrix} 8 \\\\ -5 \\end{pmatrix} \\quad \\mathbf{q}"), "p = \\binom{8}{−5}   q");
+  assert.deepEqual(notationTree("p = \\binom{8}{−5}"), [{ kind: "text", text: "p = " }, { kind: "vec", top: [{ kind: "text", text: "8" }], bottom: [{ kind: "text", text: "−5" }] }]);
+  // A page printing h(x) = 2^{x} does not make "2x^{3}" a flat power: there "2x" is the base of x^{3}.
+  assert.equal(lostNotation("y = 2x^{3} + 6x^{2} − 2.5", ["h(x) = 2^{x}"]), null);
+  assert.equal(lostNotation("h(x) = 2x", ["h(x) = 2^{x}"])?.marked, "2^{x}");
+});
+
+test("an opening text without the paper's figure sentences gets them back, nothing else", () => {
+  // Biology Nov 2023 P32: Haiku left 1(a) empty and dropped "Fig. 6.1 is a diagram ..." from 6(a).
+  assert.equal(fillLead("", "Fig. 1.1 is a diagram of the digestive system."), "Fig. 1.1 is a diagram of the digestive system.");
+  assert.equal(fillLead("The arrows show the direction of water movement.", "Fig. 6.1 is a diagram showing the pathway of water into a plant. The arrows show the direction of water movement."),
+    "Fig. 6.1 is a diagram showing the pathway of water into a plant. The arrows show the direction of water movement.");
+  // A table's or diagram's words are never copied in, nor a sentence that does not start with the figure.
+  assert.equal(fillLead("This flowchart represents an algorithm.", "This flowchart represents an algorithm. START INPUT Code OUTPUT"), null);
+  assert.equal(fillLead("H_{2}S is formed.", "H_{2}S is formed. 2HCl(aq) + Na_{2}S(aq) 2NaCl(aq) Fig. 8.1 shows the volume."), null);
+  assert.equal(fillLead("Fig. 1.1 shows a cell.", "Fig. 1.1 shows a cell."), null);
 });

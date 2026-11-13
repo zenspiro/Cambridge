@@ -339,7 +339,9 @@ export function paperFlags({ content, pages, gemini, outline }: CheckInput): Fla
   // that fails the run check passes when its real words (four letters or more) are all printed; a part that is almost
   // all formula, with too few words to judge, is left to Gemini's reading of the page picture.
   const words = (s: string) => (s.normalize("NFKD").toLowerCase().match(/[a-z]{4,}/g) ?? []);
-  const found = (s: string) => {
+  const found = (raw: string) => {
+    // Markup names (\frac, \binom) are never printed.
+    const s = raw.replace(/\\[a-z]+(?=\{)/g, " ");
     if (coverage(idx, s) >= BRAIN.minWordCover) return true;
     const w = words(s);
     if (w.length < 3) return isFormula(s) && w.every((x) => idx.text.includes(x));
@@ -440,7 +442,8 @@ export function paperFlags({ content, pages, gemini, outline }: CheckInput): Fla
 }
 
 /**
- * A part the paper prints with its [marks] that the reading does not have (owner, 12 Nov 2026: Haiku read Chemistry
+ * A part the paper prints with its [marks] that the reading does not have, and a part with marks under a number the
+ * paper never prints (owner, 12 Nov 2026: Haiku read Chemistry
  * Jun 2024 P42 alone and left out 22 parts with only 3 flags, since only Gemini's reading raised "missing"). Trusted
  * only when the printed parts' marks add up to the paper's total, so a misread outline raises nothing. Adds flags only,
  * with no "PDF's version" to copy, so older flags stay current (CHECKS_VERSION unchanged). Question papers. Pure.
@@ -452,10 +455,17 @@ export function missingFromOutline(content: Pick<PaperContent, "kind" | "items" 
   const printed = outline.filter((o) => o.marks !== undefined);
   if (!printed.length || printed.reduce((a, o) => a + (o.marks ?? 0), 0) !== total) return [];
   const ours = new Set(content.items.map((i) => i.number));
-  return printed.filter((o) => !ours.has(o.number)).map((o) => {
+  const missing = printed.filter((o) => !ours.has(o.number)).map((o) => {
     const reason = `The paper prints ${o.number} [${o.marks}] on page ${o.page}; this reading does not have it.`;
     return { key: `missing:${o.number}`, item: o.number, kind: "missing" as const, colour: COLOUR.missing, reason, pdfText: "", fingerprint: fingerprint("missing", squash(o.text), "printed"), v: CHECKS_VERSION };
   });
+  // The other way round: a part with marks under a number the paper never prints (Haiku's "6(iii)", "3(lead)").
+  const labels = new Set(outline.map((o) => o.number));
+  const extra = content.items.filter((i) => i.marks !== null && !labels.has(i.number)).map((i) => {
+    const reason = `The paper prints no ${i.number}. Check the number against the printed page.`;
+    return { key: `numbering:${i.number}:printed`, item: i.number, kind: "numbering" as const, colour: COLOUR.numbering, reason, pdfText: "", fingerprint: fingerprint("numbering", squash(itemWording(i)), "not printed"), v: CHECKS_VERSION };
+  });
+  return [...missing, ...extra];
 }
 
 /** Flags a mark scheme raises against its question paper: the marks per question must match. */
@@ -487,7 +497,14 @@ export function structureFlags(items: readonly PaperItem[], outline: readonly Ou
   // A lead-in item with a figure's labels or caption read into it: the paper's own lead-in words fix it.
   const extra = outline.flatMap((p): Flag[] => {
     const it = items.find((x) => x.number === p.number);
-    if (!it || !isLeadIn(items, p.number) || !leadExtra(it.text, p.text).length) return [];
+    if (!it || !isLeadIn(items, p.number)) return [];
+    // An opening text left empty while the paper prints one (Haiku, Biology Nov 2023 P32: "Fig. 1.1 is a diagram of the
+    // digestive system." held only as the figure).
+    if (!holdsTable(it) && fillLead(it.text, p.text) !== null) {
+      const reason = squash(it.text) ? `Question ${p.number}'s opening text leaves out words the paper prints.` : `Question ${p.number}'s opening text is empty; the paper prints it.`;
+      return [{ key: `structure:${p.number}:lead`, item: p.number, kind: "structure", colour: "red", reason, pdfText: p.text, fingerprint: fingerprint("structure", squash(p.text), squash(it.text) ? "short" : "empty"), v: CHECKS_VERSION }];
+    }
+    if (!leadExtra(it.text, p.text).length) return [];
     const reason = `Question ${p.number}'s opening text has words the paper prints in a figure or its label, not as question text.`;
     return [{ key: `structure:${p.number}:lead`, item: p.number, kind: "structure", colour: "red", reason, pdfText: p.text, fingerprint: fingerprint("structure", squash(p.text), "lead"), v: CHECKS_VERSION }];
   });
@@ -501,6 +518,27 @@ export function structureFlags(items: readonly PaperItem[], outline: readonly Ou
 }
 
 const realWordSet = (s: string) => new Set(s.normalize("NFKD").toLowerCase().match(/[a-z]{4,}/g) ?? []);
+/**
+ * An opening text that leaves out the paper's sentences naming a figure ("Fig. 6.1 is a diagram of ...": Haiku drops
+ * them, or keeps only the figure): the text with those sentences put back where they are printed, else null. Only
+ * whole printed sentences with a "Fig. N.N" are added, before or after the text (never inside it), and only when every
+ * other printed sentence is already there; the reading's own words, notation included, stay as they are. Pure.
+ */
+export function fillLead(text: string, printed: string): string | null {
+  const sentences = printed.split(/(?<=[.?!:])(?<!\bFigs?\.)\s+/).map((x) => x.trim()).filter(Boolean);
+  const have = realWordSet(text);
+  const missing = sentences.map((x) => [...realWordSet(x)].some((w) => !have.has(w)));
+  if (!missing.some(Boolean)) return null;
+  if (sentences.some((x, i) => missing[i] && !(/^Fig(ure)?\.?\s*\d+\.\d+/.test(x) && /[.?!:]$/.test(x) && realWordSet(x).size >= 3))) return null;
+  const want = new Set(sentences.flatMap((x) => [...realWordSet(x)]));
+  if ([...have].some((w) => !want.has(w))) return null;
+  const firstKept = missing.indexOf(false);
+  const lastKept = missing.lastIndexOf(false);
+  if (firstKept >= 0 && missing.slice(firstKept, lastKept + 1).some(Boolean)) return null;
+  const before = sentences.filter((_x, i) => missing[i] && (firstKept < 0 || i < firstKept));
+  const after = sentences.filter((_x, i) => missing[i] && firstKept >= 0 && i > lastKept);
+  return [before.join(" "), text.trim(), after.join(" ")].filter(Boolean).join(" ");
+}
 
 /** What an automatic fix must leave alone (owner, 10 Nov 2026: "not mess up something else"). */
 export type AutoHold = {
@@ -555,9 +593,13 @@ export function autoFixLeads(input: CheckInput, hold: AutoHold): { content: Pape
       const shared = realWordSet(f.pdfText);
       const joined = realWordSet(before.text);
       if (rest === null && [...shared].some((w) => joined.has(w))) continue;
-    } else if (rest === null || /[a-z]{3,}[.?!](\s|$)/i.test(rest.replace(/Fig(ure)?\.?\s*\d+\.\d+/gi, ""))) continue;
+    } else if (fillLead(before.text, f.pdfText) === null && (rest === null || /[a-z]{3,}[.?!](\s|$)/i.test(rest.replace(/Fig(ure)?\.?\s*\d+\.\d+/gi, "")))) continue;
     const exact = (c: PaperContent) => {
-      if (!split) return figuresToLeads({ ...c, items: c.items.map((i) => (i.number === f.item ? { ...i, text: normaliseNotation(str(f.pdfText, BRAIN.maxItemText)) } : i)) });
+      if (!split) {
+        const own = c.items.find((i) => i.number === f.item);
+        const filled = own ? fillLead(own.text, f.pdfText) : null;
+        return figuresToLeads({ ...c, items: c.items.map((i) => (i.number === f.item ? { ...i, text: filled ?? normaliseNotation(str(f.pdfText, BRAIN.maxItemText)) } : i)) });
+      }
       const own = c.items.find((i) => i.number === f.item);
       const r = own ? stripLead(own.text, f.pdfText, ownLabel) : null;
       const out = splitLeadIn(c, f.item, lead!, f.pdfText);
@@ -884,7 +926,7 @@ export function recheckItem(c: PaperContent, flags: readonly Flag[], number: str
   // A lead-in flag is settled once the question has its own item (its key ends with that question's number).
   const settled = (f: Flag) => f.kind === "structure" && c.items.some((x) => x.number === f.key.split(":").at(-1));
   // A lead-in's own words flag is settled once its text reads as the paper prints it.
-  const leadOk = (f: Flag) => f.kind === "structure" && f.key === `structure:${number}:lead` && !leadExtra(it.text, f.pdfText).length;
+  const leadOk = (f: Flag) => f.kind === "structure" && f.key === `structure:${number}:lead` && !!squash(it.text) && !leadExtra(it.text, f.pdfText).length;
   const kept = flags.filter((f) => !settled(f) && !leadOk(f) && (f.item !== number || !(f.kind === "words" || f.kind === "numbers" || f.kind === "notation" || (f.kind === "marks" && !f.key.endsWith(":gemini")) || (f.kind === "agree" && found))));
   const add = (kind: FlagKind, reason: string, what: string, keyExtra = "", pdfText = "") =>
     kept.push({ key: `${kind}:${number}${keyExtra}`, item: number, kind, colour: COLOUR[kind], reason, pdfText, fingerprint: fingerprint(kind, squash(what), reason), v: CHECKS_VERSION });
