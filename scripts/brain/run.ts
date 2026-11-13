@@ -13,7 +13,7 @@ import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { assignBoxes, findBoxes, labelBoxes, pageArt, textLines, type Box, type FigureCut } from "../../src/lib/brain/figures.ts";
+import { assignBoxes, fillPhotos, findBoxes, labelBoxes, pageArt, photoArgs, photoSlots, textLines, type Box, type FigureCut, type PageArt } from "../../src/lib/brain/figures.ts";
 import { signRequest } from "../../src/lib/agent/sign.ts";
 import { allPagesInfo, allPagesText } from "../../src/lib/pdf/firstPage.ts";
 import { fractionBars, notatedPages, pdfOutline, type Bar, type OutlinePart } from "../../src/lib/brain/notation.ts";
@@ -501,6 +501,21 @@ const run = (cmd: string, args: string[]) => new Promise<string>((resolve, rejec
  * matches its description); each page's art is stored so the admin can move a box by hand. Figures that already have
  * a box keep it unless the run names them. Free, about a second a paper.
  */
+/** Each photo on a page as a small JPEG of its box (Poppler, owner 13 Nov 2026), so a cut figure shows it. */
+async function withPhotos(art: PageArt, pdf: string, dir: string): Promise<PageArt> {
+  const data = new Map<number, string>();
+  for (const { k, b } of photoSlots(art)) {
+    const out = join(dir, `photo-${art.page}-${k}`);
+    try {
+      await run("pdftoppm", [...photoArgs(art.page, b), pdf, out]);
+      data.set(k, `data:image/jpeg;base64,${(await readFile(`${out}.jpg`)).toString("base64")}`);
+    } catch {
+      // Left out: the figure keeps its drawing.
+    }
+  }
+  return fillPhotos(art, data);
+}
+
 async function cutFigures(job: PaperJob, content: PaperContent, bytes: Uint8Array): Promise<PaperContent> {
   const need = content.figures.filter((f) => f.cut !== "manual" && (!f.box || job.scope.figures.includes(f.id)));
   if (!need.length) {
@@ -525,7 +540,7 @@ async function cutFigures(job: PaperJob, content: PaperContent, bytes: Uint8Arra
     for (const page of pages) {
       const out = join(dir, `p${page}.svg`);
       await run("pdftocairo", ["-svg", "-f", String(page), "-l", String(page), pdf, out]);
-      const art = pageArt(await readFile(out, "utf8"), page);
+      const art = await withPhotos(pageArt(await readFile(out, "utf8"), page), pdf, dir);
       const lines = textLines(await run("pdftotext", ["-f", String(page), "-l", String(page), "-bbox-layout", pdf, "-"]));
       const onPage = content.figures.filter((f) => f.page === page);
       const got = assignBoxes(onPage, findBoxes(art, lines), lines);

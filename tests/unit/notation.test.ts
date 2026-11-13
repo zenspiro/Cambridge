@@ -8,7 +8,7 @@ import {
   applyNotation, bboxWords, leadInProblems, lostNotation, normaliseNotation, notate, notatedPages, notationOn, notationParts, notationPlain,
   isCaptionLine, leadExtra, pdfOutline, stripLead, withoutLead, wordsText, type Word,
 } from "../../src/lib/brain/notation.ts";
-import { autoFixLeads, cleanPaper, figuresToLeads, fillLead, isSplitFlag, mergeReading, missingFromOutline, paperFlags, recheckItem, splitLeadIn, structureFlags } from "../../src/lib/brain/paper.ts";
+import { autoFixLeads, cleanPaper, figuresToLeads, fillLead, pipeRows, isSplitFlag, mergeReading, missingFromOutline, paperFlags, recheckItem, splitLeadIn, structureFlags } from "../../src/lib/brain/paper.ts";
 
 type W = [number, number, number, number, string];
 /** Poppler's -bbox-layout shape: pages of lines of words. */
@@ -514,4 +514,43 @@ test("an opening text without the paper's figure sentences gets them back, nothi
   assert.equal(fillLead("This flowchart represents an algorithm.", "This flowchart represents an algorithm. START INPUT Code OUTPUT"), null);
   assert.equal(fillLead("H_{2}S is formed.", "H_{2}S is formed. 2HCl(aq) + Na_{2}S(aq) 2NaCl(aq) Fig. 8.1 shows the volume."), null);
   assert.equal(fillLead("Fig. 1.1 shows a cell.", "Fig. 1.1 shows a cell."), null);
+});
+
+test("a \"which row\" question written with | becomes a table and plain options", () => {
+  // Gemini on Physics Mar 2025 P22 question 2.
+  const opts = ["a | b", "c | d", "e | f", "g | h"].map((text, k) => ({ letter: "ABCD"[k]!, text }));
+  const r = pipeRows("Which row defines speed and velocity? speed | velocity", opts)!;
+  assert.equal(r.text, "Which row defines speed and velocity?");
+  assert.deepEqual(r.table.rows, [["", "speed", "velocity"], ["A", "a", "b"], ["B", "c", "d"], ["C", "e", "f"], ["D", "g", "h"]]);
+  assert.deepEqual(r.options.map((o) => o.text), ["a; b", "c; d", "e; f", "g; h"]);
+  // Options that are not all cells, or a text with no headings: the question is kept, only the table is built.
+  assert.equal(pipeRows("Which is right?", ["one", "two", "three", "four"].map((text, k) => ({ letter: "ABCD"[k]!, text }))), null);
+  assert.equal(pipeRows("Which row is right?", opts)!.text, "Which row is right?");
+});
+
+test("Gemini's split of an opening text the paper prints whole raises no flag; a formula still does", () => {
+  // Physics Nov 2023 P32 question 9: "Fig. 9.2 shows ..." is printed before "(a) (i)", Gemini moved it to a 9(a).
+  const it = (number: string, text: string, marks: number | null = null) => ({ number, page: 2, text, marks, options: [], answerLines: 0, figures: [], guidance: "", tables: [] });
+  const ours = { kind: "qp" as const, totalMarks: null, figures: [], items: [it("9", "Fig. 9.1 shows a water heater. Fig. 9.2 shows the safety label for the heater."), it("9(a)(i)", "Explain the label.", 1)] };
+  const gem = { ...ours, items: [it("9", "Fig. 9.1 shows a water heater."), it("9(a)", "Fig. 9.2 shows the safety label for the heater."), it("9(a)(i)", "Explain the label.", 1)] };
+  const pages = ["cover", "9 Fig. 9.1 shows a water heater. Fig. 9.2 shows the safety label for the heater. (a) (i) Explain the label. [1]"];
+  const outline = [{ number: "9", page: 2, text: "Fig. 9.1 shows a water heater. Fig. 9.2 shows the safety label for the heater." }, { number: "9(a)", page: 2, text: "" }, { number: "9(a)(i)", page: 2, text: "Explain the label.", marks: 1 }];
+  const keys = paperFlags({ content: ours, pages, gemini: gem, outline }).map((f) => f.key);
+  assert.ok(!keys.includes("agree:9") && !keys.includes("missing:9(a)"), keys.join(" "));
+  // A formula opening text has no words to settle it: 1/x^{2} against 1/x stays flagged.
+  const f1 = { ...ours, items: [it("11", "f(x) = \\frac{1}{x^{2}}, x ≠ 0"), it("11(a)", "Find f(2).", 1)] };
+  const g1 = { ...ours, items: [it("11", "f(x) = \\frac{1}{x}, x ≠ 0"), it("11(a)", "Find f(2).", 1)] };
+  const o1 = [{ number: "11", page: 2, text: "f (x) = , x ! 0 \\frac{1}{x}" }, { number: "11(a)", page: 2, text: "Find f(2).", marks: 1 }];
+  assert.ok(paperFlags({ content: f1, pages: ["cover", "11 f (x) = 1 x , x ! 0 (a) Find f(2). [1]"], gemini: g1, outline: o1 }).some((f) => f.key === "agree:11"));
+});
+
+test("LaTeX symbols become the printed characters; vector names one markup", () => {
+  // Gemini on Maths Jun 2025 P22: \sin, \le, \sqrt, \propto, \pi; Claude: sin, ≤, √, ∝, π.
+  assert.equal(normaliseNotation("Solve 2 \\sin x - 1 = 0 for 0° \\le x \\le 360°."), "Solve 2 sin x - 1 = 0 for 0° ≤ x ≤ 360°.");
+  assert.equal(normaliseNotation("(5 - \\sqrt{2})(1 + 3\\sqrt{2})"), "(5 - √2)(1 + 3√2)");
+  assert.equal(normaliseNotation("y \\propto \\frac{1}{\\sqrt{x}}, \\sqrt{x+1}, \\tan(x), \\pi"), "y ∝ \\frac{1}{√x}, √(x+1), tan(x), π");
+  assert.equal(normaliseNotation("\\overrightarrow{AB} = \\vec{AC}"), "\\vec{AB} = \\vec{AC}");
+  assert.deepEqual(notationTree("\\vec{AB}"), [{ kind: "arrow", children: [{ kind: "text", text: "AB" }] }]);
+  // Words that only start like a command are left alone.
+  assert.equal(normaliseNotation("\\left \\index"), "\\left \\index");
 });

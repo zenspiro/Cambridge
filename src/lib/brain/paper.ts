@@ -108,6 +108,26 @@ export function rowOptions(tables: readonly PaperTable[]): PaperOption[] | null 
   return null;
 }
 
+/**
+ * A "which row" question written with "|" (Gemini, owner 13 Nov 2026 from 0625 Mar 2025 P22): every option's text is
+ * cells split by "|", the same number of them, and the text may end with the column headings the same way. Gives the
+ * table (headings, then a row per letter), the options with "; " between cells (as rowOptions writes them) and the
+ * text without the headings; null when the options are not all cells. Pure.
+ */
+export function pipeRows(text: string, options: readonly PaperOption[]): { text: string; table: PaperTable; options: PaperOption[] } | null {
+  const cells = options.map((o) => o.text.split("|").map((c) => c.trim()));
+  const n = cells[0]?.length ?? 0;
+  if (options.length < 3 || n < 2 || cells.some((c) => c.length !== n || c.some((x) => !x))) return null;
+  const m = /(?:^|[\s?.:])((?:[^|?.:\n]+\|){1,7}[^|?.:\n]+)\s*$/.exec(text);
+  const head = m ? m[1]!.split("|").map((c) => c.trim()) : null;
+  const heads = head && head.length === n ? head : null;
+  return {
+    text: heads ? text.slice(0, text.lastIndexOf(m![1]!)).trim() : text,
+    table: { label: "", rows: [["", ...(heads ?? cells[0]!.map(() => ""))], ...options.map((o, k) => [o.letter, ...cells[k]!])] },
+    options: options.map((o, k) => ({ letter: o.letter, text: cells[k]!.join("; ") })),
+  };
+}
+
 /** An AI's answer made safe: known fields only, capped, numbers in the printed shape. */
 export function cleanPaper(raw: unknown, kind: PaperKind): PaperContent {
   const o = obj(raw);
@@ -138,10 +158,15 @@ export function cleanPaper(raw: unknown, kind: PaperKind): PaperContent {
       return rows.length ? [{ label: str(t.label, 80), rows }] : [];
     });
     const figs = (Array.isArray(r.figures) ? r.figures : []).map((f) => str(f, 20)).filter((f) => FIGURE_ID_RE.test(f)).slice(0, 10);
+    const piped = tables.length ? null : pipeRows(normaliseNotation(str(r.text, BRAIN.maxItemText)), options);
+    if (piped) {
+      tables.push(piped.table);
+      options.splice(0, options.length, ...piped.options);
+    }
     return [{
       number,
       page: int(r.page, 1, 500) ?? 1,
-      text: normaliseNotation(str(r.text, BRAIN.maxItemText)),
+      text: piped?.text ?? normaliseNotation(str(r.text, BRAIN.maxItemText)),
       marks: int(r.marks, 0, 200),
       options: options.some((o) => o.text.trim()) ? options : rowOptions(tables) ?? options,
       answerLines: int(r.answerLines, 0, 40) ?? 0,
@@ -428,12 +453,20 @@ export function paperFlags({ content, pages, gemini, outline }: CheckInput): Fla
       const other = itemWording(g);
       if (similarity(mine, other) < BRAIN.sameText) {
         const settled = textOk && found(mine) && !found(other);
+        // An opening text that reads as the paper prints it is settled whatever Gemini has (owner, 13 Nov 2026:
+        // Physics Nov 2023 P32, Gemini moved question 9's "Fig. 9.2 shows ..." to a 9(a) the paper prints empty).
+        const printed = it.marks === null && isLeadIn(content.items, it.number) ? outline?.find((o) => o.number === it.number) : undefined;
+        const within = (a: string, b: string) => { const w = realWordSet(b); return [...realWordSet(a)].every((x) => w.has(x)); };
+        const asPrinted = !!printed && realWordSet(mine).size >= 3 && within(mine, printed.text) && within(other, mine);
         // "This reading": Claude's, or one made in a dev session (owner, 12 Nov 2026).
-        if (!settled) add("agree", it.number, "This reading and Gemini's differ here.", `${mine}|${other}`, textOk && found(other) ? g.text : "", "", "Claude and Gemini read this differently.");
+        if (!settled && !asPrinted) add("agree", it.number, "This reading and Gemini's differ here.", `${mine}|${other}`, textOk && found(other) ? g.text : "", "", "Claude and Gemini read this differently.");
       }
       if (it.marks !== null && g.marks !== null && it.marks !== g.marks) add("marks", it.number, `Gemini reads ${g.marks} marks here, we have ${it.marks}.`, `${it.marks}|${g.marks}|${mine}`, "", ":gemini");
     }
+    // A label the paper prints with no words of its own ("(a) (i) Explain ...") needs no opening text of ours.
+    const emptyLabels = new Set((outline ?? []).filter((o) => !squash(o.text)).map((o) => o.number));
     for (const g of gemini.items) {
+      if (g.marks === null && emptyLabels.has(g.number)) continue;
       if (!ours.has(g.number)) add("missing", g.number, `Gemini found question ${g.number}; our reading does not have it.`, itemWording(g), textOk && found(itemWording(g)) ? g.text : "");
     }
   }

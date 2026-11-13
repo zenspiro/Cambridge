@@ -2,6 +2,38 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-13: Photos in figures
+
+**What:** photographs and other raster pictures in a paper (micrographs, a koala, a starfish, a body diagram) are cut with their figure like drawings, from their printed caption. The script renders each photo as a small JPEG; the review screen shows it inside the figure. Two captions side by side each take their own picture.
+
+**Why:** owner, 13 Nov 2026, option A: figure cutting read only vector drawings, so every photo had to be boxed by hand (Biology Mar 2025 P42 had four).
+
+**Tested:** unit tests (placement, the JPEG check (only JPEG data URIs survive), dropping photos without data, the cut, a photo's box without the question's sentences); every benchmark paper's figures before and after: 8 figures that had no box now have one, 6 boxes better (whole leaf section, the bean pod, the variegated leaves), side-by-side captions fixed (Biology Nov 2025 P62's starfish and Chemistry Nov 2023 P62's Fig. 1.1 and 1.2 had each other's box, also before this change), each checked by eye. Those two live papers keep their swapped boxes until "Cut figures again". Stored page sizes 90 to 220 KB with photos.
+
+## 2026-11-13: Maths symbols in one form
+
+**What:** LaTeX commands in a reading (\le, \pi, \sqrt{2}, \sin x, \overrightarrow{AB}) become the characters the paper prints (≤, π, √2, sin x) or our one markup (\vec{AB}, shown with an arrow over it), and the prompt asks for the characters.
+
+**Why:** owner, 13 Nov 2026 (reading the weakest benchmark papers): Maths Jun 2025 P22 had eight red agree flags that were only the two AIs spelling symbols differently, and LaTeX showed raw on the review screen.
+
+**Tested:** unit test; benchmark tuning 97.2% to 97.4%, locked 93.4% to 93.8%, nothing worse. Maths Jun 2025 P22 loaded from this session: question 7's sequence and question 4's cards added, 7(a) and 8 marks put right, cm² on 16's answer line, four figure boxes by hand (two symmetry grids, the scale drawing, the cumulative frequency grid); 0 red flags, 100% on its key.
+
+## 2026-11-13: No false flags where Gemini splits an opening text differently
+
+**What:** when Gemini moves a sentence of an opening text to a part label the paper prints with no words, our reading (which has it where it is printed) is no longer flagged as missing a part or disagreeing.
+
+**Why:** owner, 13 Nov 2026 (reading the weakest benchmark papers): Physics Nov 2023 P32 question 9.
+
+**Tested:** unit test (a formula opening text that really differs still flags); every benchmark reading with Gemini: 5 flags fewer, each checked to be false (a first version also hid a real 1/x² against 1/x, so formulas were excluded). Loaded from this session: Physics Nov 2023 P32 (question 11's opening text numbered right), Chemistry Jun 2025 P42, Computer Science Mar 2024 P12 (page 3's 1(c) added), Biology Jun 2026 P52 (graph grid boxed by hand), Biology Mar 2025 P42 (four photos still to box by hand): all 100% on their keys.
+
+## 2026-11-13: "Which row" questions in one shape
+
+**What:** a multiple-choice "which row" question written with "|" (headings at the end of the text, cells split by "|" in each option) becomes a real table with its options as "cell; cell", the same shape our own readings use.
+
+**Why:** owner, 13 Nov 2026 (reading the weakest benchmark papers): Physics Mar 2025 P22 had four red agree flags only because Gemini wrote these questions with "|" and our reading with a table.
+
+**Tested:** unit test; the four flags go on that paper; benchmark tuning 97.0% to 97.2%, nothing worse. Physics Mar 2025 P22 loaded from this session: subscripts R₄, V₁, V₂, A₁ to A₃, eight "which row" questions as tables, answer tables no longer cut as pictures, two figure boxes by hand (Q7's four graphs, Q33's graph); 0 red flags, 100% on its key.
+
 ## 2026-11-12: Opening texts get their "Fig. N.N shows ..." sentences back
 
 **What:** an opening text that is empty, or that leaves out the paper's sentences introducing a figure, is flagged red and put right automatically: only those whole sentences are added, before or after the reading's own words. Table cells, diagram labels and anything inside the text are never touched.

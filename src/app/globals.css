@@ -411,6 +411,8 @@
   .nota-frac { @apply mx-0.5 inline-flex flex-col items-center align-middle leading-tight; }
   .nota-num { @apply border-b border-current px-0.5; }
   .nota-den { @apply px-0.5; }
+  .nota-arrow { @apply relative inline-block pt-1.5; }
+  .nota-arrow::before { content: "\2192"; @apply absolute -top-1 right-0 left-0 text-center text-xs leading-none; }
   .nota-vec { @apply mx-0.5 inline-flex flex-col items-center rounded-[40%/12%] border-x border-current px-1.5 align-middle leading-tight; }
   .flag-box { @apply mt-2 flex flex-col gap-2 rounded-lg border-l-4 bg-paper p-3; }
   .flag-red { @apply border-red-500; }

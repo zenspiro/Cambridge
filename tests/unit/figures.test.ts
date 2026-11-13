@@ -2,7 +2,7 @@
 // -svg, pdftotext -bbox-layout); no Cambridge artwork is kept in the repo.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { assignBoxes, cleanArt, cleanBox, cropSvg, findBoxes, labelBoxes, pageArt, pageSvg, textLines, wholePage } from "../../src/lib/brain/figures.ts";
+import { assignBoxes, cleanArt, cleanBox, cropSvg, fillPhotos, findBoxes, labelBoxes, pageArt, pageSvg, photoArgs, photoSlots, textLines, wholePage } from "../../src/lib/brain/figures.ts";
 import { cleanPaper, figureFlag, figureHome, paperFlags, placeOnPages } from "../../src/lib/brain/paper.ts";
 import { applyFix, figurePageSvg, figureSvg, handFixed, loadContent, paperDoc, paperView, saveArt, savePaperReading } from "../../src/lib/brain/paperRead.ts";
 import { claimBrainRun, startBatchRun, startPaperRun } from "../../src/lib/brain/runs.ts";
@@ -343,4 +343,46 @@ test("an unlabelled figure is not matched to another drawing by answer-space wor
   const lines = [{ text: "A B C Z", b: [84, 200, 556, 440] as [number, number, number, number], body: false }, { text: "A B C Working space Z", b: [101, 503, 480, 525] as [number, number, number, number], body: false }];
   const got = assignBoxes([{ id: "F2", caption: "", description: "Space to draw the logic circuit, inputs A, B, C on the left and output Z on the right" }], found, lines as never);
   assert.deepEqual(got.get("F2"), { box: [84, 192, 556, 446], cut: "order" }, "the first drawing on the page, by order");
+});
+
+test("photos: placed from pdftocairo's <use>, filled with a JPEG, kept safe, cut under the drawing", () => {
+  // Biology Mar 2025 P42 page 17: Fig. 6.2 is a photograph (a raster picture), which the drawing alone never showed.
+  const svg = [
+    `<svg xmlns="http://www.w3.org/2000/svg" width="595" height="842"><defs>`,
+    `<image id="source-5" x="0" y="0" width="1181" height="796" xlink:href="data:image/png;base64,AAAA"/>`,
+    `</defs>`,
+    `<use xlink:href="#source-5" transform="matrix(0.24,0,0,0.24,155.77,308.9)"/>`,
+    `<path fill="none" stroke-width="1" stroke="rgb(0%, 0%, 0%)" d="M 160 320 L 200 330 "/>`,
+    `</svg>`,
+  ].join("\n");
+  const art = pageArt(svg, 17);
+  const slots = photoSlots(art);
+  assert.equal(slots.length, 1);
+  assert.deepEqual(slots[0]!.b, [155.77, 308.9, 439.21, 499.94]);
+  assert.deepEqual(photoArgs(17, [72, 144, 144, 216]).slice(-9), ["-x", "100", "-y", "200", "-W", "100", "-H", "100", "-singlefile"]);
+  const jpeg = "data:image/jpeg;base64,/9j/4AAQSkZJRg==";
+  const filled = fillPhotos(art, new Map([[slots[0]!.k, jpeg]]));
+  // Only a JPEG data URI of a sane size survives the clean; anything else is dropped.
+  const clean = cleanArt(JSON.parse(JSON.stringify(filled)))!;
+  assert.equal(clean.e.filter((x) => "i" in x).length, 1);
+  assert.equal(cleanArt({ ...filled, e: [{ b: [0, 0, 10, 10], i: "javascript:alert(1)" }] })!.e.length, 0);
+  assert.equal(cleanArt({ ...filled, e: [{ b: [0, 0, 10, 10], i: "data:image/svg+xml;base64,PHN2Zz4=" }] })!.e.length, 0);
+  // A photo left without its JPEG is dropped rather than kept empty.
+  assert.equal(fillPhotos(art, new Map()).e.some((x) => "i" in x), false);
+  // The cut shows the photo first, then the drawing over it.
+  const cut = cropSvg(clean, [150, 300, 445, 505]);
+  assert.ok(cut.indexOf("<image href=\"data:image/jpeg") < cut.indexOf("<path"), cut.slice(0, 400));
+  // A caption above which only a photo sits gets the photo's box, not the question's sentences beside it.
+  const lines = textLines(`<page><flow><block xMin="92" yMin="270" xMax="420" yMax="282"><line xMin="92" yMin="270" xMax="420" yMax="282"><word xMin="92" yMin="270" xMax="420" yMax="282">Shearwater birds feed on fish in the ocean.</word></line></block></flow><flow><block xMin="270" yMin="505" xMax="320" yMax="517"><line xMin="270" yMin="505" xMax="320" yMax="517"><word xMin="270" yMin="505" xMax="295" yMax="517">Fig.</word><word xMin="297" yMin="505" xMax="320" yMax="517">6.2</word></line></block></flow></page>`);
+  const photoOnly = { ...clean, e: clean.e.filter((x) => "i" in x) };
+  assert.deepEqual(findBoxes(photoOnly, lines).captions[0]?.box, [155.77, 308.9, 439.21, 499.94]);
+});
+
+test("two captions side by side each take the drawing in their own column", () => {
+  // Chemistry Nov 2023 P62 page 2: Fig. 1.1 (left) and Fig. 1.2 (right) on one line; each used to get the other's box.
+  const path = (x0: number, x1: number) => `<path fill="none" stroke-width="1" stroke="rgb(0%, 0%, 0%)" d="M ${x0} 300 L ${x1} 420 "/>`;
+  const svg = [`<svg xmlns="http://www.w3.org/2000/svg" width="595" height="842"><defs></defs>`, path(150, 230), path(355, 450), `</svg>`].join("\n");
+  const cap = (x0: number, n: string) => `<flow><block xMin="${x0}" yMin="440" xMax="${x0 + 40}" yMax="452"><line xMin="${x0}" yMin="440" xMax="${x0 + 40}" yMax="452"><word xMin="${x0}" yMin="440" xMax="${x0 + 18}" yMax="452">Fig.</word><word xMin="${x0 + 20}" yMin="440" xMax="${x0 + 40}" yMax="452">${n}</word></line></block></flow>`;
+  const found = findBoxes(pageArt(svg, 2), textLines(`<page>${cap(170, "1.1")}${cap(390, "1.2")}</page>`));
+  assert.deepEqual(found.captions.map((c) => [c.label, c.box[0], c.box[2]]), [["1.1", 150, 230], ["1.2", 355, 450]]);
 });

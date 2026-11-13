@@ -314,6 +314,14 @@ const FROM_SUB = Object.fromEntries(Object.entries(SUB).map(([k, v]) => [v, k]))
  * "x^2", "10^-3" and "l_0" get their braces, and a minus inside the braces is U+2212. Program code is left alone (its "_"
  * is part of a name). Pure.
  */
+/** LaTeX symbol commands and the characters the papers print. */
+const LATEX_SYMBOLS: [string, string][] = [
+  ["leq", "≤"], ["le", "≤"], ["geq", "≥"], ["ge", "≥"], ["neq", "≠"], ["ne", "≠"], ["pi", "π"], ["times", "×"], ["div", "÷"],
+  ["propto", "∝"], ["cap", "∩"], ["cup", "∪"], ["degree", "°"], ["pm", "±"], ["approx", "≈"], ["infty", "∞"], ["theta", "θ"],
+  ["alpha", "α"], ["beta", "β"], ["gamma", "γ"], ["lambda", "λ"], ["mu", "μ"], ["Omega", "Ω"], ["Delta", "Δ"], ["rightarrow", "→"],
+  ["rightleftharpoons", "⇌"], ["sin", "sin "], ["cos", "cos "], ["tan", "tan "], ["cdot", "·"], ["in", "∈"], ["notin", "∉"],
+];
+
 export function normaliseNotation(s: string): string {
   if (!s) return s;
   let out = s.replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ⁿⁱ]+/g, (m) => `^{${[...m].map((c) => FROM_SUP[c] ?? c).join("")}}`);
@@ -323,6 +331,16 @@ export function normaliseNotation(s: string): string {
   // as "l_0"). A name in code ("total_marks", "x_pos") is longer on one side, so it is left alone.
   out = out.replace(/(?<![\p{L}\p{N}_])(\p{L})_(\d{1,2}|[a-z])(?![\p{L}\p{N}_{])/gu, "$1_{$2}");
   out = out.replace(/([\^_])\{([^{}]{0,40})\}/g, (_m, k: string, t: string) => `${k}{${t.replace(MINUS, "−")}}`);
+  // LaTeX symbols as printed (owner, 13 Nov 2026: Gemini writes \le, \pi, \sqrt{2}, Claude ≤, π, √2); a vector's name
+  // with its arrow is one markup, \vec{AB}.
+  for (const [k, v] of LATEX_SYMBOLS) {
+    // "\sin x" is "sin x" and "\sin(x)" is "sin(x)": a function name keeps one space only before a letter or digit.
+    out = / $/.test(v)
+      ? out.replace(new RegExp(`\\\\${k}(?![a-zA-Z])\\s*(?=(.?))`, "g"), (_m, next: string) => (/[\p{L}\p{N}]/u.test(next) ? v : v.trim()))
+      : out.replace(new RegExp(`\\\\${k}(?![a-zA-Z])`, "g"), v);
+  }
+  out = out.replace(/\^\{?\\circ\}?/g, "°").replace(/\\overrightarrow\{/g, "\\vec{").replace(/\\mathcal\{E\}/g, "ℰ");
+  for (let k = 0; k < 4 && out.includes("\\sqrt{"); k++) out = out.replace(/\\sqrt\{([^{}]{1,40})\}/g, (_m, a: string) => (/^[\p{L}\p{N}.]+$/u.test(a) ? `√${a}` : `√(${a})`));
   // LaTeX dress around the notation (Gemini): \mathbf{p} is p, \quad a space.
   out = out.replace(/\\math(?:bf|rm|it)\{([^{}]{1,20})\}/g, "$1").replace(/\\q?quad\b/g, " ");
   // A column vector in one markup: LaTeX's pmatrix (Gemini) is \binom{top}{bottom}.
@@ -403,7 +421,9 @@ export type NotationNode =
   | { kind: "sup" | "sub"; children: NotationNode[] }
   | { kind: "frac"; num: NotationNode[]; den: NotationNode[] }
   /** A column vector, \binom{top}{bottom}: two numbers stacked in brackets (Maths, owner 12 Nov 2026). */
-  | { kind: "vec"; top: NotationNode[]; bottom: NotationNode[] };
+  | { kind: "vec"; top: NotationNode[]; bottom: NotationNode[] }
+  /** A vector's name with an arrow over it, \vec{AB}. */
+  | { kind: "arrow"; children: NotationNode[] };
 
 /** Text with our markup as a tree for the review screen: superscripts, subscripts and fractions, nested. Pure. */
 export function notationTree(s: string, depth = 0): NotationNode[] {
@@ -421,6 +441,15 @@ export function notationTree(s: string, depth = 0): NotationNode[] {
         flush();
         out.push({ kind: "frac", num: notationTree(n.text, depth + 1), den: notationTree(d.text, depth + 1) });
         i = d.end;
+        continue;
+      }
+    }
+    if (depth < 6 && s.startsWith("\\vec{", i)) {
+      const g = group(s, i + 4);
+      if (g) {
+        flush();
+        out.push({ kind: "arrow", children: notationTree(g.text, depth + 1) });
+        i = g.end;
         continue;
       }
     }
