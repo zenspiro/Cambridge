@@ -323,10 +323,18 @@ export function notatedPages(pages: readonly string[], xml: string, bars: readon
     found += n.tokens.length;
   }
   const chars = (ps: readonly string[]) => ps.join("").replace(/\s/g, "").length;
-  const fromWords = words.map((w) => wordsText(w));
+  const fromWords = words.map((w) => unknownStops(wordsText(w)));
   if (boxes.length === pages.length && chars(fromWords) >= chars(pages) * 0.8) return { pages: fromWords, found, fractions: fracs, words, from: "poppler" };
-  return { pages: pages.map((p, i) => applyNotation(p, tokens[i] ?? [])), found, fractions: fracs, words, from: "patched" };
+  return { pages: pages.map((p, i) => unknownStops(applyNotation(p, tokens[i] ?? []))), found, fractions: fracs, words, from: "patched" };
 }
+
+/**
+ * A font whose full stop reaches the text layer as U+FFFD (owner, 13 Nov 2026: Maths Jun 2024 P32 printed "1.2 m" and
+ * answer dots that came out as "1\uFFFD2 m" and rows of \uFFFD): between digits it is a decimal point, at the end of a
+ * word a full stop, a run of them answer dots. Any other U+FFFD is left as it is. Pure.
+ */
+export const unknownStops = (s: string) =>
+  s.replace(/\uFFFD{3,}/g, (m) => ".".repeat(m.length)).replace(/(\d)\uFFFD(?=\d)/g, "$1.").replace(/([\p{L}\p{N})}\]])\uFFFD(?=\s|$)/gu, "$1.");
 
 const SUP: Record<string, string> = { "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹", "+": "⁺", "−": "⁻", "=": "⁼", "(": "⁽", ")": "⁾", n: "ⁿ", i: "ⁱ" };
 const SUB: Record<string, string> = { "0": "₀", "1": "₁", "2": "₂", "3": "₃", "4": "₄", "5": "₅", "6": "₆", "7": "₇", "8": "₈", "9": "₉", "+": "₊", "−": "₋", "=": "₌", "(": "₍", ")": "₎" };

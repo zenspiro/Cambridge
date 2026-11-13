@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import {
   fractionBars, fractions, fractionsIn, joinFractionLines, linearFraction, notationTree,
   applyNotation, bboxWords, leadInProblems, lostNotation, normaliseNotation, notate, notatedPages, notationOn, notationParts, notationPlain,
-  isCaptionLine, joinDropCaps, leadExtra, pdfOutline, stripLead, withoutLead, wordsText, type Word,
+  isCaptionLine, joinDropCaps, leadExtra, pdfOutline, unknownStops, stripLead, withoutLead, wordsText, type Word,
 } from "../../src/lib/brain/notation.ts";
 import { autoFixLeads, cleanPaper, figuresToLeads, fillLead, pipeRows, isSplitFlag, mergeReading, missingFromOutline, paperFlags, recheckItem, splitLeadIn, structureFlags } from "../../src/lib/brain/paper.ts";
 
@@ -581,4 +581,10 @@ test("agreement: ours settled when printed and holding all of Gemini's words, un
   // 0478 Jun 2025 P22 question 1: ours repeats its choices inside the text; still flagged.
   const opts = [{ letter: "A", text: "testing the solution." }, { letter: "B", text: "writing a program." }, { letter: "C", text: "defining sub-systems." }];
   assert.ok(flags(it("1", "Tick one box. Abstraction means A testing the solution. B writing a program. C defining sub-systems.", opts), it("1", "Tick one box. Abstraction means", opts)).includes("agree:1"));
+});
+
+test("a full stop the font sends as U+FFFD, and table cells never run into a fraction", () => {
+  // Maths Jun 2024 P32: "1.2 m" came out as "1�2 m", sentences ended in �, answer dots were rows of it.
+  assert.equal(unknownStops("area is 1�2 m�\n���� [1]"), "area is 1.2 m.\n.... [1]");
+  assert.equal(unknownStops("a � b"), "a � b");
 });

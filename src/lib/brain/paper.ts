@@ -281,7 +281,10 @@ const itemPages = (pages: readonly string[], page: number) => pages.slice(Math.m
 /** The notation flag for an item, or null: notation printed on its pages that the reading has flat. */
 function notationFlag(it: PaperItem, pages: readonly string[]): { reason: string; what: string; pdfText: string } | null {
   const near = itemPages(pages, it.page);
-  const lost = lostNotation(itemWording(it), near);
+  // Table cells kept apart: a "1" in one cell and a "2" in the next are never a fraction run together (Maths Jun 2024
+  // P32's table of values, under a printed rule that reads like a fraction bar).
+  const cellApart = [it.text, ...it.options.map((o) => o.text), ...(it.tables ?? []).flatMap((t) => [t.label, ...t.rows.map((r) => r.join(" ¦ "))])].filter(Boolean).join(" ¦ ");
+  const lost = lostNotation(cellApart, near);
   if (!lost) return null;
   const inText = lostNotation(it.text, near);
   return {
