@@ -8,7 +8,7 @@ import {
   applyNotation, bboxWords, leadInProblems, lostNotation, normaliseNotation, notate, notatedPages, notationOn, notationParts, notationPlain,
   isCaptionLine, leadExtra, pdfOutline, stripLead, withoutLead, wordsText, type Word,
 } from "../../src/lib/brain/notation.ts";
-import { autoFixLeads, cleanPaper, figuresToLeads, fillLead, isSplitFlag, mergeReading, missingFromOutline, paperFlags, recheckItem, splitLeadIn, structureFlags } from "../../src/lib/brain/paper.ts";
+import { autoFixLeads, cleanPaper, figuresToLeads, fillLead, pipeRows, isSplitFlag, mergeReading, missingFromOutline, paperFlags, recheckItem, splitLeadIn, structureFlags } from "../../src/lib/brain/paper.ts";
 
 type W = [number, number, number, number, string];
 /** Poppler's -bbox-layout shape: pages of lines of words. */
@@ -514,4 +514,16 @@ test("an opening text without the paper's figure sentences gets them back, nothi
   assert.equal(fillLead("This flowchart represents an algorithm.", "This flowchart represents an algorithm. START INPUT Code OUTPUT"), null);
   assert.equal(fillLead("H_{2}S is formed.", "H_{2}S is formed. 2HCl(aq) + Na_{2}S(aq) 2NaCl(aq) Fig. 8.1 shows the volume."), null);
   assert.equal(fillLead("Fig. 1.1 shows a cell.", "Fig. 1.1 shows a cell."), null);
+});
+
+test("a \"which row\" question written with | becomes a table and plain options", () => {
+  // Gemini on Physics Mar 2025 P22 question 2.
+  const opts = ["a | b", "c | d", "e | f", "g | h"].map((text, k) => ({ letter: "ABCD"[k]!, text }));
+  const r = pipeRows("Which row defines speed and velocity? speed | velocity", opts)!;
+  assert.equal(r.text, "Which row defines speed and velocity?");
+  assert.deepEqual(r.table.rows, [["", "speed", "velocity"], ["A", "a", "b"], ["B", "c", "d"], ["C", "e", "f"], ["D", "g", "h"]]);
+  assert.deepEqual(r.options.map((o) => o.text), ["a; b", "c; d", "e; f", "g; h"]);
+  // Options that are not all cells, or a text with no headings: the question is kept, only the table is built.
+  assert.equal(pipeRows("Which is right?", ["one", "two", "three", "four"].map((text, k) => ({ letter: "ABCD"[k]!, text }))), null);
+  assert.equal(pipeRows("Which row is right?", opts)!.text, "Which row is right?");
 });

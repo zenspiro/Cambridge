@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-13: "Which row" questions in one shape
+
+**What:** a multiple-choice "which row" question written with "|" (headings at the end of the text, cells split by "|" in each option) becomes a real table with its options as "cell; cell", the same shape our own readings use.
+
+**Why:** owner, 13 Nov 2026 (reading the weakest benchmark papers): Physics Mar 2025 P22 had four red agree flags only because Gemini wrote these questions with "|" and our reading with a table.
+
+**Tested:** unit test; the four flags go on that paper; benchmark tuning 97.0% to 97.2%, nothing worse. Physics Mar 2025 P22 loaded from this session: subscripts R₄, V₁, V₂, A₁ to A₃, eight "which row" questions as tables, answer tables no longer cut as pictures, two figure boxes by hand (Q7's four graphs, Q33's graph); 0 red flags, 100% on its key.
+
 ## 2026-11-12: Opening texts get their "Fig. N.N shows ..." sentences back
 
 **What:** an opening text that is empty, or that leaves out the paper's sentences introducing a figure, is flagged red and put right automatically: only those whole sentences are added, before or after the reading's own words. Table cells, diagram labels and anything inside the text are never touched.
