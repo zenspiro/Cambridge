@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-13: Maths symbols in one form
+
+**What:** LaTeX commands in a reading (\le, \pi, \sqrt{2}, \sin x, \overrightarrow{AB}) become the characters the paper prints (≤, π, √2, sin x) or our one markup (\vec{AB}, shown with an arrow over it), and the prompt asks for the characters.
+
+**Why:** owner, 13 Nov 2026 (reading the weakest benchmark papers): Maths Jun 2025 P22 had eight red agree flags that were only the two AIs spelling symbols differently, and LaTeX showed raw on the review screen.
+
+**Tested:** unit test; benchmark tuning 97.2% to 97.4%, locked 93.4% to 93.8%, nothing worse. Maths Jun 2025 P22 loaded from this session: question 7's sequence and question 4's cards added, 7(a) and 8 marks put right, cm² on 16's answer line, four figure boxes by hand (two symmetry grids, the scale drawing, the cumulative frequency grid); 0 red flags, 100% on its key.
+
 ## 2026-11-13: No false flags where Gemini splits an opening text differently
 
 **What:** when Gemini moves a sentence of an opening text to a part label the paper prints with no words, our reading (which has it where it is printed) is no longer flagged as missing a part or disagreeing.

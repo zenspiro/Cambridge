@@ -18,6 +18,8 @@ function render(nodes: readonly NotationNode[]): ReactNode[] {
           <span className="nota-den" aria-hidden="true">{render(p.den)}</span>
         </span>,
       );
+    } else if (p.kind === "arrow") {
+      out.push(<span key={i} className="nota-arrow" role="math" aria-label={`vector ${notationPlain(plain(p.children))}`}><span aria-hidden="true">{render(p.children)}</span></span>);
     } else if (p.kind === "vec") {
       out.push(
         <span key={i} className="nota-vec" role="math" aria-label={`column vector ${notationPlain(plain(p.top))}, ${notationPlain(plain(p.bottom))}`}>
@@ -25,7 +27,7 @@ function render(nodes: readonly NotationNode[]): ReactNode[] {
           <span aria-hidden="true">{render(p.bottom)}</span>
         </span>,
       );
-    } else if (q && q.kind !== "text" && q.kind !== "frac" && q.kind !== "vec" && q.kind !== p.kind) {
+    } else if (q && q.kind !== "text" && q.kind !== "frac" && q.kind !== "vec" && q.kind !== "arrow" && q.kind !== p.kind) {
       // A superscript and subscript together (a nuclide's mass and atomic numbers, SO₄²⁻) stack as printed.
       const [sup, sub] = p.kind === "sup" ? [p, q] : [q, p];
       out.push(<span key={i} className="nota-stack"><span>{render(sup.children)}</span><span>{render(sub.children)}</span></span>);
@@ -37,7 +39,7 @@ function render(nodes: readonly NotationNode[]): ReactNode[] {
 
 /** A node list back to its markup (for a fraction's spoken label). */
 function plain(nodes: readonly NotationNode[]): string {
-  return nodes.map((n) => (n.kind === "text" ? n.text : n.kind === "frac" ? `\\frac{${plain(n.num)}}{${plain(n.den)}}` : n.kind === "vec" ? `\\binom{${plain(n.top)}}{${plain(n.bottom)}}` : `${n.kind === "sup" ? "^" : "_"}{${plain(n.children)}}`)).join("");
+  return nodes.map((n) => (n.kind === "text" ? n.text : n.kind === "frac" ? `\\frac{${plain(n.num)}}{${plain(n.den)}}` : n.kind === "vec" ? `\\binom{${plain(n.top)}}{${plain(n.bottom)}}` : n.kind === "arrow" ? `\\vec{${plain(n.children)}}` : `${n.kind === "sup" ? "^" : "_"}{${plain(n.children)}}`)).join("");
 }
 
 export function Notation({ text }: { text: string }) {

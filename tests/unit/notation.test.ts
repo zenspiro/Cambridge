@@ -543,3 +543,14 @@ test("Gemini's split of an opening text the paper prints whole raises no flag; a
   const o1 = [{ number: "11", page: 2, text: "f (x) = , x ! 0 \\frac{1}{x}" }, { number: "11(a)", page: 2, text: "Find f(2).", marks: 1 }];
   assert.ok(paperFlags({ content: f1, pages: ["cover", "11 f (x) = 1 x , x ! 0 (a) Find f(2). [1]"], gemini: g1, outline: o1 }).some((f) => f.key === "agree:11"));
 });
+
+test("LaTeX symbols become the printed characters; vector names one markup", () => {
+  // Gemini on Maths Jun 2025 P22: \sin, \le, \sqrt, \propto, \pi; Claude: sin, ≤, √, ∝, π.
+  assert.equal(normaliseNotation("Solve 2 \\sin x - 1 = 0 for 0° \\le x \\le 360°."), "Solve 2 sin x - 1 = 0 for 0° ≤ x ≤ 360°.");
+  assert.equal(normaliseNotation("(5 - \\sqrt{2})(1 + 3\\sqrt{2})"), "(5 - √2)(1 + 3√2)");
+  assert.equal(normaliseNotation("y \\propto \\frac{1}{\\sqrt{x}}, \\sqrt{x+1}, \\tan(x), \\pi"), "y ∝ \\frac{1}{√x}, √(x+1), tan(x), π");
+  assert.equal(normaliseNotation("\\overrightarrow{AB} = \\vec{AC}"), "\\vec{AB} = \\vec{AC}");
+  assert.deepEqual(notationTree("\\vec{AB}"), [{ kind: "arrow", children: [{ kind: "text", text: "AB" }] }]);
+  // Words that only start like a command are left alone.
+  assert.equal(normaliseNotation("\\left \\index"), "\\left \\index");
+});
