@@ -8,7 +8,9 @@ Newest first. What changed, why, and how it was tested.
 
 **Why:** owner, 13 Nov 2026 (reading the remaining benchmark papers): Chemistry Jun 2026 P22 had 40 false marks flags; Maths Mar 2023 P42 a "^{=}V"; Chemistry Nov 2023 P62 a false "wording not found"; Biology Nov 2025 P62 a part with its [1] left empty and only a total flag.
 
-**Tested:** unit tests; the page text of every benchmark paper before and after: 63 lines change, all drop capitals joined in the Chemistry practical papers or "=" signs back in place (a first, looser rule changed 395 lines including swapped dice labels, so it was narrowed). Loaded from this session: Maths Mar 2023 P42 (L₁, L₂, L₃, cm²; 100%), and every paper with photos or side-by-side figures cut again on the live site.
+Also: no agree flag where our reading is printed and only adds words Gemini left out (answer-line labels, a fuller opening text); still flagged when ours repeats its choices in the text or lacks choices Gemini has.
+
+**Tested:** unit tests; the page text of every benchmark paper before and after: 63 lines change, all drop capitals joined in the Chemistry practical papers or "=" signs back in place (a first, looser rule changed 395 lines including swapped dice labels, so it was narrowed). Loaded from this session: Maths Mar 2023 P42 (L₁, L₂, L₃, cm²; 100%), Maths Nov 2024 P42 (5(c)'s opening text, 8(b) marks), Physics Jun 2025 P42 (7(c)(ii) [4] with its two steps, marks, table numbers as printed), Biology Nov 2025 P62 (1(d)(i)'s [1]), Computer Science Jun 2025 P22 (question 1's options out of its text), and every paper with photos or side-by-side figures cut again on the live site.
 
 ## 2026-11-13: Cube roots, and no false fraction flag next to a power
 

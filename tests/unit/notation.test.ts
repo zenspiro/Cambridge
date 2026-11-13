@@ -570,3 +570,15 @@ test("a capital set apart from the rest of its word is joined; separate letters 
   assert.deepEqual(joinDropCaps([w(80.8, 107.6, "metal"), w(71, 78.3, "A")]).map((x) => x.t), ["metal", "A"]);
   assert.deepEqual(joinDropCaps([w(100, 106, "X"), w(106, 109, "r")]).map((x) => x.t), ["X", "r"]);
 });
+
+test("agreement: ours settled when printed and holding all of Gemini's words, unless choices are missing or repeated", () => {
+  // Physics Jun 2025 P42 10(a)(ii): ours keeps the answer line's label "surface temperature = ... °C", Gemini drops it.
+  const it = (number: string, text: string, options: { letter: string; text: string }[] = []) => ({ number, page: 2, text, marks: 1, options, answerLines: 1, figures: [], guidance: "", tables: [] });
+  const pages = ["cover " + "Answer all questions in the spaces provided on the question paper. ".repeat(20), "10 (a) (ii) Calculate the surface temperature of planet D in °C. surface temperature = °C [1] 1 Tick one box. Abstraction means A testing the solution. B writing a program. C defining sub-systems. [1]"];
+  const read = (items: ReturnType<typeof it>[]) => ({ kind: "qp" as const, totalMarks: null, figures: [], items });
+  const flags = (ours: ReturnType<typeof it>, theirs: ReturnType<typeof it>) => paperFlags({ content: read([ours]), pages, gemini: read([theirs]) }).map((f) => f.key);
+  assert.ok(!flags(it("10(a)(ii)", "Calculate the surface temperature of planet D in °C.\nsurface temperature = ... °C"), it("10(a)(ii)", "Calculate the surface temperature of planet D in °C.")).includes("agree:10(a)(ii)"));
+  // 0478 Jun 2025 P22 question 1: ours repeats its choices inside the text; still flagged.
+  const opts = [{ letter: "A", text: "testing the solution." }, { letter: "B", text: "writing a program." }, { letter: "C", text: "defining sub-systems." }];
+  assert.ok(flags(it("1", "Tick one box. Abstraction means A testing the solution. B writing a program. C defining sub-systems.", opts), it("1", "Tick one box. Abstraction means", opts)).includes("agree:1"));
+});

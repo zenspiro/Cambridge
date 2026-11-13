@@ -457,7 +457,13 @@ export function paperFlags({ content, pages, gemini, outline }: CheckInput): Fla
       const mine = itemWording(it);
       const other = itemWording(g);
       if (similarity(mine, other) < BRAIN.sameText) {
-        const settled = textOk && found(mine) && !found(other);
+        // Ours is printed and holds every word of Gemini's: Gemini left out printed words, such as an answer line's
+        // label (owner, 13 Nov 2026: Physics Jun 2025 P42's "energy = ... kW h").
+        // Not when Gemini has choices ours lacks (0478 Jun 2025 P22 question 1: ours ran the options into the text).
+        // Nor when ours repeats its choices inside the question's text.
+        const repeats = it.options.some((o) => squash(o.text).length > 8 && squash(it.text).includes(squash(o.text)));
+        const holds = !repeats && it.options.length >= g.options.length && [...realWordSet(other)].every((w) => realWordSet(mine).has(w));
+        const settled = textOk && found(mine) && (!found(other) || holds);
         // An opening text that reads as the paper prints it is settled whatever Gemini has (owner, 13 Nov 2026:
         // Physics Nov 2023 P32, Gemini moved question 9's "Fig. 9.2 shows ..." to a 9(a) the paper prints empty).
         const printed = it.marks === null && isLeadIn(content.items, it.number) ? outline?.find((o) => o.number === it.number) : undefined;
