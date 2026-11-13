@@ -386,3 +386,29 @@ test("two captions side by side each take the drawing in their own column", () =
   const found = findBoxes(pageArt(svg, 2), textLines(`<page>${cap(170, "1.1")}${cap(390, "1.2")}</page>`));
   assert.deepEqual(found.captions.map((c) => [c.label, c.box[0], c.box[2]]), [["1.1", 150, 230], ["1.2", 355, 450]]);
 });
+
+test("a figure in panels takes every drawing below the last line of question text, not watermark letters", () => {
+  // Geography Jun 2025 P12 Fig. 5.1: three pie charts more than 25 pt apart; the box used to hold only the lowest.
+  const path = (x0: number, y0: number, x1: number, y1: number) => `<path fill="none" stroke-width="1" stroke="rgb(0%, 0%, 0%)" d="M ${x0} ${y0} L ${x1} ${y1} "/>`;
+  const svg = [`<svg xmlns="http://www.w3.org/2000/svg" width="595" height="842"><defs></defs>`, path(100, 200, 200, 300), path(300, 200, 400, 300), path(200, 360, 300, 460), path(450, 150, 460, 158), `</svg>`].join("\n");
+  const line = (x0: number, y0: number, words: string[]) => `<flow><block xMin="${x0}" yMin="${y0}" xMax="${x0 + 400}" yMax="${y0 + 12}"><line xMin="${x0}" yMin="${y0}" xMax="${x0 + 400}" yMax="${y0 + 12}">${words.map((w, i) => `<word xMin="${x0 + i * 30}" yMin="${y0}" xMax="${x0 + i * 30 + 28}" yMax="${y0 + 12}">${w}</word>`).join("")}</line></block></flow>`;
+  const body = line(60, 100, "Study Fig. 5.1, graphs showing the use of water for different purposes in three countries here.".split(" "));
+  const found = findBoxes(pageArt(svg, 24), textLines(`<page>${body}${line(250, 480, ["Fig.", "5.1"])}</page>`));
+  assert.deepEqual(found.captions[0]?.box, [100, 200, 400, 460]);
+});
+
+test("a part too short to place by its words takes the page its number is printed on", () => {
+  const item = (number: string, text: string, page: number) => ({ number, page, text, marks: 1, options: [], answerLines: 1, figures: [], guidance: "", tables: [] });
+  const pages = [`cover ${"Instructions for candidates. ".repeat(20)}`, "", "1 (a) Using the map extract, identify the following features. (i) feature A (ii) the type of road at B", "(c) Find the museum. feature"];
+  const outline = [{ number: "1(a)(i)", page: 3, text: "feature A" }];
+  const c = { kind: "qp" as const, totalMarks: null, items: [item("1(a)(i)", "feature A", 4)], figures: [] };
+  assert.equal(placeOnPages(c, pages, outline).items[0]!.page, 3);
+  assert.equal(placeOnPages(c, pages).items[0]!.page, 4, "no outline: the reading's page");
+  assert.equal(placeOnPages({ ...c, kind: "ms" }, pages, outline).items[0]!.page, 4, "a mark scheme's numbers repeat");
+});
+
+test("a labelled figure goes to the page that prints its label as a caption, not one that only mentions it", () => {
+  const pages = [`cover ${"Instructions for candidates. ".repeat(20)}`, "", "(iii) The students' results are shown in Fig. 2.2. Complete the map in Fig. 2.2.", "Average number of storeys\nFig. 2.2\n(d) The students decided."];
+  const fig = { id: "F3", page: 3, caption: "Fig. 2.2 Average number of storeys", description: "", svg: "", box: null, cut: "" as const };
+  assert.equal(placeOnPages({ kind: "qp", totalMarks: null, items: [], figures: [fig] }, pages).figures[0]!.page, 4);
+});

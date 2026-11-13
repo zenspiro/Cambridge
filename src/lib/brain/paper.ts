@@ -8,7 +8,7 @@
 import { BRAIN } from "../config.ts";
 import { coverage, similarity, squash, textIndex, type TextIndex } from "./topics.ts";
 import type { Box, FigureCut } from "./figures.ts";
-import { leadExtra, leadInProblems, stripLead, lostNotation, normaliseNotation, notationPlain, withoutLead, type OutlinePart } from "./notation.ts";
+import { isCaptionLine, leadExtra, leadInProblems, stripLead, lostNotation, normaliseNotation, notationPlain, withoutLead, type OutlinePart } from "./notation.ts";
 
 export type PaperKind = "qp" | "ms";
 export type PaperOption = { letter: string; text: string };
@@ -416,7 +416,7 @@ export function paperFlags({ content, pages, gemini, outline }: CheckInput): Fla
   // A mark scheme's rows hold method marks inside a part's total, so its rows never add up to the paper's total; its
   // marks are checked against the question paper instead (marksAgainstPaper).
   if (content.totalMarks !== null && content.kind !== "ms") {
-    const sum = content.items.reduce((a, it) => a + (it.marks ?? 0), 0);
+    const sum = countedMarks(content.items, pages);
     if (sum > 0 && sum !== content.totalMarks) add("marks", "paper", `The parts add up to ${sum} marks, but the paper's total is ${content.totalMarks}.`, `${sum}/${content.totalMarks}`);
     if (textOk && !nums.has(String(content.totalMarks))) add("numbers", "paper", `The total of ${content.totalMarks} marks is not printed in the PDF.`, `total ${content.totalMarks}`);
   }
@@ -495,12 +495,37 @@ export function paperFlags({ content, pages, gemini, outline }: CheckInput): Fla
  * only when the printed parts' marks add up to the paper's total, so a misread outline raises nothing. Adds flags only,
  * with no "PDF's version" to copy, so older flags stay current (CHECKS_VERSION unchanged). Question papers. Pure.
  */
+const CHOICE_WORDS: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6 };
+
+/** How many questions a candidate answers when the cover gives a choice ("Answer three questions in total, one from
+ * each section"), else null (answer all). */
+export function chosenQuestions(cover: string): number | null {
+  const m = /answer\s+(one|two|three|four|five|six|\d+)\s+questions?\s+in\s+total/i.exec(cover.replace(/\s+/g, " "));
+  return m ? CHOICE_WORDS[m[1]!.toLowerCase()] ?? Number(m[1]) : null;
+}
+
+/** The marks a candidate can score: every part's marks, or on a choice paper (Geography Jun 2025 P12: six questions
+ * of 25, answer three) the chosen number of questions when every question carries the same marks. Questions that
+ * differ count in full, so the total check still flags them. */
+export function countedMarks(parts: readonly { number: string; marks?: number | null }[], pages: readonly string[]): number {
+  const sum = parts.reduce((a, it) => a + (it.marks ?? 0), 0);
+  const n = chosenQuestions(pages[0] ?? "");
+  if (!n) return sum;
+  const byQ = new Map<string, number>();
+  for (const it of parts) {
+    const q = /^\d+/.exec(it.number)?.[0];
+    if (q) byQ.set(q, (byQ.get(q) ?? 0) + (it.marks ?? 0));
+  }
+  const each = [...byQ.values()];
+  return each.length > n && each.every((v) => v === each[0]) ? each[0]! * n : sum;
+}
+
 export function missingFromOutline(content: Pick<PaperContent, "kind" | "items" | "totalMarks">, outline: readonly OutlinePart[] | undefined, pages: readonly string[] = []): Flag[] {
   // The total the reading holds, else the cover's "The total mark for this paper is 80."
   const total = content.totalMarks ?? Number(/total mark for this paper is\s*(\d+)/i.exec((pages[0] ?? "").replace(/\s+/g, " "))?.[1] ?? NaN);
   if (content.kind !== "qp" || !outline?.length || !Number.isFinite(total)) return [];
   const printed = outline.filter((o) => o.marks !== undefined);
-  if (!printed.length || printed.reduce((a, o) => a + (o.marks ?? 0), 0) !== total) return [];
+  if (!printed.length || countedMarks(printed, pages) !== total) return [];
   const ours = new Set(content.items.map((i) => i.number));
   const missing = printed.filter((o) => !ours.has(o.number)).map((o) => {
     const reason = `The paper prints ${o.number} [${o.marks}] on page ${o.page}; this reading does not have it.`;
@@ -1057,7 +1082,7 @@ export function remapPages(c: PaperContent, kept: readonly number[]): PaperConte
  * line (its last line that is not an answer label like "momentum ="); a figure to the first page that prints its
  * label ("Fig. 2.1") where a question or figure is. Items code cannot place keep `fallback`'s page. Pure.
  */
-export function placeOnPages(c: PaperContent, pages: readonly string[]): PaperContent {
+export function placeOnPages(c: PaperContent, pages: readonly string[], outline: readonly OutlinePart[] = []): PaperContent {
   const idx = pages.map((p) => textIndex([p]));
   if (idx.reduce((a, x) => a + x.chars, 0) < BRAIN.minPaperTextChars) return c;
   const best = (wording: string) => {
@@ -1075,7 +1100,10 @@ export function placeOnPages(c: PaperContent, pages: readonly string[]): PaperCo
   };
   const items = c.items.map((it) => {
     const lines = it.text.split("\n").map((l) => l.trim()).filter((l) => l && !/=\s*\.*\s*\S{0,6}$/.test(l) && squash(l).length >= 12);
-    const page = best(lines.at(-1) ?? it.text) || best(it.text);
+    // Too short to place by its words ("feature A", Geography Jun 2025 P22 1(a)(i)): the page the paper prints its
+    // number on, when the printed outline has that number once.
+    const printed = c.kind === "qp" ? outline.filter((o) => o.number === it.number) : [];
+    const page = best(lines.at(-1) ?? it.text) || best(it.text) || (printed.length === 1 ? printed[0]!.page : 0);
     return page ? { ...it, page } : it;
   });
   const figures = c.figures.map((f) => {
@@ -1087,7 +1115,10 @@ export function placeOnPages(c: PaperContent, pages: readonly string[]): PaperCo
       return first && first.page !== f.page ? { ...f, page: first.page, box: null, cut: "" as const } : f;
     }
     const re = new RegExp(`Fig\\.?\\s*${label.replace(".", "\\.")}(?!\\d)`, "i");
-    const i = pages.findIndex((p) => re.test(p));
+    // The page printing the label as a caption line wins over one that only mentions it (Jun 2025 Geography P42:
+    // 2(c)(iii) on page 12 says "shown in Fig. 2.2"; the map and its label are on page 13).
+    const caption = pages.findIndex((p) => p.split("\n").some((l) => re.test(l) && isCaptionLine(l.trim())));
+    const i = caption >= 0 ? caption : pages.findIndex((p) => re.test(p));
     return i >= 0 && i + 1 !== f.page ? { ...f, page: i + 1, box: null, cut: "" as const } : f;
   });
   return { ...c, items, figures };

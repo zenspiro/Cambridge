@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-13: Geography papers: choice papers, figures in panels, text between parts
+
+**What:** a paper where candidates choose questions ("Answer three questions in total") no longer gets a total-marks flag for adding up every question. A word printed flat on the page is no lost notation when a map label beside it reads like one ("Mid-Icela" + "nd", "CBD"). Text printed after a part's [marks] and before the next part's label on the same page now counts as that next part's opening text (the hypotheses before 2(b)). A labelled figure in panels takes every drawing between the last line of question text and its caption (pie charts, a map and its key, three scatter graphs), not only the pieces close together; shapes under 24 pt are left to the old rule, so a watermarked copy's letters stay out. A figure goes to the page printing its label as a caption, not the first page that mentions it. A part too short to place by its words ("feature A") takes the page the paper prints its number on. The benchmark key drafter leaves out figures listed together as in the Insert ("Figs. 3.1 and 3.2 (Insert)").
+
+**Why:** owner, 13 Nov 2026 ("put geography last, finish others before"): reading the three Geography benchmark papers, all read by Haiku alone.
+
+**Tested:** unit tests; every benchmark paper through the loader before and after each rule: flags only fewer (the Geography false ones), page placements changed on 7 parts in 5 papers, all now on their printed page; 20 figure boxes changed, each checked by eye and each better (a first version without the 24 pt rule took a watermarked Chemistry copy's outlined text, so it was narrowed; a first carry rule took a blank page's words, so it stays on one page). Benchmark tuning 97.8% (97.7% before), locked 93.9%, nothing worse. Loaded from this session with no flags: Geography Jun 2025 P12 (1(a)(iv) numbered, Fig. 3.1's "Content removed" boxed), P22 (five Insert figures off, units on answer lines, "1 : 50 000", removed figures boxed) and P42 (hypotheses kept, 2(a)(i), 2(b)(iv), 2(c)(ii) tick tables, Fig. 2.2 on its page, three boxes by hand).
+
 ## 2026-11-13: Fewer false flags from the remaining benchmark papers
 
 **What:** a multiple-choice paper no longer gets "[1] is not printed" on every question. A lone "=" is never read as a superscript. A capital the PDF's text layer sets apart from the rest of its word ("P" and "redict") is joined to it, so the word check finds "Predict". A part whose marks differ from the [marks] printed with it gets an amber flag.

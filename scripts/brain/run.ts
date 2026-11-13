@@ -708,7 +708,7 @@ async function runPaper(job: PaperJob) {
       try {
         const g = await timed("gemini", job.models.gemini, second ? "Gemini is reading the paper to check Claude's reading" : "Gemini is reading the paper", () =>
           askGemini({ model: job.models.gemini, system: PAPER_SYSTEM, schema: PAPER_SCHEMA_GEMINI, prompt: paperPrompt(job.kind, job.paper), pdf64, pages: sentPages, limits: job.limits }));
-        gemini = placeOnPages(remapPages(cleanPaper(g.raw, job.kind), slim.kept), pages);
+        gemini = placeOnPages(remapPages(cleanPaper(g.raw, job.kind), slim.kept), pages, outline);
         if (!gemini.items.length && !alone) throw new Stop("gemini_bad_answer", "Gemini's reading had no questions");
       } catch (err) {
         if (alone || second || !(err instanceof Stop) || !GEMINI_SOFT.has(err.reason)) throw err;
@@ -726,7 +726,7 @@ async function runPaper(job: PaperJob) {
     if (!gemini?.items.length) throw new Stop("gemini_bad_answer", "Gemini's reading had no questions (it read alone)");
     await note("Claude: not asked (this reading is Gemini alone)", { stage: "claude", state: "skip" });
     if (!scoped) fresh = gemini;
-    content = placeOnPages(mergeReading(prior, gemini, new Set(job.prior.open), scoped ? job.scope : undefined), pages);
+    content = placeOnPages(mergeReading(prior, gemini, new Set(job.prior.open), scoped ? job.scope : undefined), pages, outline);
     await step("Saving Gemini's reading", { stage: "save", state: "start" });
     await save(content, gemini, false);
   } else if (!figuresOnly) {
@@ -747,11 +747,11 @@ async function runPaper(job: PaperJob) {
         prompt: paperPrompt(job.kind, job.paper, job.scope.items, mixed ? { picturePages: pics, textPages: textOnly } : undefined),
         extraText: mixed ? textPagesBlock(pages, textOnly) : undefined,
       }));
-    const read = placeOnPages(remapPages(cleanPaper(r.raw, job.kind), slim.kept), pages);
+    const read = placeOnPages(remapPages(cleanPaper(r.raw, job.kind), slim.kept), pages, outline);
     if (!read.items.length) throw new Stop("claude_bad_answer", "the reading had no questions");
     if (!scoped) fresh = read;
     // Kept items are placed again too, so a page number stored wrongly before is put right.
-    content = placeOnPages(mergeReading(prior, read, new Set(job.prior.open), scoped ? job.scope : undefined), pages);
+    content = placeOnPages(mergeReading(prior, read, new Set(job.prior.open), scoped ? job.scope : undefined), pages, outline);
     await step("Saving Claude's reading", { stage: "save", state: "start" });
     await save(content, gemini, false);
   } else await note(second ? "Claude: not asked (Gemini checks the stored reading)" : job.check ? "Claude: not asked (checking the reading again)" : "Claude: not needed to cut a figure again", { stage: "claude", state: "skip" });

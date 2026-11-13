@@ -8,7 +8,7 @@ import {
   applyNotation, bboxWords, leadInProblems, lostNotation, normaliseNotation, notate, notatedPages, notationOn, notationParts, notationPlain,
   isCaptionLine, joinDropCaps, leadExtra, pdfOutline, unknownStops, stripLead, withoutLead, wordsText, type Word,
 } from "../../src/lib/brain/notation.ts";
-import { autoFixLeads, cleanPaper, figuresToLeads, fillLead, pipeRows, isSplitFlag, mergeReading, missingFromOutline, paperFlags, recheckItem, splitLeadIn, structureFlags } from "../../src/lib/brain/paper.ts";
+import { autoFixLeads, chosenQuestions, cleanPaper, countedMarks, figuresToLeads, fillLead, pipeRows, isSplitFlag, mergeReading, missingFromOutline, paperFlags, recheckItem, splitLeadIn, structureFlags } from "../../src/lib/brain/paper.ts";
 
 type W = [number, number, number, number, string];
 /** Poppler's -bbox-layout shape: pages of lines of words. */
@@ -587,4 +587,38 @@ test("a full stop the font sends as U+FFFD, and table cells never run into a fra
   // Maths Jun 2024 P32: "1.2 m" came out as "1�2 m", sentences ended in �, answer dots were rows of it.
   assert.equal(unknownStops("area is 1�2 m�\n���� [1]"), "area is 1.2 m.\n.... [1]");
   assert.equal(unknownStops("a � b"), "a � b");
+});
+
+// Opening text printed after the last part's [marks] (Jun 2025 Geography P42: the hypotheses before 2(b)); a new
+// question never takes such words (a section heading stays with the part before).
+test("the outline gives words after a part's marks to the next part on the page, not to a new question", () => {
+  const page: W[][] = [
+    [[291.5, 35.7, 303.8, 51.4, "9"]],
+    [[49.6, 61.7, 55.7, 77.4, "2"], [72.3, 61.7, 85.7, 77.4, "(a)"], [95.0, 61.7, 140.0, 77.4, "Describe"], [143.0, 61.7, 180.0, 77.4, "it."], [533.4, 61.7, 545.7, 77.4, "[3]"]],
+    [[72.3, 101.7, 140.0, 117.4, "Hypothesis"], [143.0, 101.7, 180.0, 117.4, "one."]],
+    [[72.3, 141.7, 85.7, 157.4, "(b)"], [95.0, 141.7, 140.0, 157.4, "Test"], [143.0, 141.7, 180.0, 157.4, "it."], [533.4, 141.7, 545.7, 157.4, "[2]"]],
+    [[72.3, 181.7, 140.0, 197.4, "Section"], [143.0, 181.7, 180.0, 197.4, "B"]],
+    [[49.6, 221.7, 55.7, 237.4, "3"], [72.3, 221.7, 85.7, 237.4, "(a)"], [95.0, 221.7, 140.0, 237.4, "Name"], [143.0, 221.7, 180.0, 237.4, "one."], [533.4, 221.7, 545.7, 237.4, "[1]"]],
+  ];
+  const o = pdfOutline(bboxWords(xml([[], page])));
+  assert.deepEqual(o.map((p) => [p.number, p.text]), [
+    ["2", ""], ["2(a)", "Describe it."], ["2(b)", "Hypothesis one. Test it. Section B"], ["3", ""], ["3(a)", "Name one."],
+  ]);
+});
+
+// A map's curved label read as notation ("Mid-Icela" + "nd") while the question prints the word flat.
+test("a word the pages also print flat is no lost notation", () => {
+  assert.equal(lostNotation("volcanoes in Iceland.", ["Mid-Icela_{nd} Belt\nthe location of volcanoes in Iceland."]), null);
+  assert.ok(lostNotation("volcanoes in Iceland.", ["Mid-Icela_{nd} Belt"]));
+});
+
+test("a choice paper counts the questions a candidate answers", () => {
+  const cover = ["INSTRUCTIONS Answer three questions in total, one from each section. The total mark for this paper is 75."];
+  assert.equal(chosenQuestions(cover[0]!), 3);
+  assert.equal(chosenQuestions("Answer all questions."), null);
+  const parts = [1, 2, 3, 4, 5, 6].flatMap((q) => [{ number: `${q}(a)`, marks: 20 }, { number: `${q}(b)`, marks: 5 }]);
+  assert.equal(countedMarks(parts, cover), 75);
+  assert.equal(countedMarks(parts, ["Answer all questions."]), 150);
+  // Questions with different marks count in full, so the total check still sees them.
+  assert.equal(countedMarks([...parts, { number: "6(c)", marks: 1 }], cover), 151);
 });

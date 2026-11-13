@@ -530,6 +530,14 @@ export function notationOn(page: string): Notation[] {
 
 const bare = (s: string) => s.replace(/\s+/g, "").replace(MINUS, "−");
 
+/** A word of letters only that the pages also print flat ("in Iceland." beside a map's curved "Mid-Icela" + "nd",
+ * "the CBD" beside a map label read as ^{C}BD): the reading's flat word is printed, so it is no lost notation. */
+function printedFlat(flat: string, pages: readonly string[]): boolean {
+  if (!/^[A-Za-z]{3,}$/.test(flat)) return false;
+  const re = new RegExp(`(?<![A-Za-z0-9}])${flat}(?![A-Za-z0-9]|[\\^_]\\{)`);
+  return pages.some((p) => re.test(p));
+}
+
 /**
  * Notation printed on the item's pages that the reading has flat: the marked form is not in the wording, but its flat
  * form is ("208 81 Tl" where the paper prints ²⁰⁸₈₁Tl). Returns the first one with the wording repaired, else null.
@@ -543,7 +551,7 @@ export function lostNotation(wording: string, pages: readonly string[]): { marke
     for (const t of notationOn(p)) {
       if (have.includes(bare(t.marked))) continue;
       const m = flatPattern(t.pieces, t.prefix).exec(repaired);
-      if (!m) continue;
+      if (!m || printedFlat(m[0], pages)) continue;
       first ??= { marked: t.marked, flat: m[0] };
       repaired = repaired.replace(flatPattern(t.pieces, t.prefix), t.marked);
     }
@@ -700,12 +708,21 @@ export function pdfOutline(pages: readonly (readonly Word[])[], figures: readonl
   let romanX = -1;
   let sub = "";
   let cur: Building | null = null;
-  const start = (number: string, page: number) => {
-    cur = { number, page, text: "", words: [], got: 0 };
+  // Words after a part's [marks] and before the next label: a later part's opening text (Jun 2025 Geography P42's
+  // hypotheses before 2(b)), so a part label on the same page takes them. A question number does not (a section's "Answer one question
+  // from this section."); they stay with the part before, as when no label follows.
+  let carry: Word[] = [];
+  const start = (number: string, page: number, takes = true) => {
+    if (!takes && cur) (cur as Building).words.push(...carry);
+    cur = { number, page, text: "", words: takes ? carry : [], got: 0 };
+    carry = [];
     out.push(cur);
   };
   pages.forEach((raw, pi) => {
     const page = pi + 1;
+    // Carried words stay on their page ("BLANK PAGE" is no opening text for the next page's part).
+    if (cur) (cur as Building).words.push(...carry);
+    carry = [];
     // As printed, top to bottom (owner, 9 Nov 2026: Nov 2025 P42 stores the "2" of question 2 after its page's text).
     // The margin warnings, header and footer are left out first, so they never start a line.
     // A figure's drawing with its labels, and its printed label line, are not question text (owner, 9 Nov 2026: Mar
@@ -743,7 +760,7 @@ export function pdfOutline(pages: readonly (readonly Word[])[], figures: readonl
         letterX = -1;
         roman = 0;
         sub = "";
-        start(String(q), page);
+        start(String(q), page, false);
         prevLabelLine = wi;
         return;
       }
@@ -782,9 +799,11 @@ export function pdfOutline(pages: readonly (readonly Word[])[], figures: readonl
       // Marks end at the right margin; "[1] [2] [3]" further in is a table's heading (Nov 2025 0478 Paper 22, 5(a)).
       if (mark && w.b[2] >= MARK_X) (cur as Building).got += Number(mark[1]);
       if (/^\.{3,}/.test(t) || mark || /^\[Total:?$/.test(t) || /^\d+\]$/.test(t)) return;
-      (cur as Building).words.push(w);
+      if ((cur as Building).got) carry.push(w);
+      else (cur as Building).words.push(w);
     });
   });
+  if (cur) (cur as Building).words.push(...carry);
   return out.map((p) => ({ number: p.number, page: p.page, text: wordsText(p.words, false).replace(/\.{3,}/g, " ").replace(/\s+/g, " ").trim(), ...(p.got ? { marks: p.got } : {}) }));
 }
 
