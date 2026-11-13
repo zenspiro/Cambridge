@@ -185,9 +185,12 @@ export function cleanPaper(raw: unknown, kind: PaperKind): PaperContent {
  * paper (most questions with options), a question with a figure and no options gets the paper's usual letters with no
  * words, so it still has its choices; the figure shows them. Pure.
  */
+/** A multiple-choice paper: most questions have choices (it prints no [marks]; each question is worth 1). */
+export const isMcqPaper = (items: readonly Pick<PaperItem, "options">[]) => items.filter((i) => i.options.length >= 3).length >= Math.max(5, items.length / 2);
+
 function pictureOptions(items: PaperItem[]): PaperItem[] {
   const withOptions = items.filter((i) => i.options.length >= 3);
-  if (withOptions.length < Math.max(5, items.length / 2)) return items;
+  if (!isMcqPaper(items)) return items;
   const letters = withOptions[0]!.options.map((o) => o.letter);
   return items.map((i) => (!i.options.length && i.figures.length ? { ...i, options: letters.map((letter) => ({ letter, text: "" })) } : i));
 }
@@ -375,6 +378,8 @@ export function paperFlags({ content, pages, gemini, outline }: CheckInput): Fla
 
   if (!textOk) add("text", "paper", "The PDF's text could not be read (a scan?), so wording and numbers were not checked against it.", "unreadable");
   const seen = new Set<string>();
+  // A multiple-choice paper prints no [1] per question (owner, 13 Nov 2026: Chemistry Jun 2026 P22 had 40 such flags).
+  const mcq = isMcqPaper(content.items);
   for (const it of content.items) {
     // A mark scheme prints one row per marking point, so a part's number repeats; only the same row twice is a repeat.
     const repeat = content.kind === "ms" ? content.items.slice(0, content.items.indexOf(it)).some((x) => x.number === it.number && squash(x.text) === squash(it.text)) : seen.has(it.number);
@@ -393,7 +398,7 @@ export function paperFlags({ content, pages, gemini, outline }: CheckInput): Fla
       if (nf) add("notation", it.number, nf.reason, nf.what, nf.pdfText);
       const lost = nf ? "" : lostSuperscript(wording);
       if (lost) add("numbers", it.number, `"${lost}" looks like a power or unit that lost its superscript (10⁻², cm³).`, `${lost}|${wording}`, "", ":sup");
-      if (content.kind === "qp" && it.marks !== null && it.marks > 0 && !raw.includes(`[${it.marks}]`) && !raw.includes(`[Total: ${it.marks}]`)) {
+      if (content.kind === "qp" && it.marks !== null && it.marks > 0 && !(mcq && it.marks === 1) && !raw.includes(`[${it.marks}]`) && !raw.includes(`[Total: ${it.marks}]`)) {
         add("marks", it.number, `[${it.marks}] is not printed in the PDF.`, `${it.marks}|${wording}`);
       }
     }
@@ -492,13 +497,20 @@ export function missingFromOutline(content: Pick<PaperContent, "kind" | "items" 
     const reason = `The paper prints ${o.number} [${o.marks}] on page ${o.page}; this reading does not have it.`;
     return { key: `missing:${o.number}`, item: o.number, kind: "missing" as const, colour: COLOUR.missing, reason, pdfText: "", fingerprint: fingerprint("missing", squash(o.text), "printed"), v: CHECKS_VERSION };
   });
+  // A part whose marks are not the [marks] printed with it (Biology Nov 2025 P62: Haiku left 1(d)(i)'s [1] empty).
+  const printedMarks = new Map(printed.map((o) => [o.number, o.marks!]));
+  const wrongMarks = content.items.filter((i) => printedMarks.has(i.number) && i.marks !== printedMarks.get(i.number) && content.items.filter((x) => x.number === i.number).length === 1).map((i) => {
+    const m = printedMarks.get(i.number)!;
+    const reason = `The paper prints [${m}] for ${i.number}; this reading has ${i.marks === null ? "no marks" : `[${i.marks}]`}.`;
+    return { key: `marks:${i.number}:printed`, item: i.number, kind: "marks" as const, colour: COLOUR.marks, reason, pdfText: "", fingerprint: fingerprint("marks", `${i.marks}|${m}|${squash(itemWording(i))}`, "printed"), v: CHECKS_VERSION };
+  });
   // The other way round: a part with marks under a number the paper never prints (Haiku's "6(iii)", "3(lead)").
   const labels = new Set(outline.map((o) => o.number));
   const extra = content.items.filter((i) => i.marks !== null && !labels.has(i.number)).map((i) => {
     const reason = `The paper prints no ${i.number}. Check the number against the printed page.`;
     return { key: `numbering:${i.number}:printed`, item: i.number, kind: "numbering" as const, colour: COLOUR.numbering, reason, pdfText: "", fingerprint: fingerprint("numbering", squash(itemWording(i)), "not printed"), v: CHECKS_VERSION };
   });
-  return [...missing, ...extra];
+  return [...missing, ...wrongMarks, ...extra];
 }
 
 /** Flags a mark scheme raises against its question paper: the marks per question must match. */
@@ -969,7 +981,7 @@ export function recheckItem(c: PaperContent, flags: readonly Flag[], number: str
     if (nf) add("notation", nf.reason, nf.what, "", nf.pdfText);
     const missing = numbersIn(wording).find((x) => !nums.has(x));
     if (missing) add("numbers", `The number ${missing} is not printed in the PDF.`, `${missing}|${wording}`, `:${missing}`);
-    if (c.kind === "qp" && it.marks !== null && it.marks > 0 && !allText.includes(`[${it.marks}]`) && !allText.includes(`[Total: ${it.marks}]`)) {
+    if (c.kind === "qp" && it.marks !== null && it.marks > 0 && !(isMcqPaper(c.items) && it.marks === 1) && !allText.includes(`[${it.marks}]`) && !allText.includes(`[Total: ${it.marks}]`)) {
       add("marks", `[${it.marks}] is not printed in the PDF.`, `${it.marks}|${wording}`);
     }
   }
