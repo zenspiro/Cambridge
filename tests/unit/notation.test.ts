@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import {
   fractionBars, fractions, fractionsIn, joinFractionLines, linearFraction, notationTree,
   applyNotation, bboxWords, leadInProblems, lostNotation, normaliseNotation, notate, notatedPages, notationOn, notationParts, notationPlain,
-  isCaptionLine, leadExtra, pdfOutline, stripLead, withoutLead, wordsText, type Word,
+  isCaptionLine, joinDropCaps, leadExtra, pdfOutline, unknownStops, stripLead, withoutLead, wordsText, type Word,
 } from "../../src/lib/brain/notation.ts";
 import { autoFixLeads, cleanPaper, figuresToLeads, fillLead, pipeRows, isSplitFlag, mergeReading, missingFromOutline, paperFlags, recheckItem, splitLeadIn, structureFlags } from "../../src/lib/brain/paper.ts";
 
@@ -553,4 +553,38 @@ test("LaTeX symbols become the printed characters; vector names one markup", () 
   assert.deepEqual(notationTree("\\vec{AB}"), [{ kind: "arrow", children: [{ kind: "text", text: "AB" }] }]);
   // Words that only start like a command are left alone.
   assert.equal(normaliseNotation("\\left \\index"), "\\left \\index");
+});
+
+test("cube roots as printed; a fraction's flat form running into a power is not that fraction", () => {
+  // Maths Mar 2025 P12 4(b): \sqrt[3]{27}. Maths Nov 2023 P42 11(d): 3x^{3} on the page that prints h(x) = 3/x.
+  assert.equal(normaliseNotation("\\sqrt[3]{27} and \\sqrt[3]{x+1}"), "∛27 and ∛(x+1)");
+  assert.equal(lostNotation("gf(x) = 3x^{3} + ax^{2}", ["h (x) = \\frac{3}{x}"]), null);
+  assert.equal(lostNotation("h(x) = 3x, x ≠ 0", ["h (x) = \\frac{3}{x}"])?.marked, "\\frac{3}{x}");
+});
+
+test("a capital set apart from the rest of its word is joined; separate letters are not", () => {
+  // Chemistry Nov 2023 P62: "redict" then a lone "P" touching it on the left.
+  const w = (x0: number, x1: number, t: string, y = 684) => ({ b: [x0, y, x1, y + 15] as [number, number, number, number], t, first: false });
+  assert.deepEqual(joinDropCaps([w(120.8, 147.7, "redict"), w(113.5, 120.8, "P")]).map((x) => x.t), ["Predict"]);
+  // A real word "A" before "metal" (a space apart), X^{R}X^{r}'s "X" and "r", the dice labels: left alone.
+  assert.deepEqual(joinDropCaps([w(80.8, 107.6, "metal"), w(71, 78.3, "A")]).map((x) => x.t), ["metal", "A"]);
+  assert.deepEqual(joinDropCaps([w(100, 106, "X"), w(106, 109, "r")]).map((x) => x.t), ["X", "r"]);
+});
+
+test("agreement: ours settled when printed and holding all of Gemini's words, unless choices are missing or repeated", () => {
+  // Physics Jun 2025 P42 10(a)(ii): ours keeps the answer line's label "surface temperature = ... °C", Gemini drops it.
+  const it = (number: string, text: string, options: { letter: string; text: string }[] = []) => ({ number, page: 2, text, marks: 1, options, answerLines: 1, figures: [], guidance: "", tables: [] });
+  const pages = ["cover " + "Answer all questions in the spaces provided on the question paper. ".repeat(20), "10 (a) (ii) Calculate the surface temperature of planet D in °C. surface temperature = °C [1] 1 Tick one box. Abstraction means A testing the solution. B writing a program. C defining sub-systems. [1]"];
+  const read = (items: ReturnType<typeof it>[]) => ({ kind: "qp" as const, totalMarks: null, figures: [], items });
+  const flags = (ours: ReturnType<typeof it>, theirs: ReturnType<typeof it>) => paperFlags({ content: read([ours]), pages, gemini: read([theirs]) }).map((f) => f.key);
+  assert.ok(!flags(it("10(a)(ii)", "Calculate the surface temperature of planet D in °C.\nsurface temperature = ... °C"), it("10(a)(ii)", "Calculate the surface temperature of planet D in °C.")).includes("agree:10(a)(ii)"));
+  // 0478 Jun 2025 P22 question 1: ours repeats its choices inside the text; still flagged.
+  const opts = [{ letter: "A", text: "testing the solution." }, { letter: "B", text: "writing a program." }, { letter: "C", text: "defining sub-systems." }];
+  assert.ok(flags(it("1", "Tick one box. Abstraction means A testing the solution. B writing a program. C defining sub-systems.", opts), it("1", "Tick one box. Abstraction means", opts)).includes("agree:1"));
+});
+
+test("a full stop the font sends as U+FFFD, and table cells never run into a fraction", () => {
+  // Maths Jun 2024 P32: "1.2 m" came out as "1�2 m", sentences ended in �, answer dots were rows of it.
+  assert.equal(unknownStops("area is 1�2 m�\n���� [1]"), "area is 1.2 m.\n.... [1]");
+  assert.equal(unknownStops("a � b"), "a � b");
 });

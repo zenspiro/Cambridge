@@ -2,6 +2,24 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-13: Fewer false flags from the remaining benchmark papers
+
+**What:** a multiple-choice paper no longer gets "[1] is not printed" on every question. A lone "=" is never read as a superscript. A capital the PDF's text layer sets apart from the rest of its word ("P" and "redict") is joined to it, so the word check finds "Predict". A part whose marks differ from the [marks] printed with it gets an amber flag.
+
+**Why:** owner, 13 Nov 2026 (reading the remaining benchmark papers): Chemistry Jun 2026 P22 had 40 false marks flags; Maths Mar 2023 P42 a "^{=}V"; Chemistry Nov 2023 P62 a false "wording not found"; Biology Nov 2025 P62 a part with its [1] left empty and only a total flag.
+
+Also: no agree flag where our reading is printed and only adds words Gemini left out (answer-line labels, a fuller opening text); still flagged when ours repeats its choices in the text or lacks choices Gemini has.
+
+**Tested:** unit tests; the page text of every benchmark paper before and after: 63 lines change, all drop capitals joined in the Chemistry practical papers or "=" signs back in place (a first, looser rule changed 395 lines including swapped dice labels, so it was narrowed). Loaded from this session: Maths Mar 2023 P42 (L₁, L₂, L₃, cm²; 100%), Maths Nov 2024 P42 (5(c)'s opening text, 8(b) marks), Physics Jun 2025 P42 (7(c)(ii) [4] with its two steps, marks, table numbers as printed), Biology Nov 2025 P62 (1(d)(i)'s [1]), Computer Science Jun 2025 P22 (question 1's options out of its text), and every paper with photos or side-by-side figures cut again on the live site.
+
+## 2026-11-13: Cube roots, and no false fraction flag next to a power
+
+**What:** a cube root written as LaTeX (\sqrt[3]{27}) becomes ∛27. The flat-fraction check no longer flags "3x" in 3x³ because the page also prints 3/x.
+
+**Why:** owner, 13 Nov 2026 (reading the benchmark papers): Maths Mar 2025 P12 4(b) and Maths Nov 2023 P42 11(d).
+
+**Tested:** unit test (a real flat "3x" for 3/x still flags). Loaded from this session: Maths Mar 2025 P12 (answer-line units, the graph grid boxed without its question line) and Maths Nov 2023 P42 (both dice in one box): both 0 red flags, 100% on their keys.
+
 ## 2026-11-13: Photos in figures
 
 **What:** photographs and other raster pictures in a paper (micrographs, a koala, a starfish, a body diagram) are cut with their figure like drawings, from their printed caption. The script renders each photo as a small JPEG; the review screen shows it inside the figure. Two captions side by side each take their own picture.

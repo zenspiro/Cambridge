@@ -80,7 +80,8 @@ export function notate(words: readonly Word[]): { words: Word[]; tokens: Notatio
     const frac = x.t.startsWith("\\frac{");
     // Nor is bare punctuation or control codes: page furniture prints an invisible comma and control codes over the
     // margin (Jun 2024 0620 Paper 42, page 5, where it joined "symbol" and hid question 3's number).
-    if (h(x) <= 0 || !/[^\s,.;:\p{C}]/u.test(x.t) || (!frac && (x.t.length > 8 || (x.t.match(/[A-Za-z]/g) ?? []).length > 3))) return;
+    // An equals sign alone is never one either (Maths Mar 2023 P42: a formula's "=" read as "^{=}V").
+    if (h(x) <= 0 || !/[^\s,.;:=\p{C}]/u.test(x.t) || (!frac && (x.t.length > 8 || (x.t.match(/[A-Za-z]/g) ?? []).length > 3))) return;
     let best: { j: number; gap: number; kind: "sup" | "sub"; side: "pre" | "post" } | null = null;
     words.forEach((base, j) => {
       // A fraction is never the base of a superscript (its box is two lines tall, so its neighbours look lowered).
@@ -282,6 +283,29 @@ export function joinFractionLines(words: readonly Word[]): Word[] {
  * Every page's text with its notation. From Poppler's words when it read every page (it also reads the maths fonts
  * our own reader cannot: "y = x^{2} + 7x − 18"), else our reader's pages patched with what Poppler placed. Pure.
  */
+/**
+ * A paragraph's large first letter (a drop capital) that the text layer puts out of order (owner, 13 Nov 2026:
+ * Chemistry Nov 2023 P62's "Predict" came out as "redict" with the "P" a line later, so the word check failed): a lone
+ * capital touching the rest of its word (two or more lower-case letters, the same height) is joined to it. A first try
+ * that also took gaps up to 3 pt swapped the dice labels of Maths Nov 2023 P42 and broke X^{R}X^{r}. Pure.
+ */
+export function joinDropCaps(words: readonly Word[]): Word[] {
+  const out = [...words];
+  for (let i = out.length - 1; i >= 0; i--) {
+    const w = out[i]!;
+    if (!/^[A-Z]$/.test(w.t)) continue;
+    // Touching, the rest of a word of at least two letters, the same height: "P" + "redict", "T" + "he".
+    const j = out.findIndex((x, k) => k !== i && /^\s*[a-z]{2}/.test(x.t) && Math.abs(x.b[0] - w.b[2]) <= 0.5
+      && Math.abs(x.b[1] - w.b[1]) < 1 && Math.abs(x.b[3] - w.b[3]) < 1);
+    if (j < 0) continue;
+    const x = out[j]!;
+    const gap = "";
+    out[j] = { ...x, first: j < i ? x.first : w.first, t: `${w.t}${gap}${x.t.trimStart()}`, b: [Math.min(w.b[0], x.b[0]), Math.min(w.b[1], x.b[1]), Math.max(w.b[2], x.b[2]), Math.max(w.b[3], x.b[3])] };
+    out.splice(i, 1);
+  }
+  return out;
+}
+
 export function notatedPages(pages: readonly string[], xml: string, bars: readonly (readonly Bar[])[] = []): { pages: string[]; found: number; fractions: number; words: Word[][]; from: "poppler" | "patched" } {
   const boxes = bboxWords(xml);
   let found = 0;
@@ -290,7 +314,7 @@ export function notatedPages(pages: readonly string[], xml: string, bars: readon
   const tokens: Notation[][] = [];
   for (const [i, raw] of boxes.entries()) {
     // Fractions first: a mixed number's small stacked digits (1¾) are a fraction, not a superscript and subscript.
-    const f = fractions(raw, bars[i] ?? []);
+    const f = fractions(joinDropCaps(raw), bars[i] ?? []);
     fracs += f.count;
     const n = notate(f.words);
     n.words = joinFractionLines(n.words);
@@ -299,10 +323,18 @@ export function notatedPages(pages: readonly string[], xml: string, bars: readon
     found += n.tokens.length;
   }
   const chars = (ps: readonly string[]) => ps.join("").replace(/\s/g, "").length;
-  const fromWords = words.map((w) => wordsText(w));
+  const fromWords = words.map((w) => unknownStops(wordsText(w)));
   if (boxes.length === pages.length && chars(fromWords) >= chars(pages) * 0.8) return { pages: fromWords, found, fractions: fracs, words, from: "poppler" };
-  return { pages: pages.map((p, i) => applyNotation(p, tokens[i] ?? [])), found, fractions: fracs, words, from: "patched" };
+  return { pages: pages.map((p, i) => unknownStops(applyNotation(p, tokens[i] ?? []))), found, fractions: fracs, words, from: "patched" };
 }
+
+/**
+ * A font whose full stop reaches the text layer as U+FFFD (owner, 13 Nov 2026: Maths Jun 2024 P32 printed "1.2 m" and
+ * answer dots that came out as "1\uFFFD2 m" and rows of \uFFFD): between digits it is a decimal point, at the end of a
+ * word a full stop, a run of them answer dots. Any other U+FFFD is left as it is. Pure.
+ */
+export const unknownStops = (s: string) =>
+  s.replace(/\uFFFD{3,}/g, (m) => ".".repeat(m.length)).replace(/(\d)\uFFFD(?=\d)/g, "$1.").replace(/([\p{L}\p{N})}\]])\uFFFD(?=\s|$)/gu, "$1.");
 
 const SUP: Record<string, string> = { "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹", "+": "⁺", "−": "⁻", "=": "⁼", "(": "⁽", ")": "⁾", n: "ⁿ", i: "ⁱ" };
 const SUB: Record<string, string> = { "0": "₀", "1": "₁", "2": "₂", "3": "₃", "4": "₄", "5": "₅", "6": "₆", "7": "₇", "8": "₈", "9": "₉", "+": "₊", "−": "₋", "=": "₌", "(": "₍", ")": "₎" };
@@ -340,6 +372,7 @@ export function normaliseNotation(s: string): string {
       : out.replace(new RegExp(`\\\\${k}(?![a-zA-Z])`, "g"), v);
   }
   out = out.replace(/\^\{?\\circ\}?/g, "°").replace(/\\overrightarrow\{/g, "\\vec{").replace(/\\mathcal\{E\}/g, "ℰ");
+  out = out.replace(/\\sqrt\[(3|4)\]\{([^{}]{1,40})\}/g, (_m, n: string, a: string) => `${n === "3" ? "∛" : "∜"}${/^[\p{L}\p{N}.]+$/u.test(a) ? a : `(${a})`}`);
   for (let k = 0; k < 4 && out.includes("\\sqrt{"); k++) out = out.replace(/\\sqrt\{([^{}]{1,40})\}/g, (_m, a: string) => (/^[\p{L}\p{N}.]+$/u.test(a) ? `√${a}` : `√(${a})`));
   // LaTeX dress around the notation (Gemini): \mathbf{p} is p, \quad a space.
   out = out.replace(/\\math(?:bf|rm|it)\{([^{}]{1,20})\}/g, "$1").replace(/\\q?quad\b/g, " ");
@@ -520,7 +553,7 @@ export function lostNotation(wording: string, pages: readonly string[]): { marke
       if (have.includes(bare(f.marked)) || bare(repaired).includes(bare(linearFraction(f.num, f.den)))) continue;
       const chars = (x: string) => [...bare(x)].map((c) => (c === "−" ? "[–\\-−]" : escRe(c))).join("\\s*");
       if (/\\frac/.test(f.num + f.den) || !bare(f.num) || !bare(f.den)) continue;
-      const re = new RegExp(`(?<![A-Za-z0-9.{])${chars(f.num)}\\s*/?\\s*${chars(f.den)}(?![0-9.])`);
+      const re = new RegExp(`(?<![A-Za-z0-9.{])${chars(f.num)}\\s*/?\\s*${chars(f.den)}(?![0-9.]|[\\^_]\\{)`);
       const m = re.exec(repaired);
       if (!m) continue;
       first ??= { marked: f.marked, flat: m[0] };
