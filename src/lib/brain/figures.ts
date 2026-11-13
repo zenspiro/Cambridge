@@ -11,7 +11,10 @@ export type Box = [number, number, number, number];
 /** A drawn element: a letter (glyph outline id at x, y) or a path with its paint. Boxes in page points, y down. */
 export type ArtGlyph = { b: Box; u: string; x: number; y: number; f: string };
 export type ArtPath = { b: Box; d: string; f?: string; fr?: string; s?: string; sw?: number; lc?: string; lj?: string; da?: string; t?: number[]; w?: 1 };
-export type PageArt = { v: 1; page: number; w: number; h: number; g: Record<string, string>; e: (ArtGlyph | ArtPath)[] };
+/** A photo (raster picture) where the page prints it: its box and a JPEG of that box rendered by the script ("" until then). */
+export type ArtPhoto = { b: Box; i: string };
+export type ArtEl = ArtGlyph | ArtPath | ArtPhoto;
+export type PageArt = { v: 1; page: number; w: number; h: number; g: Record<string, string>; e: ArtEl[] };
 export type TextLine = { b: Box; text: string; body: boolean };
 export type FigureCut = "caption" | "match" | "order" | "manual" | "page" | "";
 
@@ -21,6 +24,9 @@ const BOTTOM = 50;
 const MAX_ELEMENTS = 40_000;
 const MAX_GLYPHS = 3_000;
 const MAX_D = 20_000;
+/** Photos (owner, 13 Nov 2026, option A): at most this many per page, each JPEG at most this long as a data URI. */
+export const PHOTO = { max: 12, maxChars: 400_000, dpi: 100, quality: 75 };
+const PHOTO_RE = /^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/;
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 const num = (s: string) => {
@@ -59,7 +65,7 @@ function pathBox(d: string, m: readonly number[]): Box | null {
 
 const attrsOf = (s: string) => Object.fromEntries([...s.matchAll(/([a-zA-Z:-]+)="([^"]*)"/g)].map((a) => [a[1]!, a[2]!]));
 
-/** One page of `pdftocairo -svg` output as its drawn elements. Clip paths and pictures are left out. */
+/** One page of `pdftocairo -svg` output as its drawn elements. Clip paths are left out; photos keep only their box (`fillPhotos`). */
 export function pageArt(svg: string, page: number): PageArt {
   const w = num(svg.match(/<svg[^>]*\bwidth="([\d.]+)/)?.[1] ?? "595");
   const h = num(svg.match(/<svg[^>]*\bheight="([\d.]+)/)?.[1] ?? "842");
@@ -67,9 +73,13 @@ export function pageArt(svg: string, page: number): PageArt {
   const names = new Map<string, string>();
   const outlines = new Map<string, string>();
   for (const m of svg.matchAll(/<g id="(glyph-[\d-]+)">\s*<path d="([^"]*)"\s*\/>/g)) outlines.set(m[1]!, roundD(m[2]!));
+  // Photos: pdftocairo defines each picture once (with its size in pixels) and places it with a <use> and a matrix.
+  const sources = new Map<string, [number, number]>();
+  for (const m of svg.matchAll(/<image id="(source-\d+)" x="[^"]*" y="[^"]*" width="([\d.]+)" height="([\d.]+)"/g)) sources.set(m[1]!, [num(m[2]!), num(m[3]!)]);
   const at = svg.indexOf("</defs>");
   const body = at >= 0 ? svg.slice(at) : svg;
-  const e: (ArtGlyph | ArtPath)[] = [];
+  const e: ArtEl[] = [];
+  let photos = 0;
   let fill = "#000000";
   for (const line of body.split("\n")) {
     if (e.length >= MAX_ELEMENTS) break;
@@ -89,6 +99,19 @@ export function pageArt(svg: string, page: number): PageArt {
       const x = r2(num(u[2]!)), y = r2(num(u[3]!));
       const b = pathBox(d, [1, 0, 0, 1, x, y]);
       if (b) e.push({ b: b.map(r2) as Box, u: id, x, y, f: fill });
+      continue;
+    }
+    const src = line.match(/^<use [^>]*href="#(source-\d+)"[^>]*transform="matrix\(([^)]*)\)"/);
+    if (src) {
+      const size = sources.get(src[1]!);
+      const t = src[2]!.split(/[\s,]+/).map(num);
+      if (!size || t.length !== 6 || photos >= PHOTO.max) continue;
+      const corners = [apply(t, 0, 0), apply(t, size[0], 0), apply(t, 0, size[1]), apply(t, size[0], size[1])];
+      const b: Box = [Math.min(...corners.map((c) => c[0])), Math.min(...corners.map((c) => c[1])), Math.max(...corners.map((c) => c[0])), Math.max(...corners.map((c) => c[1]))];
+      // A picture smaller than 10 pt is a mark or a speck, not a photo.
+      if (b[2] - b[0] < 10 || b[3] - b[1] < 10) continue;
+      photos++;
+      e.push({ b: b.map(r2) as Box, i: "" });
       continue;
     }
     const p = line.match(/^<path ([^>]*)\/>/);
@@ -116,7 +139,23 @@ export function pageArt(svg: string, page: number): PageArt {
   return { v: 1, page, w: r2(w), h: r2(h), g, e };
 }
 
-const isGlyph = (x: ArtGlyph | ArtPath): x is ArtGlyph => (x as ArtGlyph).u !== undefined;
+const isGlyph = (x: ArtEl): x is ArtGlyph => (x as ArtGlyph).u !== undefined;
+const isPhoto = (x: ArtEl): x is ArtPhoto => typeof (x as ArtPhoto).i === "string";
+
+/** The photos of a page whose JPEG the script still has to render, with their index in `art.e`. */
+export const photoSlots = (art: PageArt) => art.e.flatMap((x, k) => (isPhoto(x) && !x.i ? [{ k, b: x.b }] : []));
+
+/** The page's art with each photo's JPEG (a data URI from the script); a photo left without one is dropped. */
+export function fillPhotos(art: PageArt, data: ReadonlyMap<number, string>): PageArt {
+  return { ...art, e: art.e.flatMap((x, k): ArtEl[] => (!isPhoto(x) ? [x] : x.i ? [x] : PHOTO_RE.test(data.get(k) ?? "") && data.get(k)!.length <= PHOTO.maxChars ? [{ b: x.b, i: data.get(k)! }] : [])) };
+}
+
+/** pdftoppm's arguments for one photo's box as a JPEG (pixels at PHOTO.dpi, from the page's top left). */
+export function photoArgs(page: number, b: Box): string[] {
+  const k = PHOTO.dpi / 72;
+  const px = (n: number) => String(Math.max(0, Math.round(n * k)));
+  return ["-jpeg", "-jpegopt", `quality=${PHOTO.quality}`, "-r", String(PHOTO.dpi), "-f", String(page), "-l", String(page), "-x", px(b[0]), "-y", px(b[1]), "-W", px(b[2] - b[0]), "-H", px(b[3] - b[1]), "-singlefile"];
+}
 const fin = (n: unknown, lo = -5000, hi = 5000) => (typeof n === "number" && Number.isFinite(n) && n >= lo && n <= hi ? n : null);
 const box = (v: unknown): Box | null => {
   if (!Array.isArray(v) || v.length !== 4) return null;
@@ -133,11 +172,19 @@ export function cleanArt(raw: unknown): PageArt | null {
   const g: Record<string, string> = {};
   const gin = o.g && typeof o.g === "object" ? (o.g as Record<string, unknown>) : {};
   for (const [k, d] of Object.entries(gin).slice(0, MAX_GLYPHS)) if (/^g\d{1,4}$/.test(k) && typeof d === "string" && d.length <= MAX_D && D_RE.test(d)) g[k] = d;
-  const e: (ArtGlyph | ArtPath)[] = [];
+  const e: ArtEl[] = [];
+  let photos = 0;
   for (const x of (Array.isArray(o.e) ? o.e : []).slice(0, MAX_ELEMENTS)) {
     const r = x && typeof x === "object" ? (x as Record<string, unknown>) : {};
     const b = box(r.b);
     if (!b) continue;
+    if (typeof r.i === "string") {
+      if (photos < PHOTO.max && r.i.length <= PHOTO.maxChars && PHOTO_RE.test(r.i)) {
+        photos++;
+        e.push({ b, i: r.i });
+      }
+      continue;
+    }
     if (typeof r.u === "string") {
       const xx = fin(r.x), yy = fin(r.y), f = typeof r.f === "string" && PAINT_RE.test(r.f) ? r.f : "#000000";
       if (g[r.u] !== undefined && xx !== null && yy !== null) e.push({ b, u: r.u, x: xx, y: yy, f });
@@ -191,7 +238,7 @@ const inside = (a: Box, b: Box) => a[0] >= b[0] && a[1] >= b[1] && a[2] <= b[2] 
 
 /** Drawing (not letters, not white masks, not page frame, header or footer) between two heights. */
 function drawing(art: PageArt, top: number, bottom: number) {
-  return art.e.filter((x): x is ArtPath => !isGlyph(x) && !x.w && x.b[1] >= Math.max(TOP, top) - 2 && x.b[3] <= Math.min(art.h - BOTTOM, bottom) + 2
+  return art.e.filter((x): x is ArtPath | ArtPhoto => !isGlyph(x) && !(x as ArtPath).w && x.b[1] >= Math.max(TOP, top) - 2 && x.b[3] <= Math.min(art.h - BOTTOM, bottom) + 2
     && x.b[0] > 20 && x.b[2] < art.w - 20 && x.b[2] - x.b[0] < art.w * 0.9);
 }
 
@@ -212,7 +259,7 @@ function withLabels(b: Box, lines: readonly TextLine[], art: PageArt, top: numbe
   return out;
 }
 
-function grow(paths: readonly ArtPath[], gap: number): Box[] {
+function grow(paths: readonly { b: Box }[], gap: number): Box[] {
   const groups: Box[] = [];
   for (const p of paths) {
     let b = p.b;
@@ -240,9 +287,19 @@ export function findBoxes(art: PageArt, lines: readonly TextLine[]): Found {
     .sort((a, b) => a.b[1] - b.b[1]);
   const captions: Found["captions"] = [];
   let prev = 0;
+  let rowTop = 0;
   for (const c of caps) {
     const label = c.text.match(/(\d+\.\d+)/)![1]!;
-    const paths = drawing(art, prev, c.b[1]).sort((a, b) => b.b[3] - a.b[3]);
+    // Captions side by side on one line (Biology Nov 2025 P62's Fig. 3.2 and 3.3): each takes the drawing in its own
+    // column, split halfway between the captions' middles; the line above them all is where every column starts.
+    const row = caps.filter((x) => Math.abs(x.b[1] - c.b[1]) < 4).sort((a, b) => a.b[0] - b.b[0]);
+    const mid = (x: TextLine) => (x.b[0] + x.b[2]) / 2;
+    const k = row.indexOf(c);
+    const left = k > 0 ? (mid(row[k - 1]!) + mid(c)) / 2 : -Infinity;
+    const right = k < row.length - 1 ? (mid(c) + mid(row[k + 1]!)) / 2 : Infinity;
+    if (k > 0) prev = rowTop;
+    else rowTop = prev;
+    const paths = drawing(art, prev, c.b[1]).filter((p) => (p.b[0] + p.b[2]) / 2 >= left && (p.b[0] + p.b[2]) / 2 < right).sort((a, b) => b.b[3] - a.b[3]);
     if (paths.length) {
       let b = paths[0]!.b;
       let grew = true;
@@ -250,7 +307,11 @@ export function findBoxes(art: PageArt, lines: readonly TextLine[]): Found {
         grew = false;
         for (const p of paths) if (!inside(p.b, b) && overlaps(p.b, b, 25)) { b = join(b, p.b); grew = true; }
       }
-      captions.push({ label, box: withLabels(b, lines, art, prev, c.b[1] - 1, 14).map(r2) as Box });
+      // A photo takes its short labels ("heart 75%") but never a sentence: the lines next to it are question text
+      // (Biology Mar 2025 P42's Fig. 6.2).
+      const onlyPhotos = paths.filter((p) => inside(p.b, b)).every((p) => isPhoto(p));
+      const near = onlyPhotos ? lines.filter((l) => !/[.?!:]$/.test(l.text.trim()) && l.text.trim().split(/\s+/).length <= 4) : lines;
+      captions.push({ label, box: withLabels(b, near, art, prev, c.b[1] - 1, 14).map(r2) as Box });
     }
     prev = c.b[3];
   }
@@ -352,6 +413,9 @@ export function cropSvg(art: PageArt, b: Box, pad = 6, marker?: Box): string {
     if (isGlyph(x)) {
       used.add(x.u);
       parts.push(`<use href="#${x.u}" x="${x.x}" y="${x.y}" fill="${x.f}"/>`);
+    } else if (isPhoto(x)) {
+      // Under the drawing, as printed (labels and arrows on a photo stay on top).
+      if (x.i) parts.unshift(`<image href="${x.i}" x="${x.b[0]}" y="${x.b[1]}" width="${r2(x.b[2] - x.b[0])}" height="${r2(x.b[3] - x.b[1])}" preserveAspectRatio="none"/>`);
     } else parts.push(pathTag(x));
   }
   const [x, y, w, h] = [r2(v[0]), r2(v[1]), r2(v[2] - v[0]), r2(v[3] - v[1])];

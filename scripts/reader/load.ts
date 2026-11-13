@@ -18,7 +18,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { constants as zlibConstants, inflateSync } from "node:zlib";
 import { allPagesInfo } from "../../src/lib/pdf/firstPage.ts";
-import { assignBoxes, findBoxes, labelBoxes, pageArt, textLines, type Box, type FigureCut, type PageArt } from "../../src/lib/brain/figures.ts";
+import { assignBoxes, fillPhotos, findBoxes, labelBoxes, pageArt, photoArgs, photoSlots, textLines, type Box, type FigureCut, type PageArt } from "../../src/lib/brain/figures.ts";
 import { fractionBars, notatedPages, pdfOutline, type Bar, type OutlinePart } from "../../src/lib/brain/notation.ts";
 import { autoFixLeads, autoRenumber, blankPages, cleanPaper, figuresToLeads, paperFlags, placeOnPages, type AutoHold, type PaperContent, type PaperKind } from "../../src/lib/brain/paper.ts";
 
@@ -89,6 +89,21 @@ const n = notatedPages(rawPages, xml, bars);
 const pages = n.pages;
 const outline: OutlinePart[] = pdfOutline(n.words, figs);
 
+// Each photo on a figure page as a small JPEG of its box (Poppler), so a cut figure shows it.
+function withPhotos(art: PageArt, page: number): PageArt {
+  const data = new Map<number, string>();
+  for (const { k, b } of photoSlots(art)) {
+    const out = join(dir, `photo-${page}-${k}`);
+    try {
+      run("pdftoppm", [...photoArgs(page, b), pdfPath!, out]);
+      data.set(k, `data:image/jpeg;base64,${readFileSync(`${out}.jpg`).toString("base64")}`);
+    } catch {
+      // Left out: the figure keeps its drawing.
+    }
+  }
+  return fillPhotos(art, data);
+}
+
 const readJson = (p: string | undefined) => (p ? (JSON.parse(readFileSync(p, "utf8")) as unknown) : null);
 const mine = readJson(readingPath) as { kind?: unknown } | null;
 const kind: PaperKind = mine?.kind === "ms" ? "ms" : "qp";
@@ -127,7 +142,7 @@ try {
   const boxes = new Map<string, { box: Box; cut: FigureCut }>();
   for (const page of [...new Set(content.figures.filter((f) => f.cut !== "manual").map((f) => f.page))].sort((a, b) => a - b)) {
     const svg = svgs.get(page) ?? run("pdftocairo", ["-svg", "-f", String(page), "-l", String(page), pdfPath, "-"]);
-    const art = pageArt(svg, page);
+    const art = withPhotos(pageArt(svg, page), page);
     const lines = textLines(pageXml[page - 1] ?? "");
     const got = assignBoxes(content.figures.filter((f) => f.page === page), findBoxes(art, lines), lines);
     for (const [id, b] of got) if (content.figures.find((f) => f.id === id)?.cut !== "manual") boxes.set(id, b);

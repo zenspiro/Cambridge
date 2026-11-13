@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-13: Photos in figures
+
+**What:** photographs and other raster pictures in a paper (micrographs, a koala, a starfish, a body diagram) are cut with their figure like drawings, from their printed caption. The script renders each photo as a small JPEG; the review screen shows it inside the figure. Two captions side by side each take their own picture.
+
+**Why:** owner, 13 Nov 2026, option A: figure cutting read only vector drawings, so every photo had to be boxed by hand (Biology Mar 2025 P42 had four).
+
+**Tested:** unit tests (placement, the JPEG check (only JPEG data URIs survive), dropping photos without data, the cut, a photo's box without the question's sentences); every benchmark paper's figures before and after: 8 figures that had no box now have one, 6 boxes better (whole leaf section, the bean pod, the variegated leaves), the side-by-side starfish fixed after a first pass swapped them, each checked by eye. Stored page sizes 90 to 220 KB with photos.
+
 ## 2026-11-13: Maths symbols in one form
 
 **What:** LaTeX commands in a reading (\le, \pi, \sqrt{2}, \sin x, \overrightarrow{AB}) become the characters the paper prints (≤, π, √2, sin x) or our one markup (\vec{AB}, shown with an arrow over it), and the prompt asks for the characters.
