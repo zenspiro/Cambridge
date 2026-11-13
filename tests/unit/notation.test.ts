@@ -527,3 +527,19 @@ test("a \"which row\" question written with | becomes a table and plain options"
   assert.equal(pipeRows("Which is right?", ["one", "two", "three", "four"].map((text, k) => ({ letter: "ABCD"[k]!, text }))), null);
   assert.equal(pipeRows("Which row is right?", opts)!.text, "Which row is right?");
 });
+
+test("Gemini's split of an opening text the paper prints whole raises no flag; a formula still does", () => {
+  // Physics Nov 2023 P32 question 9: "Fig. 9.2 shows ..." is printed before "(a) (i)", Gemini moved it to a 9(a).
+  const it = (number: string, text: string, marks: number | null = null) => ({ number, page: 2, text, marks, options: [], answerLines: 0, figures: [], guidance: "", tables: [] });
+  const ours = { kind: "qp" as const, totalMarks: null, figures: [], items: [it("9", "Fig. 9.1 shows a water heater. Fig. 9.2 shows the safety label for the heater."), it("9(a)(i)", "Explain the label.", 1)] };
+  const gem = { ...ours, items: [it("9", "Fig. 9.1 shows a water heater."), it("9(a)", "Fig. 9.2 shows the safety label for the heater."), it("9(a)(i)", "Explain the label.", 1)] };
+  const pages = ["cover", "9 Fig. 9.1 shows a water heater. Fig. 9.2 shows the safety label for the heater. (a) (i) Explain the label. [1]"];
+  const outline = [{ number: "9", page: 2, text: "Fig. 9.1 shows a water heater. Fig. 9.2 shows the safety label for the heater." }, { number: "9(a)", page: 2, text: "" }, { number: "9(a)(i)", page: 2, text: "Explain the label.", marks: 1 }];
+  const keys = paperFlags({ content: ours, pages, gemini: gem, outline }).map((f) => f.key);
+  assert.ok(!keys.includes("agree:9") && !keys.includes("missing:9(a)"), keys.join(" "));
+  // A formula opening text has no words to settle it: 1/x^{2} against 1/x stays flagged.
+  const f1 = { ...ours, items: [it("11", "f(x) = \\frac{1}{x^{2}}, x ≠ 0"), it("11(a)", "Find f(2).", 1)] };
+  const g1 = { ...ours, items: [it("11", "f(x) = \\frac{1}{x}, x ≠ 0"), it("11(a)", "Find f(2).", 1)] };
+  const o1 = [{ number: "11", page: 2, text: "f (x) = , x ! 0 \\frac{1}{x}" }, { number: "11(a)", page: 2, text: "Find f(2).", marks: 1 }];
+  assert.ok(paperFlags({ content: f1, pages: ["cover", "11 f (x) = 1 x , x ! 0 (a) Find f(2). [1]"], gemini: g1, outline: o1 }).some((f) => f.key === "agree:11"));
+});

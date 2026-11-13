@@ -453,12 +453,20 @@ export function paperFlags({ content, pages, gemini, outline }: CheckInput): Fla
       const other = itemWording(g);
       if (similarity(mine, other) < BRAIN.sameText) {
         const settled = textOk && found(mine) && !found(other);
+        // An opening text that reads as the paper prints it is settled whatever Gemini has (owner, 13 Nov 2026:
+        // Physics Nov 2023 P32, Gemini moved question 9's "Fig. 9.2 shows ..." to a 9(a) the paper prints empty).
+        const printed = it.marks === null && isLeadIn(content.items, it.number) ? outline?.find((o) => o.number === it.number) : undefined;
+        const within = (a: string, b: string) => { const w = realWordSet(b); return [...realWordSet(a)].every((x) => w.has(x)); };
+        const asPrinted = !!printed && realWordSet(mine).size >= 3 && within(mine, printed.text) && within(other, mine);
         // "This reading": Claude's, or one made in a dev session (owner, 12 Nov 2026).
-        if (!settled) add("agree", it.number, "This reading and Gemini's differ here.", `${mine}|${other}`, textOk && found(other) ? g.text : "", "", "Claude and Gemini read this differently.");
+        if (!settled && !asPrinted) add("agree", it.number, "This reading and Gemini's differ here.", `${mine}|${other}`, textOk && found(other) ? g.text : "", "", "Claude and Gemini read this differently.");
       }
       if (it.marks !== null && g.marks !== null && it.marks !== g.marks) add("marks", it.number, `Gemini reads ${g.marks} marks here, we have ${it.marks}.`, `${it.marks}|${g.marks}|${mine}`, "", ":gemini");
     }
+    // A label the paper prints with no words of its own ("(a) (i) Explain ...") needs no opening text of ours.
+    const emptyLabels = new Set((outline ?? []).filter((o) => !squash(o.text)).map((o) => o.number));
     for (const g of gemini.items) {
+      if (g.marks === null && emptyLabels.has(g.number)) continue;
       if (!ours.has(g.number)) add("missing", g.number, `Gemini found question ${g.number}; our reading does not have it.`, itemWording(g), textOk && found(itemWording(g)) ? g.text : "");
     }
   }

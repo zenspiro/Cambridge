@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-13: No false flags where Gemini splits an opening text differently
+
+**What:** when Gemini moves a sentence of an opening text to a part label the paper prints with no words, our reading (which has it where it is printed) is no longer flagged as missing a part or disagreeing.
+
+**Why:** owner, 13 Nov 2026 (reading the weakest benchmark papers): Physics Nov 2023 P32 question 9.
+
+**Tested:** unit test (a formula opening text that really differs still flags); every benchmark reading with Gemini: 5 flags fewer, each checked to be false (a first version also hid a real 1/x² against 1/x, so formulas were excluded). Loaded from this session: Physics Nov 2023 P32 (question 11's opening text numbered right), Chemistry Jun 2025 P42, Computer Science Mar 2024 P12 (page 3's 1(c) added), Biology Jun 2026 P52 (graph grid boxed by hand), Biology Mar 2025 P42 (four photos still to box by hand): all 100% on their keys.
+
 ## 2026-11-13: "Which row" questions in one shape
 
 **What:** a multiple-choice "which row" question written with "|" (headings at the end of the text, cells split by "|" in each option) becomes a real table with its options as "cell; cell", the same shape our own readings use.
