@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-13: Cube roots, and no false fraction flag next to a power
+
+**What:** a cube root written as LaTeX (\sqrt[3]{27}) becomes ∛27. The flat-fraction check no longer flags "3x" in 3x³ because the page also prints 3/x.
+
+**Why:** owner, 13 Nov 2026 (reading the benchmark papers): Maths Mar 2025 P12 4(b) and Maths Nov 2023 P42 11(d).
+
+**Tested:** unit test (a real flat "3x" for 3/x still flags). Loaded from this session: Maths Mar 2025 P12 (answer-line units, the graph grid boxed without its question line) and Maths Nov 2023 P42 (both dice in one box): both 0 red flags, 100% on their keys.
+
 ## 2026-11-13: Photos in figures
 
 **What:** photographs and other raster pictures in a paper (micrographs, a koala, a starfish, a body diagram) are cut with their figure like drawings, from their printed caption. The script renders each photo as a small JPEG; the review screen shows it inside the figure. Two captions side by side each take their own picture.

@@ -340,6 +340,7 @@ export function normaliseNotation(s: string): string {
       : out.replace(new RegExp(`\\\\${k}(?![a-zA-Z])`, "g"), v);
   }
   out = out.replace(/\^\{?\\circ\}?/g, "°").replace(/\\overrightarrow\{/g, "\\vec{").replace(/\\mathcal\{E\}/g, "ℰ");
+  out = out.replace(/\\sqrt\[(3|4)\]\{([^{}]{1,40})\}/g, (_m, n: string, a: string) => `${n === "3" ? "∛" : "∜"}${/^[\p{L}\p{N}.]+$/u.test(a) ? a : `(${a})`}`);
   for (let k = 0; k < 4 && out.includes("\\sqrt{"); k++) out = out.replace(/\\sqrt\{([^{}]{1,40})\}/g, (_m, a: string) => (/^[\p{L}\p{N}.]+$/u.test(a) ? `√${a}` : `√(${a})`));
   // LaTeX dress around the notation (Gemini): \mathbf{p} is p, \quad a space.
   out = out.replace(/\\math(?:bf|rm|it)\{([^{}]{1,20})\}/g, "$1").replace(/\\q?quad\b/g, " ");
@@ -520,7 +521,7 @@ export function lostNotation(wording: string, pages: readonly string[]): { marke
       if (have.includes(bare(f.marked)) || bare(repaired).includes(bare(linearFraction(f.num, f.den)))) continue;
       const chars = (x: string) => [...bare(x)].map((c) => (c === "−" ? "[–\\-−]" : escRe(c))).join("\\s*");
       if (/\\frac/.test(f.num + f.den) || !bare(f.num) || !bare(f.den)) continue;
-      const re = new RegExp(`(?<![A-Za-z0-9.{])${chars(f.num)}\\s*/?\\s*${chars(f.den)}(?![0-9.])`);
+      const re = new RegExp(`(?<![A-Za-z0-9.{])${chars(f.num)}\\s*/?\\s*${chars(f.den)}(?![0-9.]|[\\^_]\\{)`);
       const m = re.exec(repaired);
       if (!m) continue;
       first ??= { marked: f.marked, flat: m[0] };

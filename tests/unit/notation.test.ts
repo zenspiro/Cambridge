@@ -554,3 +554,10 @@ test("LaTeX symbols become the printed characters; vector names one markup", () 
   // Words that only start like a command are left alone.
   assert.equal(normaliseNotation("\\left \\index"), "\\left \\index");
 });
+
+test("cube roots as printed; a fraction's flat form running into a power is not that fraction", () => {
+  // Maths Mar 2025 P12 4(b): \sqrt[3]{27}. Maths Nov 2023 P42 11(d): 3x^{3} on the page that prints h(x) = 3/x.
+  assert.equal(normaliseNotation("\\sqrt[3]{27} and \\sqrt[3]{x+1}"), "∛27 and ∛(x+1)");
+  assert.equal(lostNotation("gf(x) = 3x^{3} + ax^{2}", ["h (x) = \\frac{3}{x}"]), null);
+  assert.equal(lostNotation("h(x) = 3x, x ≠ 0", ["h (x) = \\frac{3}{x}"])?.marked, "\\frac{3}{x}");
+});
