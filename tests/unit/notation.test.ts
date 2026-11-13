@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import {
   fractionBars, fractions, fractionsIn, joinFractionLines, linearFraction, notationTree,
   applyNotation, bboxWords, leadInProblems, lostNotation, normaliseNotation, notate, notatedPages, notationOn, notationParts, notationPlain,
-  isCaptionLine, leadExtra, pdfOutline, stripLead, withoutLead, wordsText, type Word,
+  isCaptionLine, joinDropCaps, leadExtra, pdfOutline, stripLead, withoutLead, wordsText, type Word,
 } from "../../src/lib/brain/notation.ts";
 import { autoFixLeads, cleanPaper, figuresToLeads, fillLead, pipeRows, isSplitFlag, mergeReading, missingFromOutline, paperFlags, recheckItem, splitLeadIn, structureFlags } from "../../src/lib/brain/paper.ts";
 
@@ -560,4 +560,13 @@ test("cube roots as printed; a fraction's flat form running into a power is not 
   assert.equal(normaliseNotation("\\sqrt[3]{27} and \\sqrt[3]{x+1}"), "∛27 and ∛(x+1)");
   assert.equal(lostNotation("gf(x) = 3x^{3} + ax^{2}", ["h (x) = \\frac{3}{x}"]), null);
   assert.equal(lostNotation("h(x) = 3x, x ≠ 0", ["h (x) = \\frac{3}{x}"])?.marked, "\\frac{3}{x}");
+});
+
+test("a capital set apart from the rest of its word is joined; separate letters are not", () => {
+  // Chemistry Nov 2023 P62: "redict" then a lone "P" touching it on the left.
+  const w = (x0: number, x1: number, t: string, y = 684) => ({ b: [x0, y, x1, y + 15] as [number, number, number, number], t, first: false });
+  assert.deepEqual(joinDropCaps([w(120.8, 147.7, "redict"), w(113.5, 120.8, "P")]).map((x) => x.t), ["Predict"]);
+  // A real word "A" before "metal" (a space apart), X^{R}X^{r}'s "X" and "r", the dice labels: left alone.
+  assert.deepEqual(joinDropCaps([w(80.8, 107.6, "metal"), w(71, 78.3, "A")]).map((x) => x.t), ["metal", "A"]);
+  assert.deepEqual(joinDropCaps([w(100, 106, "X"), w(106, 109, "r")]).map((x) => x.t), ["X", "r"]);
 });

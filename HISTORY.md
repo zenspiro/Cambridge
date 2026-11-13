@@ -2,6 +2,14 @@
 
 Newest first. What changed, why, and how it was tested.
 
+## 2026-11-13: Fewer false flags from the remaining benchmark papers
+
+**What:** a multiple-choice paper no longer gets "[1] is not printed" on every question. A lone "=" is never read as a superscript. A capital the PDF's text layer sets apart from the rest of its word ("P" and "redict") is joined to it, so the word check finds "Predict". A part whose marks differ from the [marks] printed with it gets an amber flag.
+
+**Why:** owner, 13 Nov 2026 (reading the remaining benchmark papers): Chemistry Jun 2026 P22 had 40 false marks flags; Maths Mar 2023 P42 a "^{=}V"; Chemistry Nov 2023 P62 a false "wording not found"; Biology Nov 2025 P62 a part with its [1] left empty and only a total flag.
+
+**Tested:** unit tests; the page text of every benchmark paper before and after: 63 lines change, all drop capitals joined in the Chemistry practical papers or "=" signs back in place (a first, looser rule changed 395 lines including swapped dice labels, so it was narrowed). Loaded from this session: Maths Mar 2023 P42 (L₁, L₂, L₃, cm²; 100%), and every paper with photos or side-by-side figures cut again on the live site.
+
 ## 2026-11-13: Cube roots, and no false fraction flag next to a power
 
 **What:** a cube root written as LaTeX (\sqrt[3]{27}) becomes ∛27. The flat-fraction check no longer flags "3x" in 3x³ because the page also prints 3/x.
