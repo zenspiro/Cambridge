@@ -307,6 +307,11 @@ export function findBoxes(art: PageArt, lines: readonly TextLine[]): Found {
         grew = false;
         for (const p of paths) if (!inside(p.b, b) && overlaps(p.b, b, 25)) { b = join(b, p.b); grew = true; }
       }
+      // A figure in panels (Geography Jun 2025 P12: three pie charts, a map beside its key, three scatter graphs) has
+      // gaps wider than that: it also takes every drawing below the last line of question text above it, 24 pt or
+      // more across (a watermarked copy's letters and outlined text are smaller: Chemistry Mar 2026 P42).
+      const lastBody = Math.max(prev, ...lines.filter((l) => l.body && l.b[3] <= b[1] + 2 && l.b[1] >= prev - 2 && l.b[2] > left && l.b[0] < right).map((l) => l.b[3]));
+      for (const p of paths) if (p.b[1] >= lastBody - 2 && Math.max(p.b[2] - p.b[0], p.b[3] - p.b[1]) >= 24 && !inside(p.b, b)) b = join(b, p.b);
       // A photo takes its short labels ("heart 75%") but never a sentence: the lines next to it are question text
       // (Biology Mar 2025 P42's Fig. 6.2).
       const onlyPhotos = paths.filter((p) => inside(p.b, b)).every((p) => isPhoto(p));
